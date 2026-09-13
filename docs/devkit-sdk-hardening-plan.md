@@ -8,10 +8,11 @@ request. [PR #8](https://github.com/AaronWangTT/devkit-sdk/pull/8) separated exa
 tests, and maintained tools. [PR #9](https://github.com/AaronWangTT/devkit-sdk/pull/9)
 separated root source/libraries and archived tooling and was squash-merged as
 `8e4d1b76d1dd3ec33bbe77dc2b9d4f39171d5cfc`.
-[PR #10](https://github.com/AaronWangTT/devkit-sdk/pull/10) implements the final
-ownership layout on `refactor/final-source-layout`, with a shared package map
-and build/test entry points. Compiler upgrades, binary-library rebuildability,
-hardware automation, and repository policy changes remain future work.
+[PR #10](https://github.com/AaronWangTT/devkit-sdk/pull/10) implemented the final
+ownership layout with a shared package map and build/test entry points and was
+squash-merged as `d55d91677cfde6bbbc9c2478df15412344617bb8`. Compiler upgrades,
+binary-library rebuildability, hardware automation, and repository policy
+changes remain future work.
 
 ## Current Checkpoint
 
@@ -522,6 +523,10 @@ tool versions, library generations, or optional-feature linkage. The remaining
 payload moves followed only after package mapping was validated.
 
 ## Stage 1: Normalize Build Tools And Parameters
+
+The concrete pull-request sequence, implementation boundaries, evidence, and
+acceptance gates are defined in the
+[Stage 1 build normalization plan](stage-1-build-normalization-plan.md).
 
 - Centralize versions, checksums, immutable index pins, and host prerequisites.
 - Share local/CI setup and build entry points; verify clean and idempotent setup.
