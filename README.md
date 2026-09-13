@@ -1,6 +1,13 @@
-# :warning: ARCHIVED
+# :warning: UPSTREAM ARCHIVED
 
-This repository is no longer maintained and devices can no longer connect to IoT Hub.
+> **Fork maintenance:** This `master` branch preserves Microsoft's archived
+> upstream history. Active AZ3166 Core maintenance for
+> [AaronWangTT/HomeTemperature](https://github.com/AaronWangTT/HomeTemperature)
+> lives on the [`maintenance`](https://github.com/AaronWangTT/devkit-sdk/tree/maintenance)
+> branch. Target maintained SDK pull requests at `maintenance`; release tags are
+> created from verified commits on that branch.
+
+Microsoft's original project is no longer maintained and devices can no longer connect to IoT Hub.
 
 Please refer to the following sources for further MXCHIP needs:
 1. [Connect an MXCHIP AZ3166 to Azure IoT
