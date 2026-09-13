@@ -4,25 +4,28 @@ Recorded: 2026-09-13.
 
 Scope: the maintained devkit-sdk Core supporting HomeTemperature. This is a
 repository planning document, moved from local notes into `docs` at the user's
-request. [PR #8](https://github.com/AaronWangTT/devkit-sdk/pull/8) completed the
-first-pass reorganization and was squash-merged as
-`743ee0f708f8597c9185e3573eda8c1749f9f06b`. The next checkpoint is implemented on
-`refactor/legacy-tooling-reorg`: root `src` and `libraries`, relocated host and
-legacy tools, and removal of the empty `AZ3166` wrapper. Internal Core, BSP,
-extension, and vendor separation, toolchain upgrades, and repository policy
-changes remain future work.
-Repository reorganization is the first stage, followed by build normalization.
+request. [PR #8](https://github.com/AaronWangTT/devkit-sdk/pull/8) separated examples,
+tests, and maintained tools. [PR #9](https://github.com/AaronWangTT/devkit-sdk/pull/9)
+separated root source/libraries and archived tooling and was squash-merged as
+`8e4d1b76d1dd3ec33bbe77dc2b9d4f39171d5cfc`.
+[PR #10](https://github.com/AaronWangTT/devkit-sdk/pull/10) implements the final
+ownership layout on `refactor/final-source-layout`, with a shared package map
+and build/test entry points. Compiler upgrades, binary-library rebuildability,
+hardware automation, and repository policy changes remain future work.
 
 ## Current Checkpoint
 
-- The 938-file platform subtree was moved without content changes, then its
-  210 library files were separated into root `libraries`. All ten packages and
-  their 15 co-located examples remain intact.
-- Packaging reconstructs the original platform tree from the selected revision
-  using an isolated temporary Git index. Checkout builds copy `src` and
-  `libraries` into the corresponding platform locations. The installed archive
-  prefix remains `AZ3166/`; public headers and library-discovery paths do not
-  change.
+- The remaining 728 platform files were classified as 24 Core files, 30 BSP and
+  integration files, 54 extension files, 616 vendor files, and 4 metadata files.
+  Every move preserves the original Git blob. The 210 library files, ten library
+  packages, and 15 co-located examples remain intact.
+- [package-layout.json](../platform/az3166/package-layout.json) maps ownership
+  paths to the original installed locations. The same resolver drives committed
+  packaging and checkout staging. It rejects missing/unmapped inputs, duplicate
+  source mappings, destination collisions, and invalid relative paths.
+- Packaging reads the map and payload from the selected Git revision, not from
+  uncommitted files. It uses an isolated temporary index and the installed
+  `AZ3166/` prefix; public includes and default service inclusion do not change.
 - The 39-file DICE bundle is under `tools/provisioning/dice_device_enrollment`;
   the 25-file Jenkins hierarchy is under `legacy/jenkins`. The two orphaned
   VoiceToTwitter metadata files were removed, along with empty wrapper folders.
@@ -36,6 +39,213 @@ Repository reorganization is the first stage, followed by build normalization.
   preserved 13-sketch inventory, host compile/link checks, workflow source-path
   selection, and documentation/configuration path validation. Native and
   physical-device execution must be reported separately.
+
+## Build Sources And Tests
+
+Run commands below from the repository root. The maintained entry points require
+PowerShell 7 or later and Git with support for `git archive --mtime`.
+
+For target builds, use the existing pinned Windows toolchain: Arduino CLI 1.5.1,
+Arduino IDE 1.8.19 bootstrap, AZ3166 GCC `5_4-2016q3`, and the immutable package
+index specified by [Core package CI](../.github/workflows/core-package-ci.yml).
+The workflow installs and verifies the toolchain on a clean Windows runner. Keep
+the historical GCC installation path short; changing its version or ABI flags is
+not part of this layout migration.
+
+### Compile All Target Projects
+
+```powershell
+pwsh -File ./tools/test/Test-Az3166Sketches.ps1
+```
+
+This discovers the same 13 projects under `examples` and `tests/hardware`, stages
+the complete mapped Arduino platform in a temporary sketchbook, and invokes
+Arduino CLI with FQBN `AZ3166Checkout:stm32f4:MXCHIP_AZ3166` and warnings enabled.
+It compiles the Core, board integration, extensions, and sketch-selected Arduino
+libraries and links the existing vendor archives. It does not rebuild Mbed,
+MXCHIP, STSAFE, or other components whose implementation is available only in
+prebuilt archives. The 15 library examples are not part of this default scan.
+
+Compile one project or supply explicit installed tool locations:
+
+```powershell
+pwsh -File ./tools/test/Test-Az3166Sketches.ps1 -Sketch ./tests/hardware/UnitTest
+pwsh -File ./tools/test/Test-Az3166Sketches.ps1 `
+  -ArduinoCli C:/tools/arduino-cli.exe -ArduinoDataDirectory C:/a/portable
+```
+
+The second command illustrates custom paths; use the locations actually installed
+on the machine. The default data directory on Windows is `%LOCALAPPDATA%/Arduino15`.
+Builds fail on compiler errors and report flash/RAM usage. Temporary build files
+are currently removed when the driver exits; retaining diagnostics/artifacts is
+still a hardening task.
+
+### Inspect Or Integrate The Platform
+
+```powershell
+pwsh -File ./tools/package/Stage-Az3166Platform.ps1 -Destination ./artifacts/platform
+```
+
+Use an empty destination. Staging copies current checkout contents, including
+non-ignored new files in declared payload roots, according to the map. It never
+overwrites an existing nonempty platform. The generated tree has the original
+Arduino layout and is suitable for inspection, editor include paths, or manual
+integration. It is not an editing location or an immutable release artifact;
+regenerate it after source changes. The build/test drivers perform their own
+temporary staging and do not require this manual step.
+
+There is no supported direct build of the ownership directories as if `src`
+were still an Arduino platform. Do not copy `src`, `vendor`, or individual
+extensions directly into an installation or invent a second include-path map.
+
+### Compile Host Programs Without Running
+
+With a native GCC compiler on `PATH`:
+
+```powershell
+pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -CompileOnly
+```
+
+For compile/link verification with the installed ARM compiler on Windows:
+
+```powershell
+$compiler = Join-Path $env:LOCALAPPDATA 'Arduino15/packages/AZ3166/tools/arm-none-eabi-gcc/5_4-2016q3/bin/arm-none-eabi-g++.exe'
+& ./tools/test/Test-Az3166HostTests.ps1 -Compiler $compiler `
+  -CompileOnly -LinkerFlags '-specs=nosys.specs'
+```
+
+The cross-compiled harness executables are not hardware test firmware. They must
+not be flashed or counted as executed tests. The runner removes its temporary
+outputs when it exits.
+
+## Run Tests
+
+### Package-Layout Contracts
+
+```powershell
+pwsh -File ./tests/host/package/PackageLayoutTest.ps1
+```
+
+These tests need PowerShell and Git, but no C++ compiler, board, or cloud service.
+They use isolated temporary repositories to exercise working/revision parity,
+staging content, revision isolation, missing/unmapped inputs, collisions,
+traversal, required files, and multiple Git executables on `PATH`. They do not
+alter the caller repository or create application commits.
+
+### Native C++ Regression Tests
+
+On a host with native GCC and AddressSanitizer/UndefinedBehaviorSanitizer support:
+
+```powershell
+pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Sanitize -ExpectedVersion 2.0.2
+```
+
+The version is the current Core version, not a permanent pin for future releases;
+omit `-ExpectedVersion` to derive it from the staged header. CI supplies the
+verified package version to check consistency. The runner stages the platform,
+compiles the programs, executes each one, and fails on any nonzero exit status.
+
+| Program | Coverage | Execution |
+| --- | --- | --- |
+| `SystemVersionTest.cpp` | Core runtime-version API versus expected version. | Native executable. |
+| `WiFiUdpTest.cpp` | 11 WiFiUDP lifecycle, data, and failure cases. | Native executable with ASan/UBSan when `-Sanitize` is set. |
+| `IotClientTest.cpp` | 8 legacy-client response/state regression cases. | Native executable with ASan/UBSan when `-Sanitize` is set. |
+
+Client harnesses compile implementation code with explicit transport, parser, and
+other dependency fakes. Passing them does not validate the ARM-only vendor code,
+real network timing, or the actual Parson parser. Successful `-CompileOnly` output
+is not runtime test evidence. Native C++ execution is performed on Ubuntu CI;
+availability on a local machine depends on its compiler installation.
+
+### Physical-Board Tests
+
+`tests/hardware/UnitTest` is the ArduinoUnit device suite;
+`tests/hardware/manual/HttpTest` is an unbounded HTTP/NTP/heap stress diagnostic.
+The sketch driver only compiles them. Neither maintained test entry point flashes
+a board or collects hardware pass/fail results. A physical run requires separate
+authorization, a suitable flashing setup, serial capture, and any necessary
+wiring/network fixtures. Automated trusted-board execution remains planned work;
+do not use the archived Jenkins tooling as an implicitly supported replacement.
+
+## Build And Publish The Core Package
+
+### Verify An Immutable Revision
+
+```powershell
+pwsh -File ./tools/package/Test-Az3166BoardPackage.ps1 `
+  -Revision HEAD -ExpectedVersion 2.0.2 -OutputDirectory ./artifacts/packages
+```
+
+This builds the selected committed revision twice, requires matching size/hash,
+and verifies the packaged version header. It returns the archive path, resolved
+commit, version, size, and SHA-256. Uncommitted source, map, or header changes are
+not included. To create a single archive without the repeated-build check:
+
+```powershell
+pwsh -File ./tools/package/New-Az3166BoardPackage.ps1 `
+  -Revision HEAD -OutputPath ./artifacts/AZ3166-2.0.2.zip
+```
+
+Prefer the verifier for release evidence. Both commands accept an existing tag or
+commit as `-Revision`. Old layouts without a manifest retain historical fallbacks.
+The canonical historical check remains:
+
+```powershell
+pwsh -File ./tools/package/Test-Az3166BoardPackage.ps1 `
+  -Revision 2.0.2 -ExpectedVersion 2.0.2 -OutputDirectory ./artifacts/canonical
+```
+
+The canonical tag intentionally differs from later maintained 2.0.2 source
+commits. Its established byte size and hash are checked separately by CI; do not
+replace that baseline with the current archive hash.
+
+### Publish Through The Release Workflow
+
+1. Merge a reviewed change into `maintenance` and require its exact-commit Core
+   package CI results, including Windows sketch compilation, to pass.
+2. For a new release, update the numeric version in
+   [SystemVersion.h](../src/core/arduino/SystemVersion.h) through the approved
+   release process. Create and push a matching numeric tag only when authorized.
+   The existing `2.0.2` tag is a verification example, not a release to republish.
+3. Dispatch [Core release](../.github/workflows/core-release.yml) from
+   `maintenance`, with the existing tag as its `version` input.
+4. The workflow checks tag ancestry and version, checks out that tag, rebuilds
+   and verifies its package, runs available layout and host tests, then publishes
+   the immutable GitHub release archive and SHA-256 in the release notes.
+5. Publish the Board Manager index entry in `azureiotdevkit_tools` separately,
+   then update consumers to its reviewed immutable index commit. This repository
+   does not automatically publish an index or upgrade HomeTemperature.
+
+The release workflow refuses to overwrite an existing release. It currently
+repeats package and host checks, but does not rerun the Windows sketch job or
+automatically enforce the prior CI result described in step 1. Reusing/enforcing
+the full exact-tag CI gate is remaining hardening work, not a guarantee provided
+by this structural migration.
+
+## CI Orchestration
+
+Maintained operations belong in the shared scripts above. Workflows select the
+runner, install pinned dependencies, call those entry points, and control release
+publication. Do not add workflow-only copies of the current map, compiler flags,
+or test list. The old inline release commands exist only for tags that predate
+the shared host-test runner.
+
+| Workflow/job | Steps and shared entry points |
+| --- | --- |
+| Core package CI: Windows and Ubuntu | Run `PackageLayoutTest.ps1`; run `Test-Az3166BoardPackage.ps1` for the current revision and canonical 2.0.2; verify caller state; upload the resulting package. |
+| Core package CI: Ubuntu | Run `Test-Az3166HostTests.ps1 -Sanitize` with the verified package version, executing both regression suites and the version test. |
+| Core package CI: Windows | Set up the pinned Arduino CLI and checksum-verified IDE/Core toolchain; run `Test-Az3166Sketches.ps1` for all 13 projects. |
+| Core package CI: comparison | Download both packages and require equal sizes and SHA-256 hashes. |
+| Core release | Validate/check out the requested tag; call its package verifier, layout tests, and shared host-test runner when available; use historical compatibility commands for older tags; publish only after its steps succeed. |
+
+[Core package CI](../.github/workflows/core-package-ci.yml) runs on PRs and pushes
+to `maintenance`, and supports manual dispatch. A platform-inapplicable matrix
+step is intentionally skipped: Ubuntu executes native C++ tests, while Windows
+compiles ARM sketches. A skipped hardware execution is not a hardware pass.
+
+Further orchestration work: share the pinned bootstrap with local setup, retain
+full compiler/test artifacts, add machine-readable test/coverage reports, and
+make a reusable full CI validation gate a prerequisite for tagged publication.
 
 ## First-Pass Status
 
@@ -135,11 +345,11 @@ compilation behavior during the structural migration.
   Its current executability was not verified; do not assume it can replace the
   maintained CI runner without porting and validation.
 
-## Long-Term Ownership Map
+## Ownership Map
 
-Examples, tests, and host tools have already moved. Root `src` and `libraries`
-form the current package source; finer-grained runtime/vendor separation below
-is a proposal, not part of this checkpoint.
+The final classification is implemented by the package map. These ownership
+directories are not installed paths; filenames and package destinations remain
+the same as before the move.
 
 | Current content | Proposed home | Initial treatment |
 | --- | --- | --- |
@@ -166,21 +376,21 @@ the public library set.
 
 ## Path Dependencies To Update Together
 
-- Package builder: committed `src` and `libraries` composition, with historical
-  `AZ3166/src` fallback and an unchanged installed archive layout.
+- Package builder: the selected revision's manifest and mapped Git blobs, with
+  historical layout fallback and an unchanged installed archive tree.
 - Package verifier: source location of `SystemVersion.h` and the installed
   archive layout used to validate it.
-- Sketch driver: repository-root source/library staging and discovery under
-  `examples` and `tests/hardware`.
+- Sketch driver: shared mapped staging and discovery under `examples` and
+  `tests/hardware`.
 - PR and release workflows: source/include paths, file guards, and script paths.
-- Host tests: relative includes of the implementation and Core headers.
+- Host tests: staged include directories selected by the shared test runner.
 - Arduino platform recipes: include and linker paths into Core and vendor trees.
-- Legacy C# configuration/deployment wrappers: hard-coded source, example,
-  UnitTest, version, and platform locations if those tools remain supported.
+- Legacy C# configuration/deployment wrappers remain historical and are not
+  consumers of the new map or supported build entry points.
 - README and contribution instructions: maintained branch, installation, and
-  test paths, including both source trees for manual installation.
+  test paths, using the staging command rather than manual ownership-tree copies.
 
-## Proposed Repository Layout
+## Current Repository Layout
 
 ```text
 devkit-sdk/
@@ -188,12 +398,15 @@ devkit-sdk/
     core/arduino/
     bsp/az3166/
     extensions/
-      cli/
+      configuration/
+      diagnostics/
       display/
-      httpclient/
-      httpserver/
-      ntp/
+      http-client/
+      http-server/
+      network/
+      ota/
       telemetry/
+      time/
   libraries/
     Audio/ AudioV2/ AzureIoT/ FileSystem/ MQTT/
     Sensors/ SPI/ WebSocket/ WiFi/ Wire/
@@ -202,23 +415,22 @@ devkit-sdk/
     azure-iot-sdk-c/
     mxchip/
     prebuilt/az3166/
+    http-parser/
+    mbed-memory-status/
   platform/az3166/
     boards.txt
     platform.txt
     programmers.txt
+    README.md
     package-layout.json
   examples/
     board/
     cloud/
-    networking/
     peripherals/
   tests/
     host/
-    compile/
     hardware/
-    support/
   tools/
-    build/
     package/
     test/
     provisioning/
@@ -226,12 +438,11 @@ devkit-sdk/
   legacy/
     jenkins/
   .github/workflows/
-  build/                       (generated, ignored)
+  artifacts/                   (generated, ignored)
 ```
 
-Names are proposed, not final API names. Do not create empty categories without
-content. Preserve existing Arduino library identities; do not collapse
-Audio/AudioV2 or rename public headers during this work.
+Do not create empty categories without content. Preserve existing Arduino library
+identities; Audio/AudioV2 remain separate and public headers are not renamed.
 
 ## Keep Repository Layout Separate From Package Layout
 
@@ -254,9 +465,11 @@ Initially, extensions can still be staged into their original Core locations.
 Do not change header visibility, library discovery, include flags, or what gets
 compiled at the same time as directory relocation.
 
-The current mapping stages root `src` at the platform root and root `libraries`
-at its `libraries/` child. It does not yet separate the Core, BSP, extensions,
-and vendor directories within `src`.
+The manifest accounts for all payload files under `src`, `libraries`, `vendor`,
+and `platform/az3166`, excluding the map itself. Core, BSP, and extension files
+still land under their original `cores/arduino` paths; dependencies return to
+their original `system` paths. This keeps compile/include order and service
+linkage separate from the ownership reorganization.
 
 Packaging must continue to consume a committed revision, not line-ending-
 translated worktree copies. Preserve deterministic ordering, timestamps, file
@@ -264,6 +477,8 @@ contents, and paths. Existing release tags using `AZ3166/src` must remain
 packageable and the canonical 2.0.2 archive check must continue to pass.
 
 ## Stage 0: Reorganize With Compatibility Gates
+
+Implemented through PRs #8, #9, and #10. The staged order and acceptance gates were:
 
 1. Inventory ownership, public headers, includes, library metadata, CI path
    references, host tools, and example versus test entry points.
@@ -302,9 +517,9 @@ compiler behavior frozen. Its scope was:
 5. Preserve package contents exactly and rerun the existing native tests,
   runtime-version check, all 13 target builds, and package verification.
 
-Do not move Core/library/vendor payloads, change tool versions, merge library
-generations, or decide optional-feature linkage in this first PR. Those changes
-follow once the package-staging boundary is tested.
+The first PR deliberately did not move Core/library/vendor payloads or change
+tool versions, library generations, or optional-feature linkage. The remaining
+payload moves followed only after package mapping was validated.
 
 ## Stage 1: Normalize Build Tools And Parameters
 
@@ -324,8 +539,9 @@ diagnostics survive both successful and failed runs; baseline tests remain green
 
 ## Stage 2: Grow The Test System
 
-- Use one host-test entry point shared by PR CI and release validation.
-  CMake/CTest is a candidate; reuse the existing regression cases.
+- Preserve the shared host-test entry point now used by PR CI and current
+  release validation. Extend it rather than duplicating commands in workflows;
+  CMake/CTest remains a possible future migration.
 - Emit machine-readable results and targeted coverage reports.
 - Recover pure character, formatting, string, Print/Stream, and IP-address tests.
 - Add standalone-header and multi-translation-unit compile/link tests, including
