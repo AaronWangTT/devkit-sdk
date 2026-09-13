@@ -1,3 +1,0 @@
-Azure	KEYWORD1
-AzureIot	KEYWORD2
-AzureIotHub	KEYWORD2

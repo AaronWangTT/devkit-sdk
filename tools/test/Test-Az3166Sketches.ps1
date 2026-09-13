@@ -21,7 +21,8 @@ $sketchRoots = @(
     (Join-Path $repositoryRoot "examples")
     (Join-Path $repositoryRoot "tests/hardware")
 )
-$platformSource = Join-Path $repositoryRoot "AZ3166/src"
+$platformSource = Join-Path $repositoryRoot "src"
+$platformLibraries = Join-Path $repositoryRoot "libraries"
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) "az3166-tests-$([guid]::NewGuid().ToString('N'))"
 
 if (-not $ArduinoDataDirectory) {
@@ -75,6 +76,7 @@ try {
     New-Item -ItemType Directory -Path $librariesDirectory -Force | Out-Null
     New-Item -ItemType Directory -Path $downloadsDirectory -Force | Out-Null
     Copy-Item -LiteralPath $platformSource -Destination $platformDirectory -Recurse
+    Copy-Item -LiteralPath $platformLibraries -Destination (Join-Path $platformDirectory "libraries") -Recurse
 
     Invoke-WebRequest -Uri $arduinoUnitUrl -OutFile $archivePath -UseBasicParsing
     $archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()

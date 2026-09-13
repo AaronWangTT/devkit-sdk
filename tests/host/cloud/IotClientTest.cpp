@@ -8,7 +8,7 @@
 #include <map>
 #include <string>
 
-#include "../../../AZ3166/src/cores/arduino/WString.h"
+#include "../../../src/cores/arduino/WString.h"
 #include "parson.h"
 
 #define Arduino_h

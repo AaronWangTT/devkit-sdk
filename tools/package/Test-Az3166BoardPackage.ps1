@@ -11,7 +11,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$versionHeaderPath = "AZ3166/src/cores/arduino/system/SystemVersion.h"
 $packageBuilder = Join-Path $PSScriptRoot "New-Az3166BoardPackage.ps1"
 
 function Invoke-GitText {
@@ -49,6 +48,13 @@ function Get-Az3166CoreVersion {
 }
 
 $resolvedCommit = Invoke-GitText -GitArguments @("rev-parse", "$Revision^{commit}")
+$sourceDirectory = Invoke-GitText -GitArguments @(
+    "ls-tree", "-d", "--name-only", $resolvedCommit, "--", "src"
+)
+if ($sourceDirectory -ne "src") {
+    $sourceDirectory = "AZ3166/src"
+}
+$versionHeaderPath = "$sourceDirectory/cores/arduino/system/SystemVersion.h"
 $versionHeader = Invoke-GitText -GitArguments @(
     "show",
     "${resolvedCommit}:$versionHeaderPath"

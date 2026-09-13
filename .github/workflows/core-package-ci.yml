@@ -88,8 +88,8 @@ jobs:
           set -euo pipefail
           g++ -std=c++11 \
             -include cstdint \
-            -I AZ3166/src/cores/arduino/system \
-            AZ3166/src/cores/arduino/system/SystemVersion.cpp \
+            -I src/cores/arduino/system \
+            src/cores/arduino/system/SystemVersion.cpp \
             tests/host/core/SystemVersionTest.cpp \
             -o "$RUNNER_TEMP/system-version-test"
           "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
@@ -102,8 +102,8 @@ jobs:
           g++ -std=c++11 -O1 -g -Wall -Wextra -Werror \
             -fsanitize=address,undefined \
             -fno-omit-frame-pointer \
-            -I AZ3166/src/system/mbed-os/features/netsocket \
-            -I AZ3166/src/cores/arduino/system \
+            -I src/system/mbed-os/features/netsocket \
+            -I src/cores/arduino/system \
             tests/host/wifi/WiFiUdpTest.cpp \
             -o "$RUNNER_TEMP/wifiudp-test"
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
@@ -118,10 +118,10 @@ jobs:
           g++ -std=gnu++11 -O1 -g -Wall -Wextra -Werror \
             -ffunction-sections -fdata-sections \
             -fsanitize=address,undefined -fno-omit-frame-pointer \
-            -I AZ3166/src/cores/arduino \
-            -I AZ3166/src/cores/arduino/httpclient \
-            -I AZ3166/src/system/azure-iot-sdk-c/deps/parson \
-            -I AZ3166/src/system/azure-iot-sdk-c/c-utility/inc \
+            -I src/cores/arduino \
+            -I src/cores/arduino/httpclient \
+            -I src/system/azure-iot-sdk-c/deps/parson \
+            -I src/system/azure-iot-sdk-c/c-utility/inc \
             tests/host/cloud/IotClientTest.cpp \
             -Wl,--gc-sections \
             -o "$RUNNER_TEMP/iot-client-test"

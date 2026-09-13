@@ -41,7 +41,7 @@
     <hudson.tasks.BatchFile>
       <command>rd %LOCALAPPDATA%\Arduino15\packages\AZ3166\hardware\stm32f4\1.0.1 /S /Q&#xd;
 &#xd;
-xcopy devkit-sdk\AZ3166\src %LOCALAPPDATA%\Arduino15\packages\AZ3166\hardware\stm32f4\1.0.1 /S /I /E /Q /Y&#xd;
+xcopy devkit-sdk\src %LOCALAPPDATA%\Arduino15\packages\AZ3166\hardware\stm32f4\1.0.1 /S /I /E /Q /Y&#xd;
 &#xd;
 xcopy \\devdivcn\Shared\Personal\ToolsForJenkins\ArduinoUnit %LOCALAPPDATA%\Arduino15\packages\AZ3166\hardware\stm32f4\1.0.1\libraries\ArduinoUnit /S /I /E /Q /Y</command>
     </hudson.tasks.BatchFile>

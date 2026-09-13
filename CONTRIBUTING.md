@@ -33,16 +33,20 @@ The `master` branch preserves archived upstream history.
 
 If you want to understand how Code works or want to debug an issue, you'll want to get the source, and run it locally.
 
-You'll need [git] to download source code and copy it to the Arduino target folder. 
+You'll need [git] to download source code. The maintained sketch driver stages
+`src` and `libraries` together without modifying an installed board package;
+see the validation commands below. For a manual installation, copy both trees
+into an existing AZ3166 platform installation as shown here.
 
 ### Windows
 
 ```
 git clone --branch maintenance https://github.com/AaronWangTT/devkit-sdk
 
-cd devkit-sdk\AZ3166\src
+cd devkit-sdk
 
-xcopy /s .\*.* C:\Users\{your name}\AppData\Local\Arduino15\packages\AZ3166\hardware\stm32f4\{version} /I /R /Y
+xcopy /s .\src\*.* "C:\Users\{your name}\AppData\Local\Arduino15\packages\AZ3166\hardware\stm32f4\{version}" /I /R /Y
+xcopy /s .\libraries\*.* "C:\Users\{your name}\AppData\Local\Arduino15\packages\AZ3166\hardware\stm32f4\{version}\libraries" /I /R /Y
 ```
 
 ### OS X
@@ -50,16 +54,20 @@ xcopy /s .\*.* C:\Users\{your name}\AppData\Local\Arduino15\packages\AZ3166\hard
 ```
 git clone --branch maintenance https://github.com/AaronWangTT/devkit-sdk
 
-cd devkit-sdk/AZ3166
+cd devkit-sdk
 
-cp -R /src/. ~/Library/Arduino15/packages/AZ3166/hardware/stem32f4/{version} 
+cp -R ./src/. ~/Library/Arduino15/packages/AZ3166/hardware/stm32f4/{version}/
+mkdir -p ~/Library/Arduino15/packages/AZ3166/hardware/stm32f4/{version}/libraries
+cp -R ./libraries/. ~/Library/Arduino15/packages/AZ3166/hardware/stm32f4/{version}/libraries/
 ```
 
 ### Validate your changes
 Standalone examples are under `examples`, host tests under `tests/host`, and
 device-test projects under `tests/hardware`. Keep each Arduino sketch folder
 and its companion files together. Library-specific examples remain with their
-libraries under `AZ3166/src/libraries`.
+libraries under `libraries`. Archived tooling is documented in
+[legacy/README.md](legacy/README.md); relocating it does not make it supported
+or safe to run against production services.
 
 With the pinned AZ3166 toolchain installed and Arduino CLI available, compile
 all 13 standalone examples and device-test projects from the repository root

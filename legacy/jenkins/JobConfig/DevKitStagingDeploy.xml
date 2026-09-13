@@ -21,7 +21,7 @@
         </userRemoteConfigs>
         <branches>
           <hudson.plugins.git.BranchSpec>
-            <name>*/release</name>
+            <name>pre-release</name>
           </hudson.plugins.git.BranchSpec>
         </branches>
         <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -60,11 +60,16 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-  <triggers/>
+  <triggers>
+    <hudson.triggers.SCMTrigger>
+      <spec>H/15 * * * *</spec>
+      <ignorePostCommitHooks>false</ignorePostCommitHooks>
+    </hudson.triggers.SCMTrigger>
+  </triggers>
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.BatchFile>
-      <command>xcopy devkit-sdk\AZ3166\src %LOCALAPPDATA%\Arduino15\packages\AZ3166\hardware\stm32f4\1.0.0 /S /I /E /Q /Y&#xd;
+      <command>xcopy devkit-sdk\src %LOCALAPPDATA%\Arduino15\packages\AZ3166\hardware\stm32f4\1.0.0 /S /I /E /Q /Y&#xd;
 &#xd;
 xcopy \\devdivcn\Shared\Personal\ToolsForJenkins\ArduinoUnit %LOCALAPPDATA%\Arduino15\packages\AZ3166\hardware\stm32f4\1.0.0\libraries\ArduinoUnit /S /I /E /Q /Y</command>
     </hudson.tasks.BatchFile>
@@ -81,7 +86,7 @@ cd ..&#xd;
 node out\index.js</command>
     </hudson.tasks.BatchFile>
     <hudson.plugins.powershell.PowerShell plugin="powershell@1.3">
-      <command>scripts\DevKitDeploy.ps1 -Environment &quot;prod&quot;</command>
+      <command>scripts\DevKitDeploy.ps1 -Environment &quot;staging&quot;</command>
     </hudson.plugins.powershell.PowerShell>
   </builders>
   <publishers>
@@ -106,6 +111,5 @@ node out\index.js</command>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>
     </hudson.plugins.ws__cleanup.PreBuildCleanup>
-    <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.8.8"/>
   </buildWrappers>
 </project>
