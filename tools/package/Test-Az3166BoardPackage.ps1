@@ -10,7 +10,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repositoryRoot = Split-Path -Parent $PSScriptRoot
+$repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $versionHeaderPath = "AZ3166/src/cores/arduino/system/SystemVersion.h"
 $packageBuilder = Join-Path $PSScriptRoot "New-Az3166BoardPackage.ps1"
 

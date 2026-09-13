@@ -9,7 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repositoryRoot = Split-Path -Parent $PSScriptRoot
+$repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $resolvedCommit = git -C $repositoryRoot rev-parse "$Revision^{commit}"
 if ($LASTEXITCODE -ne 0 -or -not $resolvedCommit) {
     throw "Could not resolve Git revision: $Revision"
