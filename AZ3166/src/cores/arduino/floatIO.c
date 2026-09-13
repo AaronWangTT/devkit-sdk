@@ -6,6 +6,32 @@
 #include <math.h>
 #include "floatIO.h"
 #define iSize 10                 // number of buffers, one for each float before wrapping around
+
+static char *apply_width(char *output, signed char width) {
+    int requested_width = (int)width;
+    int left_aligned = requested_width < 0;
+    size_t length;
+    size_t padding;
+
+    if (left_aligned) {
+        requested_width = -requested_width;
+    }
+
+    length = strlen(output);
+    if (requested_width <= (int)length) {
+        return output;
+    }
+
+    padding = (size_t)requested_width - length;
+    if (left_aligned) {
+        memset(output + length, ' ', padding);
+        output[length + padding] = '\0';
+    } else {
+        memmove(output + padding, output, length + 1);
+        memset(output, ' ', padding);
+    }
+    return output;
+}
  
 /* float to string
  * f is the float to turn into a string
@@ -31,18 +57,23 @@ char *f2s(float f, int p){
    follow https://github.com/blynkkk/blynk-library/issues/14 to implement dtostrf
  */
 char * dtostrf(double number, signed char width, unsigned char prec, char *s) {
+    unsigned char digit_index;
+
+    if(s == NULL) {
+        return NULL;
+    }
     if(isnan(number)) {
         strcpy(s, "nan");
-        return s;
+        return apply_width(s, width);
     }
     if(isinf(number)) {
         strcpy(s, "inf");
-        return s;
+        return apply_width(s, width);
     }
 
     if(number > 4294967040.0 || number < -4294967040.0) {
         strcpy(s, "ovf");
-        return s;
+        return apply_width(s, width);
     }
     char* out = s;
     // Handle negative numbers
@@ -69,13 +100,19 @@ char * dtostrf(double number, signed char width, unsigned char prec, char *s) {
         ++out;
     }
 
-    while(prec-- > 0) {
+    for(digit_index = 0; digit_index < prec; ++digit_index) {
+        unsigned int digit;
+
         remainder *= 10.0;
-        if((int)remainder == 0){
-                *out = '0';
-                 ++out;
+        digit = (unsigned int)remainder;
+        if(digit > 9) {
+            digit = 9;
         }
+        *out = (char)('0' + digit);
+        ++out;
+        remainder -= digit;
     }
-    sprintf(out, "%d", (int) remainder);
-    return s;
+    *out = '\0';
+
+    return apply_width(s, width);
 }
