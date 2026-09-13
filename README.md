@@ -11,15 +11,20 @@ the version returned by `getDevkitVersion()`.
 The fork's `master` branch preserves Microsoft's archived upstream history and
 does not receive HomeTemperature maintenance changes. Submit maintained Core
 fixes, packaging changes, and release preparation through pull requests to
-`maintenance`. Core package CI validates the runtime version API, builds the
-Board Manager archive twice, and rejects any non-reproducible result. To perform
-the same package check locally from a committed revision:
+`maintenance`. Core package CI validates the runtime version API, verifies
+repeatable package builds on Windows and Ubuntu, and requires both platforms to
+produce byte-for-byte identical archives. To perform the same package check
+locally from a committed revision:
 
 ```powershell
 & .\tools\Test-Az3166BoardPackage.ps1 `
 	-ExpectedVersion 2.0.2 `
 	-OutputDirectory .\artifacts
 ```
+
+The package builder disables Git's automatic line-ending conversion and uses
+UTC ZIP timestamps without modifying the caller's Git configuration or
+environment.
 
 A numeric semantic-version tag created from a verified `maintenance` commit must
 exactly match `SystemVersion.h`. Pushing that tag runs the release workflow,
