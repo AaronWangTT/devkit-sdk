@@ -78,7 +78,20 @@ jobs:
           "version=$($result.Version)" >> $env:GITHUB_OUTPUT
           $result | Format-List
 
-      - name: Verify runtime version API
+      - name: Validate package layout contracts
+        if: hashFiles('tests/host/package/PackageLayoutTest.ps1') != ''
+        shell: pwsh
+        run: ./tests/host/package/PackageLayoutTest.ps1
+
+      - name: Run Core host tests
+        if: hashFiles('tools/test/Test-Az3166HostTests.ps1') != ''
+        shell: pwsh
+        run: |
+          ./tools/test/Test-Az3166HostTests.ps1 -Sanitize `
+            -ExpectedVersion '${{ steps.package.outputs.version }}'
+
+      - name: Verify historical runtime version API
+        if: hashFiles('tools/test/Test-Az3166HostTests.ps1') == ''
         shell: bash
         run: |
           set -euo pipefail
@@ -98,8 +111,8 @@ jobs:
             -o "$RUNNER_TEMP/system-version-test"
           "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
 
-      - name: Run WiFiUDP host tests
-        if: hashFiles('tests/host/wifi/WiFiUdpTest.cpp', 'AZ3166/tests/WiFiTest/WiFiUdpTest.cpp') != ''
+      - name: Run historical WiFiUDP host tests
+        if: hashFiles('tools/test/Test-Az3166HostTests.ps1') == '' && hashFiles('tests/host/wifi/WiFiUdpTest.cpp', 'AZ3166/tests/WiFiTest/WiFiUdpTest.cpp') != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -122,8 +135,8 @@ jobs:
           UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
             "$RUNNER_TEMP/wifiudp-test"
 
-      - name: Run legacy client host tests
-        if: hashFiles('tests/host/cloud/IotClientTest.cpp', 'AZ3166/tests/VoiceToTwitter/IotClientTest.cpp') != ''
+      - name: Run historical legacy client host tests
+        if: hashFiles('tools/test/Test-Az3166HostTests.ps1') == '' && hashFiles('tests/host/cloud/IotClientTest.cpp', 'AZ3166/tests/VoiceToTwitter/IotClientTest.cpp') != ''
         shell: bash
         run: |
           set -euo pipefail

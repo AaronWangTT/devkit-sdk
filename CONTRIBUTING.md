@@ -34,32 +34,24 @@ The `master` branch preserves archived upstream history.
 If you want to understand how Code works or want to debug an issue, you'll want to get the source, and run it locally.
 
 You'll need [git] to download source code. The maintained sketch driver stages
-`src` and `libraries` together without modifying an installed board package;
-see the validation commands below. For a manual installation, copy both trees
-into an existing AZ3166 platform installation as shown here.
+the source-to-package map without modifying an installed board package; see the
+validation commands below. Core, board support, extensions, dependencies, and
+Arduino libraries have separate ownership directories and must not be copied
+directly into a board installation.
 
-### Windows
+### Stage the Arduino platform
 
-```
+```powershell
 git clone --branch maintenance https://github.com/AaronWangTT/devkit-sdk
-
 cd devkit-sdk
-
-xcopy /s .\src\*.* "C:\Users\{your name}\AppData\Local\Arduino15\packages\AZ3166\hardware\stm32f4\{version}" /I /R /Y
-xcopy /s .\libraries\*.* "C:\Users\{your name}\AppData\Local\Arduino15\packages\AZ3166\hardware\stm32f4\{version}\libraries" /I /R /Y
+pwsh -File ./tools/package/Stage-Az3166Platform.ps1 -Destination ./artifacts/platform
 ```
 
-### OS X
-
-```
-git clone --branch maintenance https://github.com/AaronWangTT/devkit-sdk
-
-cd devkit-sdk
-
-cp -R ./src/. ~/Library/Arduino15/packages/AZ3166/hardware/stm32f4/{version}/
-mkdir -p ~/Library/Arduino15/packages/AZ3166/hardware/stm32f4/{version}/libraries
-cp -R ./libraries/. ~/Library/Arduino15/packages/AZ3166/hardware/stm32f4/{version}/libraries/
-```
+The staging destination must be empty. It is generated output for inspection or
+manual integration, not an editing location. The test drivers create their own
+temporary staging areas, so this explicit staging step is not a prerequisite for
+them. Update [the package map](platform/az3166/package-layout.json) whenever
+ownership paths change; missing inputs and destination collisions fail validation.
 
 ### Validate your changes
 Standalone examples are under `examples`, host tests under `tests/host`, and
@@ -78,7 +70,15 @@ pwsh -File .\tools\test\Test-Az3166Sketches.ps1
 ```
 
 Native host-test commands and pinned toolchain setup are maintained in the
-[CI workflow](.github/workflows/core-package-ci.yml). To verify package generation
+[CI workflow](.github/workflows/core-package-ci.yml). Run the shared native tests
+using PowerShell 7 and GCC with sanitizer support:
+
+```powershell
+pwsh -File ./tests/host/package/PackageLayoutTest.ps1
+pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Sanitize
+```
+
+The C++ tests use dependency fakes, not the ARM-only vendor binaries. To verify package generation
 from a committed revision, run:
 
 ```powershell

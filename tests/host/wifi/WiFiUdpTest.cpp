@@ -217,7 +217,7 @@ int UDPSocket::constructionCount = 0;
 int UDPSocket::destructionCount = 0;
 int UDPSocket::totalCloseCalls = 0;
 
-#include "../../../libraries/WiFi/src/AZ3166WiFiUdp.cpp"
+#include "AZ3166WiFiUdp.cpp"
 
 #define REQUIRE(condition) \
     do { \

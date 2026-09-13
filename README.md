@@ -47,27 +47,36 @@ With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) 
 
 | Directory | Purpose |
 | --- | --- |
-| [src](src) | Platform metadata, Core, vendor dependencies, and board support. |
+| [src/core/arduino](src/core/arduino) | Arduino compatibility APIs and the Core version API. |
+| [src/bsp/az3166](src/bsp/az3166) | Board adapters, startup integration, configuration, variants, and boot support. |
+| [src/extensions](src/extensions) | Core-hosted networking, HTTP, time, configuration, telemetry, display, OTA, and diagnostics services. |
+| [vendor](vendor) | Imported dependency bundles, headers, licenses, and prebuilt archives. |
+| [platform/az3166](platform/az3166) | Arduino metadata and the source-to-package map. |
 | [libraries](libraries) | Arduino library packages with their original metadata and examples. |
 | [examples](examples) | Standalone cloud, board, SPI, and I2C demonstration projects. |
 | [tests/host](tests/host) | Runtime-version, WiFiUDP, and legacy IoT-client host tests. |
 | [tests/hardware](tests/hardware) | ArduinoUnit device suite and the manual HTTP/NTP stress test. |
-| [tools/test](tools/test) | Sketch compilation driver. |
-| [tools/package](tools/package) | Deterministic package builder and verifier. |
+| [tools/test](tools/test) | Shared host-test and sketch compilation drivers. |
+| [tools/package](tools/package) | Validated staging, deterministic package builder, and verifier. |
 | [tools/provisioning](tools/provisioning) | Historical DICE enrollment utility; its build and runtime are not validated by maintained CI. |
 | [legacy](legacy/README.md) | Archived Jenkins, installer, deployment, and device-test tooling. |
 | [docs](docs/devkit-sdk-hardening-plan.md) | Structure and hardening plan. |
 
-The package builder combines committed `src` contents with `libraries` under the
-archive's `AZ3166/` directory. The sketch driver stages the same installed layout
-from the checkout. Repository paths are separate from Arduino's installed paths;
-copying only `src` does not produce a complete platform. Library names, public
-headers, and the 15 library examples are preserved.
+The [package map](platform/az3166/package-layout.json) assigns every payload file
+to its original installed location under the archive's `AZ3166/` prefix. Both
+checkout staging and committed-revision packaging use the same validated map.
+Do not copy ownership directories directly into an Arduino installation; use
+[Stage-Az3166Platform.ps1](tools/package/Stage-Az3166Platform.ps1) or the build
+drivers. Library names, public headers, default service inclusion, and the 15
+library examples are preserved. The extension category does not make those
+services optional at build time.
 
 ## Tests
 
-Core package CI executes the runtime-version check and the WiFiUDP and legacy
-IoT-client host harnesses on Ubuntu. Both client harnesses use AddressSanitizer
+Core package CI runs package-map contract tests on Windows and Ubuntu. It uses
+[Test-Az3166HostTests.ps1](tools/test/Test-Az3166HostTests.ps1) to execute the
+runtime-version check and the WiFiUDP and legacy IoT-client harnesses on Ubuntu.
+Both client harnesses use AddressSanitizer
 and UndefinedBehaviorSanitizer. They compile the client implementation with
 dependency fakes; they do not execute the ARM-only vendor libraries or the real
 JSON parser. The corresponding checks also run during releases when the tagged
@@ -101,6 +110,17 @@ and falls back to their original paths for historical tags. Package source paths
 are resolved from the requested Git revision, including the historical
 `AZ3166/src` layout. Packaging uses a temporary Git index when combining split
 directories, preserving the caller's index and the published Arduino layout.
+
+To run the host checks with native GCC and PowerShell 7:
+
+```powershell
+pwsh -File ./tests/host/package/PackageLayoutTest.ps1
+pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Sanitize
+```
+
+The host driver stages the mapped platform before compiling. Its `-CompileOnly`
+option is explicitly compile/link-only and does not run tests. Current release
+tags use the same host-test driver; older tags retain compatibility commands.
 
 ## Contribution
 

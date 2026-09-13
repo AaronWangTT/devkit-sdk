@@ -11,6 +11,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+. (Join-Path $PSScriptRoot 'Az3166PackageLayout.ps1')
 $packageBuilder = Join-Path $PSScriptRoot "New-Az3166BoardPackage.ps1"
 
 function Invoke-GitText {
@@ -23,38 +24,11 @@ function Invoke-GitText {
     return $output
 }
 
-function Get-Az3166CoreVersion {
-    param(
-        [string]$HeaderContent,
-        [string]$Source
-    )
-
-    $components = foreach ($name in @(
-        "DEVKIT_MAJOR_VERSION",
-        "DEVKIT_MINOR_VERSION",
-        "DEVKIT_PATCH_VERSION"
-    )) {
-        $match = [regex]::Match(
-            $HeaderContent,
-            "(?m)^\s*#define\s+$name\s+([0-9]+)\s*$"
-        )
-        if (-not $match.Success) {
-            throw "$Source does not define a numeric $name."
-        }
-        [int]$match.Groups[1].Value
-    }
-
-    return $components -join "."
-}
-
 $resolvedCommit = Invoke-GitText -GitArguments @("rev-parse", "$Revision^{commit}")
-$sourceDirectory = Invoke-GitText -GitArguments @(
-    "ls-tree", "-d", "--name-only", $resolvedCommit, "--", "src"
-)
-if ($sourceDirectory -ne "src") {
-    $sourceDirectory = "AZ3166/src"
-}
-$versionHeaderPath = "$sourceDirectory/cores/arduino/system/SystemVersion.h"
+$layout = Get-Az3166PackageLayout -RepositoryRoot $repositoryRoot -Revision $resolvedCommit
+$versionHeaderPath = ($layout.Files | Where-Object {
+    $_.Destination -ceq 'cores/arduino/system/SystemVersion.h'
+}).Source
 $versionHeader = Invoke-GitText -GitArguments @(
     "show",
     "${resolvedCommit}:$versionHeaderPath"
