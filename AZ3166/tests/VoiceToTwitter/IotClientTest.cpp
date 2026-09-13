@@ -210,20 +210,36 @@ bool missingRequiredStringsAreRejected() {
 }
 
 bool invalidResponseAfterSuccessIsReported() {
-    UploadFixture fixture;
-    REQUIRE(iot_client_blob_upload_step1("voice.wav") == 0);
-    fixture.value.type = JSONArray;
-    REQUIRE(iot_client_blob_upload_step1("voice.wav") == -1);
-    REQUIRE(jsonFreeCount == 2);
+    const JSON_Value_Type types[] = {
+        JSONError, JSONObject, JSONNull, JSONArray, JSONString, JSONNumber, JSONBoolean
+    };
+    for (size_t index = 0; index < sizeof(types) / sizeof(types[0]); ++index) {
+        UploadFixture fixture;
+        REQUIRE(iot_client_blob_upload_step1("voice.wav") == 0);
+        fixture.value.type = types[index];
+        if (types[index] == JSONError) {
+            nextParsedValue = NULL;
+        }
+        REQUIRE(iot_client_blob_upload_step1("voice.wav") == -1);
+        REQUIRE(sasUri == NULL);
+        REQUIRE(correlationId == NULL);
+        REQUIRE(jsonFreeCount == (types[index] == JSONError ? 1 : 2));
+        REQUIRE(iot_client_blob_upload_step2("audio", 5) == -1);
+        REQUIRE(iot_client_blob_upload_step3(false) == -1);
+        REQUIRE(requestCount == 2);
+    }
     return true;
 }
 
 bool missingHttpResponseIsReported() {
     UploadFixture fixture;
+    REQUIRE(iot_client_blob_upload_step1("voice.wav") == 0);
     nextResponse = NULL;
     REQUIRE(iot_client_blob_upload_step1("voice.wav") == -1);
-    REQUIRE(parseCount == 0);
-    REQUIRE(jsonFreeCount == 0);
+    REQUIRE(sasUri == NULL);
+    REQUIRE(correlationId == NULL);
+    REQUIRE(parseCount == 1);
+    REQUIRE(jsonFreeCount == 1);
     return true;
 }
 
@@ -231,13 +247,26 @@ bool unsuccessfulHttpStatusesAreRejected() {
     const int statuses[] = {199, 300, 400, 500};
     for (size_t index = 0; index < sizeof(statuses) / sizeof(statuses[0]); ++index) {
         UploadFixture fixture;
+        REQUIRE(iot_client_blob_upload_step1("voice.wav") == 0);
         fixture.response.status_code = statuses[index];
         REQUIRE(iot_client_blob_upload_step1("voice.wav") == -1);
         REQUIRE(sasUri == NULL);
         REQUIRE(correlationId == NULL);
-        REQUIRE(parseCount == 0);
-        REQUIRE(jsonFreeCount == 0);
+        REQUIRE(parseCount == 1);
+        REQUIRE(jsonFreeCount == 1);
     }
+    return true;
+}
+
+bool invalidBlobNameClearsPreviousUpload() {
+    UploadFixture fixture;
+    REQUIRE(iot_client_blob_upload_step1("voice.wav") == 0);
+    REQUIRE(iot_client_blob_upload_step1(NULL) == -1);
+    REQUIRE(sasUri == NULL);
+    REQUIRE(correlationId == NULL);
+    REQUIRE(iot_client_blob_upload_step2("audio", 5) == -1);
+    REQUIRE(iot_client_blob_upload_step3(false) == -1);
+    REQUIRE(requestCount == 1);
     return true;
 }
 
@@ -254,7 +283,8 @@ int main() {
         {"missing required strings are rejected", missingRequiredStringsAreRejected},
         {"invalid response after success is reported", invalidResponseAfterSuccessIsReported},
         {"missing HTTP response is reported", missingHttpResponseIsReported},
-        {"unsuccessful HTTP statuses are rejected", unsuccessfulHttpStatusesAreRejected}
+        {"unsuccessful HTTP statuses are rejected", unsuccessfulHttpStatusesAreRejected},
+        {"invalid blob name clears previous upload", invalidBlobNameClearsPreviousUpload}
     };
     int failures = 0;
     for (size_t index = 0; index < sizeof(tests) / sizeof(tests[0]); ++index) {

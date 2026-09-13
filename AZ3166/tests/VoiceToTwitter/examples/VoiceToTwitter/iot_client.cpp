@@ -78,6 +78,12 @@ int iot_client_set_connection_string(const char *conn_str)
 
 int iot_client_blob_upload_step1(const char *blobName)
 {
+    free(sasUri);
+    sasUri = NULL;
+    free(correlationId);
+    correlationId = NULL;
+    step2_status_code = 0;
+
     if (blobName == NULL)
     {
         Serial.println("Invalid blob name");
@@ -190,6 +196,11 @@ int iot_client_blob_upload_step2(const char *content, int length)
 
 int iot_client_blob_upload_step3(bool isSuccess)
 {
+    if (correlationId == NULL)
+    {
+        Serial.println("Please complete iot_client_blob_upload_step1 before sending a notification.");
+        return -1;
+    }
     if (_check_iot_ready_for_request() != 0)
     {
         return -1;
