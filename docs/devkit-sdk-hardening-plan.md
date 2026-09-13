@@ -47,7 +47,6 @@ Repository reorganization is the first stage, followed by build normalization.
   UnitTest configuration references. Historical release layouts have fallbacks.
 - Preserved all shipped library examples, legacy tool locations, sketch filenames/extensions, and the complete `AZ3166/src` payload. Removed the two orphaned VoiceToTwitter metadata files.
 - Removed the two root Azure Pipeline templates and the stale root Board Manager index. The maintained catalog in `azureiotdevkit_tools` is unchanged.
-  index. The maintained catalog in `azureiotdevkit_tools` is unchanged.
 - Validation: all 13 relocated sketches compile; all 3 host programs compile and
   link with ARM GCC; current and canonical 2.0.2 package verification passes;
   workflow syntax, old/new release path selection, and local links pass.
