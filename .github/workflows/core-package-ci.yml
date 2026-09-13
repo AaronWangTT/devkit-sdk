@@ -94,7 +94,7 @@ jobs:
             -o "$RUNNER_TEMP/system-version-test"
           "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
 
-      - name: Run Core host tests
+      - name: Run WiFiUDP host tests
         if: runner.os == 'Linux'
         shell: bash
         run: |

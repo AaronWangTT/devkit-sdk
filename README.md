@@ -58,6 +58,9 @@ compile-only checks, not hardware execution or validation against live cloud
 services. Native build commands are maintained in the
 [CI workflow](.github/workflows/core-package-ci.yml).
 
+The sketch test script requires PowerShell 7 or later (`pwsh`), matching the CI
+shell. Windows PowerShell 5.1 (`powershell.exe`) is not supported.
+
 ## Contribution
 
 There are a couple of ways you can contribute to this repo:
