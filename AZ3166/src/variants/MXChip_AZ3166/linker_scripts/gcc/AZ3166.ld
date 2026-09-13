@@ -119,14 +119,14 @@ SECTIONS
         _edata = .;
     } > RAM
 
-    .bss :
+    .bss ALIGN(8) :
     {
-        . = ALIGN(4);
+        . = ALIGN(8);
         __bss_start__ = .;
         _sbss = .;
         *(.bss*)
         *(COMMON)
-        . = ALIGN(4);
+        . = ALIGN(8);
         __bss_end__ = .;
         _ebss = .;
     } > RAM
