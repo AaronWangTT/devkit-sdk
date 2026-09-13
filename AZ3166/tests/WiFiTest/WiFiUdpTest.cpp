@@ -91,7 +91,8 @@ class UDPSocket {
 public:
     UDPSocket()
         : openResult(0), bindResult(0), sendResult(UsePayloadSize),
-          blocking(true), timeout(0), openCalls(0), bindCalls(0), closeCalls(0),
+          isOpen(false), isBound(false), blocking(true), timeout(0),
+          openCalls(0), bindCalls(0), closeCalls(0),
           sendCalls(0), receiveCalls(0), boundPort(0), hasIncomingPacket(false),
           receiveError(-1) {
         lastCreated = this;
@@ -117,18 +118,36 @@ public:
 
     int open(FakeNetworkInterface *) {
         ++openCalls;
-        return openResult;
+        if (openResult != 0) {
+            return openResult;
+        }
+        if (isOpen) {
+            return -1;
+        }
+        isOpen = true;
+        isBound = false;
+        return 0;
     }
 
     int bind(uint16_t port) {
         ++bindCalls;
+        if (bindResult != 0) {
+            return bindResult;
+        }
+        if (!isOpen || isBound) {
+            return -1;
+        }
+        isBound = true;
         boundPort = port;
-        return bindResult;
+        return 0;
     }
 
     int close() {
         ++closeCalls;
         ++totalCloseCalls;
+        isOpen = false;
+        isBound = false;
+        boundPort = 0;
         return 0;
     }
 
@@ -174,6 +193,8 @@ public:
     int openResult;
     int bindResult;
     int sendResult;
+    bool isOpen;
+    bool isBound;
     bool blocking;
     int timeout;
     int openCalls;
@@ -226,7 +247,7 @@ bool constructorStartsWithoutRemoteEndpoint() {
     return true;
 }
 
-bool beginOpensConfiguresAndBinds() {
+bool beginReopensBeforeRebinding() {
     resetFakes();
     WiFiUDP udp;
     UDPSocket *socket = UDPSocket::lastCreated;
@@ -239,7 +260,8 @@ bool beginOpensConfiguresAndBinds() {
     REQUIRE(socket->timeout == 5000);
 
     REQUIRE(udp.begin(5353) == 1);
-    REQUIRE(socket->openCalls == 1);
+    REQUIRE(socket->closeCalls == 1);
+    REQUIRE(socket->openCalls == 2);
     REQUIRE(socket->bindCalls == 2);
     REQUIRE(socket->boundPort == 5353);
 
@@ -373,6 +395,13 @@ bool writeRequiresSocketAndDestinationAndReportsFailures() {
     socket->sendResult = -1;
     REQUIRE(udp.write(payload, sizeof(payload)) == 0);
     REQUIRE(socket->sendCalls == 1);
+    REQUIRE(udp.endPacket() == 0);
+
+    socket->sendResult = UDPSocket::UsePayloadSize;
+    REQUIRE(udp.beginPacket(IPAddress(203, 0, 113, 10), 53) == 1);
+    REQUIRE(udp.write(payload, sizeof(payload)) == sizeof(payload));
+    REQUIRE(socket->sendCalls == 2);
+    REQUIRE(udp.endPacket() == 1);
 
     return true;
 }
@@ -434,7 +463,7 @@ struct TestCase {
 int main() {
     const TestCase tests[] = {
         {"constructor starts without remote endpoint", constructorStartsWithoutRemoteEndpoint},
-        {"begin opens, configures, and binds", beginOpensConfiguresAndBinds},
+        {"begin reopens before rebinding", beginReopensBeforeRebinding},
         {"begin reports open and bind failures", beginReportsOpenAndBindFailures},
         {"stop is idempotent and allows restart", stopIsIdempotentAndAllowsRestart},
         {"send buffer to IP endpoint", sendsBufferToIpEndpoint},

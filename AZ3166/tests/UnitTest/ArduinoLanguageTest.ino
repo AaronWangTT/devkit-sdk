@@ -15,16 +15,12 @@ test(analog_read)
 
 test(analog_write)
 {
-    int val = 0;
-
-    analogReadResolution(10);
-    val= analogRead(PB_0);
-    Serial.print("Analog Read:");
-    Serial.println(val);
-
     analogWriteResolution(10);
-    analogWrite(PA_4, val);
-    assertEqual(analogRead(PA_4), val);
+  analogWrite(PA_4, 511);
+  assertEqual(digitalRead(PA_4), LOW);
+
+  analogWrite(PA_4, 512);
+  assertEqual(digitalRead(PA_4), HIGH);
 
     delay(LOOP_DELAY);
 }
