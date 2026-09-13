@@ -43,6 +43,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate package layout contracts
+        shell: pwsh
+        run: ./tests/host/package/PackageLayoutTest.ps1
+
       - name: Build and verify deterministic package
         id: package
         shell: pwsh
@@ -81,53 +85,12 @@ jobs:
           }
           $result | Format-List
 
-      - name: Verify runtime version API
+      - name: Run Core host tests
         if: runner.os == 'Linux'
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          g++ -std=c++11 \
-            -include cstdint \
-            -I src/cores/arduino/system \
-            src/cores/arduino/system/SystemVersion.cpp \
-            tests/host/core/SystemVersionTest.cpp \
-            -o "$RUNNER_TEMP/system-version-test"
-          "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
-
-      - name: Run WiFiUDP host tests
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          g++ -std=c++11 -O1 -g -Wall -Wextra -Werror \
-            -fsanitize=address,undefined \
-            -fno-omit-frame-pointer \
-            -I src/system/mbed-os/features/netsocket \
-            -I src/cores/arduino/system \
-            tests/host/wifi/WiFiUdpTest.cpp \
-            -o "$RUNNER_TEMP/wifiudp-test"
-          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
-          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
-            "$RUNNER_TEMP/wifiudp-test"
-
-      - name: Run legacy client host tests
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          g++ -std=gnu++11 -O1 -g -Wall -Wextra -Werror \
-            -ffunction-sections -fdata-sections \
-            -fsanitize=address,undefined -fno-omit-frame-pointer \
-            -I src/cores/arduino \
-            -I src/cores/arduino/httpclient \
-            -I src/system/azure-iot-sdk-c/deps/parson \
-            -I src/system/azure-iot-sdk-c/c-utility/inc \
-            tests/host/cloud/IotClientTest.cpp \
-            -Wl,--gc-sections \
-            -o "$RUNNER_TEMP/iot-client-test"
-          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
-          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
-            "$RUNNER_TEMP/iot-client-test"
+          ./tools/test/Test-Az3166HostTests.ps1 -Sanitize `
+            -ExpectedVersion '${{ steps.package.outputs.version }}'
 
       - name: Set up Arduino CLI
         if: runner.os == 'Windows'

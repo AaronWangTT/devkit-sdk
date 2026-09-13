@@ -18,11 +18,11 @@ points. Some job definitions contain destructive workspace commands, and the
 deployment scripts overwrite remote artifacts. Do not import or run them
 against a production workspace or service without a separate review.
 
-The bundles retain their internal hierarchy. Repository-source references have
-been adjusted for root `src` and `libraries`, but external workspace paths,
-service endpoints, credentials, runtime versions, and tool assumptions have not
-been repaired or validated. In particular, the old package-generation modes do
-not assemble the current split layout. Use
+The bundles retain their internal hierarchy. Their repository references describe
+the earlier flat source layout; they have not been adapted to the ownership map.
+External workspace paths, service endpoints, credentials, runtime versions, and
+tool assumptions have not been repaired or validated either. In particular, the
+old package-generation modes do not assemble the current mapped layout. Use
 [the maintained package tools](../tools/package) and
 [sketch driver](../tools/test/Test-Az3166Sketches.ps1) instead.
 

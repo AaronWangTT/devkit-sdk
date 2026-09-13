@@ -17,12 +17,11 @@ $arduinoUnitUrl = "https://downloads.arduino.cc/libraries/github.com/mmurdoch/Ar
 $arduinoUnitSha256 = "dc2e4473aedad99d254b4169e6ec32c717004c6537f2008e87db72d8c76b08ff"
 $fqbn = "AZ3166Checkout:stm32f4:MXCHIP_AZ3166"
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+. (Join-Path $repositoryRoot 'tools/package/Az3166PackageLayout.ps1')
 $sketchRoots = @(
     (Join-Path $repositoryRoot "examples")
     (Join-Path $repositoryRoot "tests/hardware")
 )
-$platformSource = Join-Path $repositoryRoot "src"
-$platformLibraries = Join-Path $repositoryRoot "libraries"
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) "az3166-tests-$([guid]::NewGuid().ToString('N'))"
 
 if (-not $ArduinoDataDirectory) {
@@ -75,8 +74,7 @@ $configurationPath = Join-Path $temporaryRoot "arduino-cli.yaml"
 try {
     New-Item -ItemType Directory -Path $librariesDirectory -Force | Out-Null
     New-Item -ItemType Directory -Path $downloadsDirectory -Force | Out-Null
-    Copy-Item -LiteralPath $platformSource -Destination $platformDirectory -Recurse
-    Copy-Item -LiteralPath $platformLibraries -Destination (Join-Path $platformDirectory "libraries") -Recurse
+    Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination $platformDirectory
 
     Invoke-WebRequest -Uri $arduinoUnitUrl -OutFile $archivePath -UseBasicParsing
     $archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
