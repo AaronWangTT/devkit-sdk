@@ -23,6 +23,8 @@ WiFiUDP::WiFiUDP()
 {
     _pUdpSocket = new UDPSocket();
 
+    _port = 0;
+    _address = NULL;
     _localPort = 0;
     is_initialized = false;
 }
@@ -43,8 +45,13 @@ int WiFiUDP::begin(unsigned short port)
 
     if ( is_initialized )
     {
+        if (_pUdpSocket->bind(port) != 0)
+        {
+            _pUdpSocket->close();
+            is_initialized = false;
+            return 0;
+        }
         _localPort = port;
-        _pUdpSocket->bind(port);
         return 1;
     }
     else
@@ -120,19 +127,23 @@ size_t WiFiUDP::write(unsigned char data)
 
 size_t WiFiUDP::write(const unsigned char *buffer, size_t size)
 {
-    if (!is_initialized)
+    if (!is_initialized || _address == NULL)
     {
         return 0;
     }
-    _pUdpSocket->sendto(*_address, (char*)buffer, size);
-    return size;
+    int result = _pUdpSocket->sendto(*_address, (char*)buffer, size);
+    return result > 0 ? (size_t)result : 0;
 }
 
 int WiFiUDP::read()
 {
     int n;
-    char b;
+    unsigned char b;
 
+    if (!is_initialized)
+    {
+        return -1;
+    }
     if (_address == NULL)
     {
         _address = new SocketAddress();
@@ -147,6 +158,10 @@ int WiFiUDP::read()
 
 int WiFiUDP::read(unsigned char* buffer, size_t len)
 {
+    if (!is_initialized)
+    {
+        return 0;
+    }
     if (_address == NULL)
     {
         _address = new SocketAddress();
@@ -155,7 +170,8 @@ int WiFiUDP::read(unsigned char* buffer, size_t len)
             return 0;
         }
     }
-    return _pUdpSocket->recvfrom(_address, (char*)buffer, len);
+    int result = _pUdpSocket->recvfrom(_address, (char*)buffer, len);
+    return result > 0 ? result : 0;
 }
 
 void WiFiUDP::flush()
