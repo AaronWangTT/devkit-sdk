@@ -117,8 +117,11 @@ jobs:
         env:
           CORE_VERSION: ${{ steps.build-lock.outputs.core_version }}
           ARDUINO_IDE_VERSION: ${{ steps.build-lock.outputs.arduino_ide_version }}
+          ARDUINO_IDE_URL: ${{ steps.build-lock.outputs.arduino_ide_url }}
+          ARDUINO_IDE_SIZE: ${{ steps.build-lock.outputs.arduino_ide_size }}
           ARDUINO_IDE_SHA256: ${{ steps.build-lock.outputs.arduino_ide_sha256 }}
           AZ3166_INDEX_URL: ${{ steps.build-lock.outputs.index_url }}
+          AZ3166_INDEX_SHA256: ${{ steps.build-lock.outputs.index_sha256 }}
           GCC_PACKAGE_VERSION: ${{ steps.build-lock.outputs.gcc_package_version }}
           GCC_COMPILER_VERSION: ${{ steps.build-lock.outputs.gcc_compiler_version }}
         run: |
@@ -136,8 +139,12 @@ jobs:
             Remove-Item -LiteralPath $arduinoRoot -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $expandedRoot -Recurse -Force -ErrorAction SilentlyContinue
             Invoke-WebRequest `
-              -Uri "https://downloads.arduino.cc/arduino-$env:ARDUINO_IDE_VERSION-windows.zip" `
+              -Uri $env:ARDUINO_IDE_URL `
               -OutFile $archive
+            $archiveSize = (Get-Item -LiteralPath $archive).Length
+            if ($archiveSize -ne [long]$env:ARDUINO_IDE_SIZE) {
+              throw "Arduino IDE archive size mismatch: $archiveSize"
+            }
             $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($archiveHash -ne $env:ARDUINO_IDE_SHA256) {
               throw "Arduino IDE archive hash mismatch: $archiveHash"
@@ -155,6 +162,13 @@ jobs:
             Remove-Item -LiteralPath (Join-Path $arduinoData "packages/AZ3166") `
               -Recurse -Force -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Path $arduinoData -Force | Out-Null
+            $indexPath = Join-Path $env:RUNNER_TEMP "package_azureboard_index.json"
+            Invoke-WebRequest -Uri $env:AZ3166_INDEX_URL -OutFile $indexPath
+            $indexHash = (Get-FileHash -LiteralPath $indexPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            Remove-Item -LiteralPath $indexPath -Force
+            if ($indexHash -ne $env:AZ3166_INDEX_SHA256) {
+              throw "AZ3166 Board Manager index hash mismatch: $indexHash"
+            }
             & $arduino `
               --install-boards "AZ3166:stm32f4:$env:CORE_VERSION" `
               --pref "boardsmanager.additional.urls=$env:AZ3166_INDEX_URL" `

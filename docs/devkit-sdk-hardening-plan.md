@@ -49,9 +49,11 @@ PowerShell 7 or later and Git with support for `git archive --mtime`.
 For target builds, use the existing pinned Windows toolchain: Arduino CLI 1.5.1,
 Arduino IDE 1.8.19 bootstrap, AZ3166 GCC `5_4-2016q3`, and the immutable package
 index specified by [Core package CI](../.github/workflows/core-package-ci.yml).
-The workflow installs and verifies the toolchain on a clean Windows runner. Keep
-the historical GCC installation path short; changing its version or ABI flags is
-not part of this layout migration.
+The workflow verifies the IDE archive and immutable index before Board Manager
+uses the index package checksums on a clean Windows runner. Direct installed-tool
+identity checks belong to the shared Stage 1 installer. Keep the historical GCC
+installation path short; changing its version or ABI flags is not part of this
+layout migration.
 
 ### Compile All Target Projects
 

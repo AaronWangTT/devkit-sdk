@@ -102,6 +102,17 @@ $workflowLiterals = @(
 foreach ($literal in $workflowLiterals) {
     Assert-BuildConfigurationTest (-not $workflow.Contains($literal)) "Core package CI duplicates a build-lock value: $literal"
 }
+$declaredRunners = @([regex]::Matches($workflow, '(?m)^\s+(?:runner|runs-on):\s+([A-Za-z0-9.-]+)\s*$') | ForEach-Object {
+    $_.Groups[1].Value
+})
+$expectedRunners = @(
+    $lock.hostPrerequisites.windows.runner
+    $lock.hostPrerequisites.linux.runner
+    $lock.hostPrerequisites.linux.runner
+)
+Assert-BuildConfigurationTest `
+    (@(Compare-Object ($expectedRunners | Sort-Object) ($declaredRunners | Sort-Object)).Count -eq 0) `
+    'GitHub Actions runner labels do not match the build lock.'
 
 $sketchDriver = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'tools/test/Test-Az3166Sketches.ps1')
 Assert-BuildConfigurationTest ($sketchDriver.Contains('Get-Az3166BuildLock')) 'The sketch driver does not consume the shared build lock.'
@@ -124,25 +135,30 @@ try {
         Assert-BuildConfigurationTest ($parts.Count -eq 2) "Malformed GitHub output line: $line"
         $githubOutput[$parts[0]] = $parts[1]
     }
-    $expectedOutputNames = @(
-        'lock_sha256'
-        'core_version'
-        'core_package_size'
-        'core_package_sha256'
-        'arduino_cli_version'
-        'arduino_ide_version'
-        'arduino_ide_sha256'
-        'index_revision'
-        'index_url'
-        'gcc_package_version'
-        'gcc_compiler_version'
-    )
+    $expectedOutput = [ordered]@{
+        lock_sha256 = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        core_version = $lock.core.version
+        core_package_size = [string]$lock.core.canonicalPackage.size
+        core_package_sha256 = $lock.core.canonicalPackage.sha256
+        arduino_cli_version = $lock.arduino.cli.version
+        arduino_ide_version = $lock.arduino.ide.version
+        arduino_ide_url = $lock.arduino.ide.windows.url
+        arduino_ide_size = [string]$lock.arduino.ide.windows.size
+        arduino_ide_sha256 = $lock.arduino.ide.windows.sha256
+        index_revision = $lock.boardManager.revision
+        index_url = $lock.boardManager.indexUrl
+        index_sha256 = $lock.boardManager.sha256
+        gcc_package_version = $lock.tools.armNoneEabiGcc.version
+        gcc_compiler_version = $lock.tools.armNoneEabiGcc.compilerVersion
+    }
     Assert-BuildConfigurationTest `
-        (@(Compare-Object $expectedOutputNames @($githubOutput.Keys)).Count -eq 0) `
+        (@(Compare-Object @($expectedOutput.Keys) @($githubOutput.Keys)).Count -eq 0) `
         'The GitHub output names do not match the workflow contract.'
-    $expectedLockHash = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    Assert-BuildConfigurationTest ($githubOutput.lock_sha256 -ceq $expectedLockHash) 'The exported lock hash does not match the lock file.'
-    Assert-BuildConfigurationTest ($githubOutput.core_version -ceq $lock.core.version) 'The exported Core version does not match the lock.'
+    foreach ($name in $expectedOutput.Keys) {
+        Assert-BuildConfigurationTest `
+            ($githubOutput[$name] -ceq $expectedOutput[$name]) `
+            "The exported $name value does not match the build lock."
+    }
 }
 finally {
     Remove-Item -LiteralPath $githubOutputPath -Force -ErrorAction SilentlyContinue
