@@ -93,16 +93,17 @@ int iot_client_blob_upload_step1(const char *blobName)
     blobRequest.set_header("Authorization", current_token);
     blobRequest.set_header("Accept", "application/json");
     const Http_Response *response = blobRequest.send();
-    bool error = false;
+    bool error = true;
     if (response == NULL)
     {
         Serial.println("iot_client_blob_upload_step1 failed!");
         return -1;
     }
-    if (response->status_code < 300)
+    if (response->status_code >= 200 && response->status_code < 300)
     {
         JSON_Value *jsonValue = json_parse_string(response->body);
         JSON_Object *jsonObject = jsonValue == NULL ? NULL : json_value_get_object(jsonValue);
+        error = jsonObject == NULL;
         if (jsonObject != NULL)
         {
 

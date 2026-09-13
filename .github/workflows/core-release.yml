@@ -102,6 +102,25 @@ jobs:
           UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
             "$RUNNER_TEMP/wifiudp-test"
 
+      - name: Run legacy client host tests
+        if: hashFiles('AZ3166/tests/VoiceToTwitter/IotClientTest.cpp') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=gnu++11 -O1 -g -Wall -Wextra -Werror \
+            -ffunction-sections -fdata-sections \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -I AZ3166/src/cores/arduino \
+            -I AZ3166/src/cores/arduino/httpclient \
+            -I AZ3166/src/system/azure-iot-sdk-c/deps/parson \
+            -I AZ3166/src/system/azure-iot-sdk-c/c-utility/inc \
+            AZ3166/tests/VoiceToTwitter/IotClientTest.cpp \
+            -Wl,--gc-sections \
+            -o "$RUNNER_TEMP/iot-client-test"
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            "$RUNNER_TEMP/iot-client-test"
+
       - name: Publish GitHub release
         shell: pwsh
         env:

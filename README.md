@@ -43,6 +43,21 @@ This SDK is used to develop and prototype Internet of Things (IoT) solutions lev
 
 With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) with [Arduino Extension](https://marketplace.visualstudio.com) to rapidly build a full-fledged IoT application that integrates multiple services like Azure IoT Hub, Logic Apps and Cognitive Services.
 
+## Tests
+
+Core package CI executes the runtime-version check and the WiFiUDP and legacy
+IoT-client host harnesses on Ubuntu. Both client harnesses use AddressSanitizer
+and UndefinedBehaviorSanitizer. They compile the client implementation with
+dependency fakes; they do not execute the ARM-only vendor libraries or the real
+JSON parser. The corresponding checks also run during releases when the tagged
+revision contains those harnesses.
+
+On Windows, [Test-Az3166Sketches.ps1](AZ3166/tests/Test-Az3166Sketches.ps1)
+compiles every discovered Arduino test sketch against the checkout. These are
+compile-only checks, not hardware execution or validation against live cloud
+services. Native build commands are maintained in the
+[CI workflow](.github/workflows/core-package-ci.yml).
+
 ## Contribution
 
 There are a couple of ways you can contribute to this repo:
