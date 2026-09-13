@@ -6,8 +6,8 @@
 #include "TelemetryClient.h"
 
 #ifndef ENABLETRACE
-// By default trace is enabled
-#define ENABLETRACE           1
+// System telemetry is opt-in. Define ENABLETRACE=1 in the platform build flags to enable it.
+#define ENABLETRACE           0
 #endif
 
 // Todo, the url and key of AI shall be get from REST service / web page, instead of hardcode here 
