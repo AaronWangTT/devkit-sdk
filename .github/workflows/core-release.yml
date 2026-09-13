@@ -1,0 +1,71 @@
+name: Core release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish Core release
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and verify tagged package
+        id: package
+        shell: pwsh
+        run: |
+          $result = & ./tools/Test-Az3166BoardPackage.ps1 `
+            -ExpectedVersion $env:GITHUB_REF_NAME `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP "package")
+          "path=$($result.Path)" >> $env:GITHUB_OUTPUT
+          "sha256=$($result.SHA256)" >> $env:GITHUB_OUTPUT
+          "version=$($result.Version)" >> $env:GITHUB_OUTPUT
+          $result | Format-List
+
+      - name: Verify runtime version API
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++11 \
+            -include cstdint \
+            -I AZ3166/src/cores/arduino/system \
+            AZ3166/src/cores/arduino/system/SystemVersion.cpp \
+            tools/SystemVersionTest.cpp \
+            -o "$RUNNER_TEMP/system-version-test"
+          "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_PATH: ${{ steps.package.outputs.path }}
+          PACKAGE_SHA256: ${{ steps.package.outputs.sha256 }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          @"
+          Maintained AZ3166 Arduino Core release for AaronWangTT/HomeTemperature,
+          based on Microsoft's final 2.0.0 release.
+
+          The release tag and getDevkitVersion() both report $env:PACKAGE_VERSION.
+          The attached Board Manager archive was generated reproducibly from the
+          tagged AZ3166/src tree.
+
+          Artifact SHA-256: $env:PACKAGE_SHA256
+          "@ | Set-Content -LiteralPath $notesPath -Encoding utf8NoBOM
+
+          gh release create $env:PACKAGE_VERSION $env:PACKAGE_PATH `
+            --repo $env:GITHUB_REPOSITORY `
+            --verify-tag `
+            --title "AZ3166 Core $env:PACKAGE_VERSION" `
+            --notes-file $notesPath `
+            --latest
