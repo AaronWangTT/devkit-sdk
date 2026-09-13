@@ -12,10 +12,25 @@ on:
 permissions:
   contents: read
 
+env:
+  GOLDEN_VERSION: "2.0.2"
+  GOLDEN_SIZE: "5497641"
+  GOLDEN_SHA256: 5914d3e7b988fdc50b00ff241b7ac191fd6fb9bdc234b4a3f86c51ed0d5e9677
+
 jobs:
   verify:
-    name: Verify Core package
-    runs-on: ubuntu-24.04
+    name: Verify Core package (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu
+            runner: ubuntu-24.04
+            artifact_suffix: ubuntu
+          - name: Windows
+            runner: windows-2022
+            artifact_suffix: windows
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Check out repository
@@ -26,15 +41,43 @@ jobs:
       - name: Build and verify deterministic package
         id: package
         shell: pwsh
+        env:
+          TZ: Pacific/Honolulu
         run: |
+          git config core.autocrlf true
+          $callerTimezone = $env:TZ
           $result = & ./tools/Test-Az3166BoardPackage.ps1 `
             -OutputDirectory (Join-Path $env:RUNNER_TEMP "package")
+          if ($env:TZ -ne $callerTimezone) {
+            throw "Package builder did not restore the caller timezone."
+          }
+          if ((git config --get core.autocrlf) -ne "true") {
+            throw "Package builder modified the caller Git configuration."
+          }
           "path=$($result.Path)" >> $env:GITHUB_OUTPUT
           "sha256=$($result.SHA256)" >> $env:GITHUB_OUTPUT
           "version=$($result.Version)" >> $env:GITHUB_OUTPUT
           $result | Format-List
 
+      - name: Verify canonical 2.0.2 package
+        shell: pwsh
+        env:
+          TZ: Pacific/Honolulu
+        run: |
+          $result = & ./tools/Test-Az3166BoardPackage.ps1 `
+            -Revision $env:GOLDEN_VERSION `
+            -ExpectedVersion $env:GOLDEN_VERSION `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP "golden-package")
+          if (
+            $result.Size -ne [long]$env:GOLDEN_SIZE -or
+            $result.SHA256 -ne $env:GOLDEN_SHA256
+          ) {
+            throw "Canonical $env:GOLDEN_VERSION package mismatch: $($result.Size) bytes, $($result.SHA256)"
+          }
+          $result | Format-List
+
       - name: Verify runtime version API
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
@@ -49,7 +92,44 @@ jobs:
       - name: Upload verified package
         uses: actions/upload-artifact@v4
         with:
-          name: AZ3166-${{ steps.package.outputs.version }}
+          name: AZ3166-${{ steps.package.outputs.version }}-${{ matrix.artifact_suffix }}
           path: ${{ steps.package.outputs.path }}
           if-no-files-found: error
           retention-days: 14
+
+  compare:
+    name: Compare Core packages
+    needs: verify
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download verified packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AZ3166-*
+          path: ${{ runner.temp }}/packages
+
+      - name: Require byte-for-byte equality
+        shell: pwsh
+        run: |
+          $packages = @(
+            Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP "packages") `
+              -Filter "AZ3166-*.zip" -File -Recurse
+          )
+          if ($packages.Count -ne 2) {
+            throw "Expected two platform packages, found $($packages.Count)."
+          }
+
+          $results = @($packages | ForEach-Object {
+            [pscustomobject]@{
+              Path = $_.FullName
+              Size = $_.Length
+              SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+          })
+          $results | Format-Table -AutoSize
+
+          if (@($results.Size | Sort-Object -Unique).Count -ne 1 -or
+              @($results.SHA256 | Sort-Object -Unique).Count -ne 1) {
+            throw "Windows and Ubuntu packages are not byte-for-byte identical."
+          }
