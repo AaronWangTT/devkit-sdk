@@ -18,6 +18,7 @@ env:
   GOLDEN_SHA256: 5914d3e7b988fdc50b00ff241b7ac191fd6fb9bdc234b4a3f86c51ed0d5e9677
   ARDUINO_CLI_VERSION: "1.5.1"
   ARDUINO_IDE_VERSION: "1.8.19"
+  ARDUINO_IDE_SHA256: c704a821089eab2588f1deae775916219b1517febd1dd574ff29958dca873945
   AZ3166_INDEX_REVISION: ac5055ec3a8fddd3135b1c367a9f630d33f65ef8
   AZ3166_INDEX_URL: https://raw.githubusercontent.com/AaronWangTT/azureiotdevkit_tools/ac5055ec3a8fddd3135b1c367a9f630d33f65ef8/package_azureboard_index.json
 
@@ -120,7 +121,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/a
-          key: az3166-test-toolchain-${{ env.GOLDEN_VERSION }}-index-${{ env.AZ3166_INDEX_REVISION }}-ide-${{ env.ARDUINO_IDE_VERSION }}-windows
+          key: az3166-test-toolchain-${{ env.GOLDEN_VERSION }}-index-${{ env.AZ3166_INDEX_REVISION }}-ide-${{ env.ARDUINO_IDE_VERSION }}-${{ env.ARDUINO_IDE_SHA256 }}-windows
 
       - name: Install pinned AZ3166 test toolchain
         if: runner.os == 'Windows'
@@ -142,6 +143,10 @@ jobs:
             Invoke-WebRequest `
               -Uri "https://downloads.arduino.cc/arduino-$env:ARDUINO_IDE_VERSION-windows.zip" `
               -OutFile $archive
+            $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($archiveHash -ne $env:ARDUINO_IDE_SHA256) {
+              throw "Arduino IDE archive hash mismatch: $archiveHash"
+            }
             Expand-Archive -LiteralPath $archive -DestinationPath $env:RUNNER_TEMP
             Move-Item -LiteralPath $expandedRoot -Destination $arduinoRoot
             Remove-Item -LiteralPath $archive -Force
