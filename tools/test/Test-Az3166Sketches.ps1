@@ -12,12 +12,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$arduinoUnitVersion = "2.2.0"
-$arduinoUnitUrl = "https://downloads.arduino.cc/libraries/github.com/mmurdoch/ArduinoUnit-$arduinoUnitVersion.zip"
-$arduinoUnitSha256 = "dc2e4473aedad99d254b4169e6ec32c717004c6537f2008e87db72d8c76b08ff"
-$fqbn = "AZ3166Checkout:stm32f4:MXCHIP_AZ3166"
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+. (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 . (Join-Path $repositoryRoot 'tools/package/Az3166PackageLayout.ps1')
+$buildLock = Get-Az3166BuildLock
+$arduinoUnitVersion = $buildLock.arduino.unit.version
+$arduinoUnitUrl = $buildLock.arduino.unit.archive.url
+$arduinoUnitSha256 = $buildLock.arduino.unit.archive.sha256
+$fqbn = $buildLock.arduino.fqbn
 $sketchRoots = @(
     (Join-Path $repositoryRoot "examples")
     (Join-Path $repositoryRoot "tests/hardware")

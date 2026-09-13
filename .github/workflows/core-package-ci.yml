@@ -12,16 +12,6 @@ on:
 permissions:
   contents: read
 
-env:
-  GOLDEN_VERSION: "2.0.2"
-  GOLDEN_SIZE: "5497641"
-  GOLDEN_SHA256: 5914d3e7b988fdc50b00ff241b7ac191fd6fb9bdc234b4a3f86c51ed0d5e9677
-  ARDUINO_CLI_VERSION: "1.5.1"
-  ARDUINO_IDE_VERSION: "1.8.19"
-  ARDUINO_IDE_SHA256: c704a821089eab2588f1deae775916219b1517febd1dd574ff29958dca873945
-  AZ3166_INDEX_REVISION: ac5055ec3a8fddd3135b1c367a9f630d33f65ef8
-  AZ3166_INDEX_URL: https://raw.githubusercontent.com/AaronWangTT/azureiotdevkit_tools/ac5055ec3a8fddd3135b1c367a9f630d33f65ef8/package_azureboard_index.json
-
 jobs:
   verify:
     name: Verify Core package (${{ matrix.name }})
@@ -42,6 +32,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Read pinned build configuration
+        id: build-lock
+        shell: pwsh
+        run: |
+          . ./tools/build/Az3166Build.Common.ps1
+          $lock = Get-Az3166BuildLock
+          Export-Az3166BuildLockGitHubOutput `
+            -Lock $lock -Path $env:GITHUB_OUTPUT
+
+      - name: Validate build configuration
+        shell: pwsh
+        run: ./tests/host/build/BuildConfigurationTest.ps1
 
       - name: Validate package layout contracts
         shell: pwsh
@@ -68,10 +71,13 @@ jobs:
           "version=$($result.Version)" >> $env:GITHUB_OUTPUT
           $result | Format-List
 
-      - name: Verify canonical 2.0.2 package
+      - name: Verify canonical Core package
         shell: pwsh
         env:
           TZ: Pacific/Honolulu
+          GOLDEN_VERSION: ${{ steps.build-lock.outputs.core_version }}
+          GOLDEN_SIZE: ${{ steps.build-lock.outputs.core_package_size }}
+          GOLDEN_SHA256: ${{ steps.build-lock.outputs.core_package_sha256 }}
         run: |
           $result = & ./tools/package/Test-Az3166BoardPackage.ps1 `
             -Revision $env:GOLDEN_VERSION `
@@ -96,26 +102,33 @@ jobs:
         if: runner.os == 'Windows'
         uses: arduino/setup-arduino-cli@v2
         with:
-          version: ${{ env.ARDUINO_CLI_VERSION }}
+          version: ${{ steps.build-lock.outputs.arduino_cli_version }}
 
       - name: Cache AZ3166 test toolchain
         if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/a
-          key: az3166-test-toolchain-${{ env.GOLDEN_VERSION }}-index-${{ env.AZ3166_INDEX_REVISION }}-ide-${{ env.ARDUINO_IDE_VERSION }}-${{ env.ARDUINO_IDE_SHA256 }}-windows
+          key: az3166-test-toolchain-${{ hashFiles('tools/build/az3166-build-lock.json') }}-windows
 
       - name: Install pinned AZ3166 test toolchain
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          CORE_VERSION: ${{ steps.build-lock.outputs.core_version }}
+          ARDUINO_IDE_VERSION: ${{ steps.build-lock.outputs.arduino_ide_version }}
+          ARDUINO_IDE_SHA256: ${{ steps.build-lock.outputs.arduino_ide_sha256 }}
+          AZ3166_INDEX_URL: ${{ steps.build-lock.outputs.index_url }}
+          GCC_PACKAGE_VERSION: ${{ steps.build-lock.outputs.gcc_package_version }}
+          GCC_COMPILER_VERSION: ${{ steps.build-lock.outputs.gcc_compiler_version }}
         run: |
           $arduinoRoot = Join-Path $env:RUNNER_TEMP "a"
           $arduino = Join-Path $arduinoRoot "arduino_debug.exe"
           $arduinoData = Join-Path $arduinoRoot "portable"
-          $coreRoot = Join-Path $arduinoData "packages/AZ3166/hardware/stm32f4/$env:GOLDEN_VERSION"
-          $compilerRoot = Join-Path $arduinoData "packages/AZ3166/tools/arm-none-eabi-gcc/5_4-2016q3"
+          $coreRoot = Join-Path $arduinoData "packages/AZ3166/hardware/stm32f4/$env:CORE_VERSION"
+          $compilerRoot = Join-Path $arduinoData "packages/AZ3166/tools/arm-none-eabi-gcc/$env:GCC_PACKAGE_VERSION"
           $compiler = Join-Path $compilerRoot "bin/arm-none-eabi-g++.exe"
-          $targetHeader = Join-Path $compilerRoot "arm-none-eabi/include/c++/5.4.1/arm-none-eabi/bits/c++config.h"
+          $targetHeader = Join-Path $compilerRoot "arm-none-eabi/include/c++/$env:GCC_COMPILER_VERSION/arm-none-eabi/bits/c++config.h"
 
           if (-not (Test-Path -LiteralPath $arduino -PathType Leaf)) {
             $archive = Join-Path $env:RUNNER_TEMP "arduino-$env:ARDUINO_IDE_VERSION-windows.zip"
@@ -143,7 +156,7 @@ jobs:
               -Recurse -Force -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Path $arduinoData -Force | Out-Null
             & $arduino `
-              --install-boards "AZ3166:stm32f4:$env:GOLDEN_VERSION" `
+              --install-boards "AZ3166:stm32f4:$env:CORE_VERSION" `
               --pref "boardsmanager.additional.urls=$env:AZ3166_INDEX_URL" `
               --save-prefs
             if ($LASTEXITCODE -ne 0) {
