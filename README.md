@@ -8,10 +8,12 @@ from Microsoft's final 2.0.0 release. Core 2.0.2 carries forward the corrected
 `dtostrf()` formatting and opt-in SDK telemetry behavior from 2.0.1, and fixes
 the version returned by `getDevkitVersion()`.
 
-Changes reach `maintenance` through pull requests. Core package CI validates the
-runtime version API, builds the Board Manager archive twice, and rejects any
-non-reproducible result. To perform the same package check locally from a
-committed revision:
+The fork's `master` branch preserves Microsoft's archived upstream history and
+does not receive HomeTemperature maintenance changes. Submit maintained Core
+fixes, packaging changes, and release preparation through pull requests to
+`maintenance`. Core package CI validates the runtime version API, builds the
+Board Manager archive twice, and rejects any non-reproducible result. To perform
+the same package check locally from a committed revision:
 
 ```powershell
 & .\tools\Test-Az3166BoardPackage.ps1 `
@@ -19,9 +21,10 @@ committed revision:
 	-OutputDirectory .\artifacts
 ```
 
-Pushing a numeric semantic-version tag that exactly matches `SystemVersion.h`
-runs the release workflow. The workflow repeats those checks and publishes the
-versioned archive and SHA-256 without modifying an existing release or tag.
+A numeric semantic-version tag created from a verified `maintenance` commit must
+exactly match `SystemVersion.h`. Pushing that tag runs the release workflow,
+which repeats those checks and publishes the versioned archive and SHA-256
+without modifying an existing release or tag.
 
 This SDK is used to develop and prototype Internet of Things (IoT) solutions leveraging Microsoft Azure services and the **MXChip IoT DevKit** (a.k.a **DevKit**) which is an Arduino compatible board with rich peripherals and sensors.
 
