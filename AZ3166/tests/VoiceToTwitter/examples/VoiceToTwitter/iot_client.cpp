@@ -3,7 +3,7 @@
 
 #include "iot_client.h"
 #include "Arduino.h"
-#include <json.h>
+#include "parson.h"
 #include <stdlib.h>
 #include "azure_c_shared_utility/sastoken.h"
 #include "http_client.h"
@@ -20,7 +20,7 @@ static char temp[1024];
 static char temp2[1024];
 
 /// Utility methods begin
-const char *_json_object_get_string(json_object *obj, const char *name);
+const char *_json_object_get_string(JSON_Object *obj, const char *name);
 void _setString(char **p, const char *value, int length);
 int _check_iot_ready_for_request();
 /// Utility methods end
@@ -78,6 +78,12 @@ int iot_client_set_connection_string(const char *conn_str)
 
 int iot_client_blob_upload_step1(const char *blobName)
 {
+    free(sasUri);
+    sasUri = NULL;
+    free(correlationId);
+    correlationId = NULL;
+    step2_status_code = 0;
+
     if (blobName == NULL)
     {
         Serial.println("Invalid blob name");
@@ -93,15 +99,17 @@ int iot_client_blob_upload_step1(const char *blobName)
     blobRequest.set_header("Authorization", current_token);
     blobRequest.set_header("Accept", "application/json");
     const Http_Response *response = blobRequest.send();
-    bool error = false;
+    bool error = true;
     if (response == NULL)
     {
         Serial.println("iot_client_blob_upload_step1 failed!");
         return -1;
     }
-    if (response->status_code < 300)
+    if (response->status_code >= 200 && response->status_code < 300)
     {
-        json_object *jsonObject = json_tokener_parse(response->body);
+        JSON_Value *jsonValue = json_parse_string(response->body);
+        JSON_Object *jsonObject = jsonValue == NULL ? NULL : json_value_get_object(jsonValue);
+        error = jsonObject == NULL;
         if (jsonObject != NULL)
         {
 
@@ -144,8 +152,8 @@ int iot_client_blob_upload_step1(const char *blobName)
             }
         }
 
-        if (jsonObject != NULL)
-            json_object_put(jsonObject);
+        if (jsonValue != NULL)
+            json_value_free(jsonValue);
     }
     
     return error ? -1 : 0;
@@ -188,6 +196,11 @@ int iot_client_blob_upload_step2(const char *content, int length)
 
 int iot_client_blob_upload_step3(bool isSuccess)
 {
+    if (correlationId == NULL)
+    {
+        Serial.println("Please complete iot_client_blob_upload_step1 before sending a notification.");
+        return -1;
+    }
     if (_check_iot_ready_for_request() != 0)
     {
         return -1;
@@ -295,9 +308,9 @@ const char *iot_client_get_c2d_message(char * etag)
     return res != NULL ? strdup(res) : NULL;
 }
 
-const char *_json_object_get_string(json_object *obj, const char *name)
+const char *_json_object_get_string(JSON_Object *obj, const char *name)
 {
-    return json_object_get_string(json_object_object_get(obj, name));
+    return json_object_get_string(obj, name);
 }
 void _setString(char **p, const char *value, int length)
 {

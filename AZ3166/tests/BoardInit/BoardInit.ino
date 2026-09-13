@@ -19,7 +19,7 @@ static int led = 0;
 
 DevI2C *ext_i2c;
 LSM6DSLSensor *acc_gyro;
-int32_t axes[3];
+int axes[3];
 
 void setup() {
   Screen.print(0, "Azure IoT DevKit");
@@ -31,8 +31,8 @@ void setup() {
   ext_i2c = new DevI2C(D14, D15);
   acc_gyro = new LSM6DSLSensor(*ext_i2c, D4, D5);
   acc_gyro->init(NULL);
-  acc_gyro->enable_x();
-  acc_gyro->enable_g();
+  acc_gyro->enableAccelerator();
+  acc_gyro->enableGyroscope();
 }
 
 void loop() {
@@ -45,7 +45,7 @@ void loop() {
   rgbLed.setColor(_rgb[color].red, _rgb[color].green, _rgb[color].blue);
   color = (color + 1) % (sizeof(_rgb) / sizeof(struct _tagRGB));
 
-  acc_gyro->get_x_axes(axes);
+  acc_gyro->getXAxes(axes);
   char buff[128];
   sprintf(buff, "Azure IoT DevKit\r\n     x:%d           \r\n     y:%d           \r\n     z:%d             ", axes[0], axes[1], axes[2]);
   Screen.print(buff);

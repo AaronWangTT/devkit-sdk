@@ -28,6 +28,8 @@ private:
   SocketAddress* _address;
   uint16_t _localPort;
   bool is_initialized;
+  bool _packetActive;
+  bool _packetSendFailed;
 
 public:
   WiFiUDP();  // Constructor

@@ -23,40 +23,47 @@ WiFiUDP::WiFiUDP()
 {
     _pUdpSocket = new UDPSocket();
 
+    _port = 0;
+    _address = NULL;
     _localPort = 0;
     is_initialized = false;
+    _packetActive = false;
+    _packetSendFailed = false;
 }
 
 /* Start WiFiUDP socket, listening at local port PORT */
 int WiFiUDP::begin(unsigned short port)
 {
-    if ( !is_initialized )
+    if (is_initialized)
     {
-        _pUdpSocket->set_blocking(false);
-        _pUdpSocket->set_timeout(5000);
-        if(_pUdpSocket->open(WiFiInterface()) != 0)
-        {
-            return 0;
-        }
-        is_initialized = true;
+        stop();
     }
 
-    if ( is_initialized )
-    {
-        _localPort = port;
-        _pUdpSocket->bind(port);
-        return 1;
-    }
-    else
+    if (_pUdpSocket->open(WiFiInterface()) != 0)
     {
         return 0;
     }
+    _pUdpSocket->set_blocking(false);
+    _pUdpSocket->set_timeout(5000);
+    is_initialized = true;
+
+    if (_pUdpSocket->bind(port) != 0)
+    {
+        stop();
+        return 0;
+    }
+    _localPort = port;
+    return 1;
 }
 
 
 /* Release any resources being used by this WiFiUDP instance */
 void WiFiUDP::stop()
 {
+    _localPort = 0;
+    _packetActive = false;
+    _packetSendFailed = false;
+
     if (!is_initialized)
         return;
 
@@ -66,6 +73,9 @@ void WiFiUDP::stop()
 
 int WiFiUDP::beginPacket(const char *host, unsigned short port)
 {
+    _packetActive = false;
+    _packetSendFailed = false;
+
     // Look up the host first
     SocketAddress outEndPoint(host, port);
     if(WiFiInterface()->gethostbyname(host, &outEndPoint))
@@ -79,6 +89,9 @@ int WiFiUDP::beginPacket(const char *host, unsigned short port)
 
 int WiFiUDP::beginPacket(IPAddress ip, unsigned short port)
 {
+    _packetActive = false;
+    _packetSendFailed = false;
+
     if (!is_initialized)
     {
         if(_pUdpSocket->open(WiFiInterface()) != 0)
@@ -104,13 +117,22 @@ int WiFiUDP::beginPacket(IPAddress ip, unsigned short port)
     }
     else
     {
+        _packetActive = true;
         return 1;
     }
 }
 
 int WiFiUDP::endPacket()
 {
-    return true;
+    if (!_packetActive)
+    {
+        return 0;
+    }
+
+    int result = _packetSendFailed ? 0 : 1;
+    _packetActive = false;
+    _packetSendFailed = false;
+    return result;
 }
 
 size_t WiFiUDP::write(unsigned char data)
@@ -120,19 +142,27 @@ size_t WiFiUDP::write(unsigned char data)
 
 size_t WiFiUDP::write(const unsigned char *buffer, size_t size)
 {
-    if (!is_initialized)
+    if (!is_initialized || _address == NULL || !_packetActive)
     {
         return 0;
     }
-    _pUdpSocket->sendto(*_address, (char*)buffer, size);
-    return size;
+    int result = _pUdpSocket->sendto(*_address, (char*)buffer, size);
+    if (result != (int)size)
+    {
+        _packetSendFailed = true;
+    }
+    return result > 0 ? (size_t)result : 0;
 }
 
 int WiFiUDP::read()
 {
     int n;
-    char b;
+    unsigned char b;
 
+    if (!is_initialized)
+    {
+        return -1;
+    }
     if (_address == NULL)
     {
         _address = new SocketAddress();
@@ -147,6 +177,10 @@ int WiFiUDP::read()
 
 int WiFiUDP::read(unsigned char* buffer, size_t len)
 {
+    if (!is_initialized)
+    {
+        return 0;
+    }
     if (_address == NULL)
     {
         _address = new SocketAddress();
@@ -155,7 +189,8 @@ int WiFiUDP::read(unsigned char* buffer, size_t len)
             return 0;
         }
     }
-    return _pUdpSocket->recvfrom(_address, (char*)buffer, len);
+    int result = _pUdpSocket->recvfrom(_address, (char*)buffer, len);
+    return result > 0 ? result : 0;
 }
 
 void WiFiUDP::flush()

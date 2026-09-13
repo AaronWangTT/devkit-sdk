@@ -1,12 +1,12 @@
 test(analog_read)
 {
     analogReadResolution(10);
-    int result  = analogRead(ARDUINO_PIN_A0);
+    int result  = analogRead(PB_0);
     assertMoreOrEqual(result, 0);
     assertLessOrEqual(result, 1023);
 
     analogReadResolution(12);
-    result  = analogRead(ARDUINO_PIN_A0);
+    result  = analogRead(PB_0);
     assertMoreOrEqual(result, 0);
     assertLessOrEqual(result, 4095);
 
@@ -15,16 +15,12 @@ test(analog_read)
 
 test(analog_write)
 {
-    int val = 0;
-
-    analogReadResolution(10);
-    val= analogRead(ARDUINO_PIN_A0);
-    Serial.print("Analog Read:");
-    Serial.println(val);
-
     analogWriteResolution(10);
-    analogWrite(ARDUINO_PIN_A5, val);
-    assertEqual(analogRead(ARDUINO_PIN_A5), val);
+  analogWrite(PA_4, 511);
+  assertEqual(digitalRead(PA_4), LOW);
+
+  analogWrite(PA_4, 512);
+  assertEqual(digitalRead(PA_4), HIGH);
 
     delay(LOOP_DELAY);
 }
@@ -74,16 +70,16 @@ test(serial_print)
         Serial.print(x);
         Serial.print("\t\t");
 
-        Serial.print(x, DEC);
+        Serial.print(x, BASE_DEC);
         Serial.print("\t");
 
-        Serial.print(x, HEX);
+        Serial.print(x, BASE_HEX);
         Serial.print("\t");
 
-        Serial.print(x, OCT);
+        Serial.print(x, BASE_OCT);
         Serial.print("\t");
 
-        Serial.print(x, BIN);
+        Serial.print(x, BASE_BIN);
         Serial.println();
 
         delay(LOOP_DELAY);
@@ -92,12 +88,12 @@ test(serial_print)
     Serial.println(x, 1);
     Serial.println(12.3456, 2);
 
-    int analogValue = analogRead(ARDUINO_PIN_A0);
+    int analogValue = analogRead(PB_0);
     Serial.println(analogValue);
-    Serial.println(analogValue, DEC);
-    Serial.println(analogValue, HEX);
-    Serial.println(analogValue, OCT);
-    Serial.println(analogValue, BIN);
+    Serial.println(analogValue, BASE_DEC);
+    Serial.println(analogValue, BASE_HEX);
+    Serial.println(analogValue, BASE_OCT);
+    Serial.println(analogValue, BASE_BIN);
 
     // test printf() and printf_P()
     Serial.printf("testing printf() - String: %s; the length is %d\n", "hello", 5);
@@ -268,7 +264,7 @@ test(chars)
 
 test(random)
 {
-    randomSeed(analogRead(ARDUINO_PIN_A0));
+    randomSeed(analogRead(PB_0));
     long randNum = random(300);
     assertLess(randNum, 300);
     assertMoreOrEqual(randNum, 0);
@@ -309,7 +305,7 @@ test(math_constrain)
 
 test(math_map)
 {
-    int val = analogRead(ARDUINO_PIN_A0);
+    int val = analogRead(PB_0);
     val = map(val,0,1023,0,255);
 
     // map(val,0,1023,0,255): The value shoud be between 0 and 255

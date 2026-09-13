@@ -16,6 +16,11 @@ env:
   GOLDEN_VERSION: "2.0.2"
   GOLDEN_SIZE: "5497641"
   GOLDEN_SHA256: 5914d3e7b988fdc50b00ff241b7ac191fd6fb9bdc234b4a3f86c51ed0d5e9677
+  ARDUINO_CLI_VERSION: "1.5.1"
+  ARDUINO_IDE_VERSION: "1.8.19"
+  ARDUINO_IDE_SHA256: c704a821089eab2588f1deae775916219b1517febd1dd574ff29958dca873945
+  AZ3166_INDEX_REVISION: ac5055ec3a8fddd3135b1c367a9f630d33f65ef8
+  AZ3166_INDEX_URL: https://raw.githubusercontent.com/AaronWangTT/azureiotdevkit_tools/ac5055ec3a8fddd3135b1c367a9f630d33f65ef8/package_azureboard_index.json
 
 jobs:
   verify:
@@ -88,6 +93,116 @@ jobs:
             tools/SystemVersionTest.cpp \
             -o "$RUNNER_TEMP/system-version-test"
           "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
+
+      - name: Run WiFiUDP host tests
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined \
+            -fno-omit-frame-pointer \
+            -I AZ3166/src/system/mbed-os/features/netsocket \
+            -I AZ3166/src/cores/arduino/system \
+            AZ3166/tests/WiFiTest/WiFiUdpTest.cpp \
+            -o "$RUNNER_TEMP/wifiudp-test"
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            "$RUNNER_TEMP/wifiudp-test"
+
+      - name: Run legacy client host tests
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=gnu++11 -O1 -g -Wall -Wextra -Werror \
+            -ffunction-sections -fdata-sections \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -I AZ3166/src/cores/arduino \
+            -I AZ3166/src/cores/arduino/httpclient \
+            -I AZ3166/src/system/azure-iot-sdk-c/deps/parson \
+            -I AZ3166/src/system/azure-iot-sdk-c/c-utility/inc \
+            AZ3166/tests/VoiceToTwitter/IotClientTest.cpp \
+            -Wl,--gc-sections \
+            -o "$RUNNER_TEMP/iot-client-test"
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            "$RUNNER_TEMP/iot-client-test"
+
+      - name: Set up Arduino CLI
+        if: runner.os == 'Windows'
+        uses: arduino/setup-arduino-cli@v2
+        with:
+          version: ${{ env.ARDUINO_CLI_VERSION }}
+
+      - name: Cache AZ3166 test toolchain
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/a
+          key: az3166-test-toolchain-${{ env.GOLDEN_VERSION }}-index-${{ env.AZ3166_INDEX_REVISION }}-ide-${{ env.ARDUINO_IDE_VERSION }}-${{ env.ARDUINO_IDE_SHA256 }}-windows
+
+      - name: Install pinned AZ3166 test toolchain
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $arduinoRoot = Join-Path $env:RUNNER_TEMP "a"
+          $arduino = Join-Path $arduinoRoot "arduino_debug.exe"
+          $arduinoData = Join-Path $arduinoRoot "portable"
+          $coreRoot = Join-Path $arduinoData "packages/AZ3166/hardware/stm32f4/$env:GOLDEN_VERSION"
+          $compilerRoot = Join-Path $arduinoData "packages/AZ3166/tools/arm-none-eabi-gcc/5_4-2016q3"
+          $compiler = Join-Path $compilerRoot "bin/arm-none-eabi-g++.exe"
+          $targetHeader = Join-Path $compilerRoot "arm-none-eabi/include/c++/5.4.1/arm-none-eabi/bits/c++config.h"
+
+          if (-not (Test-Path -LiteralPath $arduino -PathType Leaf)) {
+            $archive = Join-Path $env:RUNNER_TEMP "arduino-$env:ARDUINO_IDE_VERSION-windows.zip"
+            $expandedRoot = Join-Path $env:RUNNER_TEMP "arduino-$env:ARDUINO_IDE_VERSION"
+            Remove-Item -LiteralPath $arduinoRoot -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $expandedRoot -Recurse -Force -ErrorAction SilentlyContinue
+            Invoke-WebRequest `
+              -Uri "https://downloads.arduino.cc/arduino-$env:ARDUINO_IDE_VERSION-windows.zip" `
+              -OutFile $archive
+            $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($archiveHash -ne $env:ARDUINO_IDE_SHA256) {
+              throw "Arduino IDE archive hash mismatch: $archiveHash"
+            }
+            Expand-Archive -LiteralPath $archive -DestinationPath $env:RUNNER_TEMP
+            Move-Item -LiteralPath $expandedRoot -Destination $arduinoRoot
+            Remove-Item -LiteralPath $archive -Force
+          }
+
+          if (
+            -not (Test-Path -LiteralPath (Join-Path $coreRoot "platform.txt") -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $compiler -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $targetHeader -PathType Leaf)
+          ) {
+            Remove-Item -LiteralPath (Join-Path $arduinoData "packages/AZ3166") `
+              -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $arduinoData -Force | Out-Null
+            & $arduino `
+              --install-boards "AZ3166:stm32f4:$env:GOLDEN_VERSION" `
+              --pref "boardsmanager.additional.urls=$env:AZ3166_INDEX_URL" `
+              --save-prefs
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to install the pinned AZ3166 test toolchain."
+            }
+          }
+
+          if (
+            -not (Test-Path -LiteralPath (Join-Path $coreRoot "platform.txt") -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $compiler -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $targetHeader -PathType Leaf)
+          ) {
+            throw "The AZ3166 test toolchain installation is incomplete."
+          }
+
+      - name: Compile Arduino test sketches
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./AZ3166/tests/Test-Az3166Sketches.ps1 `
+            -ArduinoDataDirectory `
+              (Join-Path $env:RUNNER_TEMP "a/portable")
 
       - name: Upload verified package
         uses: actions/upload-artifact@v4
