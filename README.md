@@ -1,5 +1,17 @@
 # IoT DevKit SDK
 
+## HomeTemperature maintained release
+
+Release 2.0.1 is maintained for
+[AaronWangTT/HomeTemperature](https://github.com/AaronWangTT/HomeTemperature)
+from Microsoft's final 2.0.0 release. It corrects `dtostrf()` precision and
+width formatting and makes SDK system telemetry opt-in. Build the deterministic
+Arduino Board Manager archive from a committed revision with:
+
+```powershell
+& .\tools\New-Az3166BoardPackage.ps1 -OutputPath .\AZ3166-2.0.1.zip
+```
+
 This SDK is used to develop and prototype Internet of Things (IoT) solutions leveraging Microsoft Azure services and the **MXChip IoT DevKit** (a.k.a **DevKit**) which is an Arduino compatible board with rich peripherals and sensors.
 
 With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) with [Arduino Extension](https://marketplace.visualstudio.com) to rapidly build a full-fledged IoT application that integrates multiple services like Azure IoT Hub, Logic Apps and Cognitive Services.
@@ -29,5 +41,6 @@ The DevKit board features ARM Cortex-M processors. At its core, it comes with a 
 You can purchase the DevKit from: **[https://aka.ms/iot-devkit-purchase](https://aka.ms/iot-devkit-purchase)**. We have opened purchase channel on [DFRobot](https://www.dfrobot.com/), [SeeedStudio](https://www.seeedstudio.com/) and [Plugable](http://plugable.com/)
 
 ### Data / Telemetry
-This project collects usage data and sends it to Microsoft to help improve our products and services. Read Microsoft's [privacy statement to learn more](https://privacy.microsoft.com/en-us/privacystatement).  
-If you choose to participate, you can stop at any time by following this [document](https://aka.ms/devkit/disable-data-collection).
+The maintained 2.0.1 release disables SDK system telemetry by default. Define
+`ENABLETRACE=1` in the platform build flags to opt in. Microsoft's original
+privacy statement is available at <https://privacy.microsoft.com/en-us/privacystatement>.
