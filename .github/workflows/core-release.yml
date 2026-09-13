@@ -82,14 +82,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          platform_source=src
+          if [[ ! -d "$platform_source" ]]; then
+            platform_source=AZ3166/src
+          fi
           test_source=tests/host/core/SystemVersionTest.cpp
           if [[ ! -f "$test_source" ]]; then
             test_source=tools/SystemVersionTest.cpp
           fi
           g++ -std=c++11 \
             -include cstdint \
-            -I AZ3166/src/cores/arduino/system \
-            AZ3166/src/cores/arduino/system/SystemVersion.cpp \
+            -I "$platform_source/cores/arduino/system" \
+            "$platform_source/cores/arduino/system/SystemVersion.cpp" \
             "$test_source" \
             -o "$RUNNER_TEMP/system-version-test"
           "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
@@ -99,6 +103,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          platform_source=src
+          if [[ ! -d "$platform_source" ]]; then
+            platform_source=AZ3166/src
+          fi
           test_source=tests/host/wifi/WiFiUdpTest.cpp
           if [[ ! -f "$test_source" ]]; then
             test_source=AZ3166/tests/WiFiTest/WiFiUdpTest.cpp
@@ -106,8 +114,8 @@ jobs:
           g++ -std=c++11 -O1 -g -Wall -Wextra -Werror \
             -fsanitize=address,undefined \
             -fno-omit-frame-pointer \
-            -I AZ3166/src/system/mbed-os/features/netsocket \
-            -I AZ3166/src/cores/arduino/system \
+            -I "$platform_source/system/mbed-os/features/netsocket" \
+            -I "$platform_source/cores/arduino/system" \
             "$test_source" \
             -o "$RUNNER_TEMP/wifiudp-test"
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
@@ -119,6 +127,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          platform_source=src
+          if [[ ! -d "$platform_source" ]]; then
+            platform_source=AZ3166/src
+          fi
           test_source=tests/host/cloud/IotClientTest.cpp
           if [[ ! -f "$test_source" ]]; then
             test_source=AZ3166/tests/VoiceToTwitter/IotClientTest.cpp
@@ -126,10 +138,10 @@ jobs:
           g++ -std=gnu++11 -O1 -g -Wall -Wextra -Werror \
             -ffunction-sections -fdata-sections \
             -fsanitize=address,undefined -fno-omit-frame-pointer \
-            -I AZ3166/src/cores/arduino \
-            -I AZ3166/src/cores/arduino/httpclient \
-            -I AZ3166/src/system/azure-iot-sdk-c/deps/parson \
-            -I AZ3166/src/system/azure-iot-sdk-c/c-utility/inc \
+            -I "$platform_source/cores/arduino" \
+            -I "$platform_source/cores/arduino/httpclient" \
+            -I "$platform_source/system/azure-iot-sdk-c/deps/parson" \
+            -I "$platform_source/system/azure-iot-sdk-c/c-utility/inc" \
             "$test_source" \
             -Wl,--gc-sections \
             -o "$RUNNER_TEMP/iot-client-test"
@@ -152,7 +164,7 @@ jobs:
 
           The release tag and getDevkitVersion() both report $env:PACKAGE_VERSION.
           The attached Board Manager archive was generated reproducibly from the
-          tagged AZ3166/src tree.
+          tagged platform source tree.
 
           Artifact SHA-256: $env:PACKAGE_SHA256
           "@ | Set-Content -LiteralPath $notesPath -Encoding utf8NoBOM

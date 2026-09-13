@@ -47,16 +47,22 @@ With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) 
 
 | Directory | Purpose |
 | --- | --- |
-| [AZ3166/src](AZ3166/src) | Unchanged installable Arduino platform: Core, libraries, vendor dependencies, and board support. |
+| [src](src) | Platform metadata, Core, vendor dependencies, and board support. |
+| [libraries](libraries) | Arduino library packages with their original metadata and examples. |
 | [examples](examples) | Standalone cloud, board, SPI, and I2C demonstration projects. |
 | [tests/host](tests/host) | Runtime-version, WiFiUDP, and legacy IoT-client host tests. |
 | [tests/hardware](tests/hardware) | ArduinoUnit device suite and the manual HTTP/NTP stress test. |
 | [tools/test](tools/test) | Sketch compilation driver. |
 | [tools/package](tools/package) | Deterministic package builder and verifier. |
+| [tools/provisioning](tools/provisioning) | Historical DICE enrollment utility; its build and runtime are not validated by maintained CI. |
+| [legacy](legacy/README.md) | Archived Jenkins, installer, deployment, and device-test tooling. |
+| [docs](docs/devkit-sdk-hardening-plan.md) | Structure and hardening plan. |
 
-Library examples remain inside their existing Arduino library packages. Legacy
-Jenkins/deployment/provisioning tools and sample metadata remain under `AZ3166`
-pending separate review; they are not part of this structural migration.
+The package builder combines committed `src` contents with `libraries` under the
+archive's `AZ3166/` directory. The sketch driver stages the same installed layout
+from the checkout. Repository paths are separate from Arduino's installed paths;
+copying only `src` does not produce a complete platform. Library names, public
+headers, and the 15 library examples are preserved.
 
 ## Tests
 
@@ -91,8 +97,10 @@ Use `-Sketch .\tests\hardware\UnitTest` to compile a single project, or
 `-ArduinoCli <path-to-arduino-cli>` if the CLI is not on `PATH`.
 
 The release workflow selects the relocated tools and host tests when present,
-and falls back to their original paths for historical tags. The packaged
-`AZ3166/src` tree and published Arduino include/library paths are unchanged.
+and falls back to their original paths for historical tags. Package source paths
+are resolved from the requested Git revision, including the historical
+`AZ3166/src` layout. Packaging uses a temporary Git index when combining split
+directories, preserving the caller's index and the published Arduino layout.
 
 ## Contribution
 
