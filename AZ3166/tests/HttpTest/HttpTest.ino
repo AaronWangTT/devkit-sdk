@@ -2,7 +2,7 @@
 #include "OLEDDisplay.h"
 #include "RGB_LED.h"
 #include "AZ3166WiFi.h"
-#include "mbed_memory_status.h"
+#include "utilities/mbed_memory_status.h"
 #include "Thread.h"
 #include "NTPClient.h"
 #include "SystemWiFi.h"

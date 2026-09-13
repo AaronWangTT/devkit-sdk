@@ -5,8 +5,7 @@
 #include "EEPROMInterface.h"
 #include "OLEDDisplay.h"
 #include "http_client.h"
-#include "mbed_memory_status.h"
-#include "json.h"
+#include "parson.h"
 #include "AudioClass.h"
 
 #define RGB_LED_BRIGHTNESS  16
@@ -19,7 +18,7 @@ static int wavFileSize;
 static int timeout = 0;
 static int step2Result = -1;
 static RGB_LED rgbLed;
-const char *_json_object_get_string(json_object *obj, const char *name);
+const char *_json_object_get_string(JSON_Object *obj, const char *name);
 static AudioClass& Audio = AudioClass::getInstance();
 
 static void InitWiFi()
@@ -264,7 +263,8 @@ void loop()
             Serial.println(p);
             if (strlen(p) > 0 && p[0] == '{')
             {
-                json_object *jsonObject = json_tokener_parse(p);
+                JSON_Value *jsonValue = json_parse_string(p);
+                JSON_Object *jsonObject = jsonValue == NULL ? NULL : json_value_get_object(jsonValue);
                 if (jsonObject != NULL)
                 {
                     const char *jsonText = _json_object_get_string(jsonObject, "text");
@@ -283,8 +283,9 @@ void loop()
                     }
                     // delay to let user read this message
                     delay(5000);
-                    json_object_put(jsonObject);
                 }
+                if (jsonValue != NULL)
+                    json_value_free(jsonValue);
             }
             free((void *)p);
             p = iot_client_get_c2d_message(etag);

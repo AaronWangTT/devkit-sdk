@@ -29,22 +29,22 @@ extern "C" {
 #endif
 
 // WCharacter.h prototypes
-inline boolean isAlphaNumeric(int c) __attribute__((always_inline));
-inline boolean isAlpha(int c) __attribute__((always_inline));
-inline boolean isAscii(int c) __attribute__((always_inline));
-inline boolean isWhitespace(int c) __attribute__((always_inline));
-inline boolean isControl(int c) __attribute__((always_inline));
-inline boolean isDigit(int c) __attribute__((always_inline));
-inline boolean isGraph(int c) __attribute__((always_inline));
-inline boolean isLowerCase(int c) __attribute__((always_inline));
-inline boolean isPrintable(int c) __attribute__((always_inline));
-inline boolean isPunct(int c) __attribute__((always_inline));
-inline boolean isSpace(int c) __attribute__((always_inline));
-inline boolean isUpperCase(int c) __attribute__((always_inline));
-inline boolean isHexadecimalDigit(int c) __attribute__((always_inline));
-inline int toAscii(int c) __attribute__((always_inline));
-inline int toLowerCase(int c) __attribute__((always_inline));
-inline int toUpperCase(int c)__attribute__((always_inline));
+boolean isAlphaNumeric(int c);
+boolean isAlpha(int c);
+boolean isAscii(int c);
+boolean isWhitespace(int c);
+boolean isControl(int c);
+boolean isDigit(int c);
+boolean isGraph(int c);
+boolean isLowerCase(int c);
+boolean isPrintable(int c);
+boolean isPunct(int c);
+boolean isSpace(int c);
+boolean isUpperCase(int c);
+boolean isHexadecimalDigit(int c);
+int toAscii(int c);
+int toLowerCase(int c);
+int toUpperCase(int c);
 
 #ifdef __cplusplus
 }

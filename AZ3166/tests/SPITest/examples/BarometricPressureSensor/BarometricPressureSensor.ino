@@ -89,14 +89,14 @@ void loop() {
 unsigned int readRegister(byte thisRegister, int bytesToRead) {
   byte inByte = 0;           // incoming byte from the SPI
   unsigned int result = 0;   // result to return
-  Serial.print(thisRegister, BIN);
+  Serial.print(thisRegister, BASE_BIN);
   Serial.print("\t");
   // SCP1000 expects the register name in the upper 6 bits
   // of the byte. So shift the bits left by two bits:
   thisRegister = thisRegister << 2;
   // now combine the address and the command into one byte
   byte dataToSend = thisRegister & READ;
-  Serial.println(thisRegister, BIN);
+  Serial.println(thisRegister, BASE_BIN);
   // take the chip select low to select the device:
   digitalWrite(chipSelectPin, LOW);
   // send the device the register you want to read:
