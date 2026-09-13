@@ -223,7 +223,7 @@ function New-Az3166PlatformTree {
         $records = @($Layout.Files | ForEach-Object { "$($_.Mode) $($_.ObjectId)`t$($_.Destination)" })
         $process = [Diagnostics.Process]::new()
         try {
-            $process.StartInfo.FileName = (Get-Command git -CommandType Application).Source
+            $process.StartInfo.FileName = @(Get-Command git -CommandType Application -ErrorAction Stop)[0].Source
             $process.StartInfo.UseShellExecute = $false
             $process.StartInfo.RedirectStandardInput = $true
             $process.StartInfo.StandardInputEncoding = [Text.UTF8Encoding]::new($false)

@@ -72,6 +72,30 @@ $cases = [ordered]@{
         catch { $refused = $_.Exception.Message -like '*empty destination*' }
         Assert-LayoutTest $refused 'Staging overwrote a nonempty directory.'
     }
+    'multiple Git installations select one executable' = {
+        param($root, $manifest)
+        $gitCommand = @(Get-Command git -CommandType Application -ErrorAction Stop)[0]
+        $fakeName = if ($IsWindows) { 'git.exe' } else { 'git' }
+        $fakeRelativePath = "duplicate-git/$fakeName"
+        Write-LayoutFixtureFile $root $fakeRelativePath "#!/bin/sh`nexit 99`n"
+        if (-not $IsWindows) {
+            [IO.File]::SetUnixFileMode((Join-Path $root $fakeRelativePath),
+                [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite -bor [IO.UnixFileMode]::UserExecute)
+        }
+        $previousPath = $env:PATH
+        try {
+            $env:PATH = @((Split-Path -Parent $gitCommand.Source), (Join-Path $root 'duplicate-git'), $previousPath) -join [IO.Path]::PathSeparator
+            Assert-LayoutTest (@(Get-Command git -CommandType Application).Count -gt 1) 'The duplicate-Git fixture did not create multiple matches.'
+            $null = Invoke-Az3166LayoutGit $root @('-c', 'core.autocrlf=false', 'add', '--', 'payload', 'platform')
+            $snapshot = (Invoke-Az3166LayoutGit $root @('write-tree')).Trim()
+            $layout = Get-Az3166PackageLayout -RepositoryRoot $root -Revision $snapshot
+            $tree = New-Az3166PlatformTree -RepositoryRoot $root -Layout $layout
+            Assert-LayoutTest ($tree -match '^[0-9a-f]{40,64}$') 'Git executable resolution failed to create a platform tree.'
+        }
+        finally {
+            $env:PATH = $previousPath
+        }
+    }
     'missing mapped inputs are rejected' = {
         param($root, $manifest)
         $manifest.mappings += @{ source = 'payload/missing'; destination = 'missing' }

@@ -13,7 +13,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repositoryRoot 'tools/package/Az3166PackageLayout.ps1')
-$compilerCommand = Get-Command $Compiler -CommandType Application -ErrorAction Stop
+$compilerCommand = @(Get-Command $Compiler -CommandType Application -ErrorAction Stop)[0]
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "az3166-host-$([guid]::NewGuid().ToString('N'))"
 $platform = Join-Path $temporaryRoot 'platform'
 $previousAsan = $env:ASAN_OPTIONS
