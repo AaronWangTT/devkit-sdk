@@ -27,9 +27,17 @@ UTC ZIP timestamps without modifying the caller's Git configuration or
 environment.
 
 A numeric semantic-version tag created from a verified `maintenance` commit must
-exactly match `SystemVersion.h`. Pushing that tag runs the release workflow,
-which repeats those checks and publishes the versioned archive and SHA-256
-without modifying an existing release or tag.
+exactly match `SystemVersion.h`. Creating or pushing the tag does not publish a
+release. To publish it, manually run the `Core release` workflow from the
+`maintenance` branch and supply the existing tag as its version input. The
+workflow verifies that the tag belongs to `maintenance`, repeats the package and
+runtime checks from that tagged commit, and creates the versioned GitHub release.
+It does not update the package-index or consumer repositories. Re-running it for
+an existing release fails rather than replacing the release or moving its tag.
+
+Core package CI continues to run automatically for pull requests and pushes to
+`maintenance`. Its uploaded files are short-lived workflow artifacts for
+comparison, not published Core releases.
 
 This SDK is used to develop and prototype Internet of Things (IoT) solutions leveraging Microsoft Azure services and the **MXChip IoT DevKit** (a.k.a **DevKit**) which is an Arduino compatible board with rich peripherals and sensors.
 
