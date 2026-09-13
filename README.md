@@ -17,7 +17,7 @@ produce byte-for-byte identical archives. To perform the same package check
 locally from a committed revision:
 
 ```powershell
-& .\tools\Test-Az3166BoardPackage.ps1 `
+& .\tools\package\Test-Az3166BoardPackage.ps1 `
 	-ExpectedVersion 2.0.2 `
 	-OutputDirectory .\artifacts
 ```
@@ -43,6 +43,21 @@ This SDK is used to develop and prototype Internet of Things (IoT) solutions lev
 
 With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) with [Arduino Extension](https://marketplace.visualstudio.com) to rapidly build a full-fledged IoT application that integrates multiple services like Azure IoT Hub, Logic Apps and Cognitive Services.
 
+## Repository layout
+
+| Directory | Purpose |
+| --- | --- |
+| [AZ3166/src](AZ3166/src) | Unchanged installable Arduino platform: Core, libraries, vendor dependencies, and board support. |
+| [examples](examples) | Standalone cloud, board, SPI, and I2C demonstration projects. |
+| [tests/host](tests/host) | Runtime-version, WiFiUDP, and legacy IoT-client host tests. |
+| [tests/hardware](tests/hardware) | ArduinoUnit device suite and the manual HTTP/NTP stress test. |
+| [tools/test](tools/test) | Sketch compilation driver. |
+| [tools/package](tools/package) | Deterministic package builder and verifier. |
+
+Library examples remain inside their existing Arduino library packages. Legacy
+Jenkins/deployment/provisioning tools and sample metadata remain under `AZ3166`
+pending separate review; they are not part of this structural migration.
+
 ## Tests
 
 Core package CI executes the runtime-version check and the WiFiUDP and legacy
@@ -52,14 +67,32 @@ dependency fakes; they do not execute the ARM-only vendor libraries or the real
 JSON parser. The corresponding checks also run during releases when the tagged
 revision contains those harnesses.
 
-On Windows, [Test-Az3166Sketches.ps1](AZ3166/tests/Test-Az3166Sketches.ps1)
-compiles every discovered Arduino test sketch against the checkout. These are
-compile-only checks, not hardware execution or validation against live cloud
-services. Native build commands are maintained in the
+On Windows, [Test-Az3166Sketches.ps1](tools/test/Test-Az3166Sketches.ps1)
+discovers sketches under `examples` and `tests/hardware` and compiles them against
+the checkout. This preserves the existing 13-project coverage: 11 standalone
+examples and 2 device-test projects. The 15 examples inside the shipped Arduino
+libraries are unchanged and are not included in this scan. These are compile-only
+checks, not hardware execution or validation against live cloud services.
+`tests/hardware/manual/HttpTest` is an unbounded HTTP/NTP concurrency and memory
+diagnostic, not an automated pass/fail suite. Native build commands are in the
 [CI workflow](.github/workflows/core-package-ci.yml).
 
 The sketch test script requires PowerShell 7 or later (`pwsh`), matching the CI
 shell. Windows PowerShell 5.1 (`powershell.exe`) is not supported.
+
+With the pinned toolchain installed and Arduino CLI on `PATH`, run from the
+repository root:
+
+```powershell
+pwsh -File .\tools\test\Test-Az3166Sketches.ps1
+```
+
+Use `-Sketch .\tests\hardware\UnitTest` to compile a single project, or
+`-ArduinoCli <path-to-arduino-cli>` if the CLI is not on `PATH`.
+
+The release workflow selects the relocated tools and host tests when present,
+and falls back to their original paths for historical tags. The packaged
+`AZ3166/src` tree and published Arduino include/library paths are unchanged.
 
 ## Contribution
 

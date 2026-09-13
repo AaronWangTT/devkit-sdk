@@ -16,9 +16,12 @@ $arduinoUnitVersion = "2.2.0"
 $arduinoUnitUrl = "https://downloads.arduino.cc/libraries/github.com/mmurdoch/ArduinoUnit-$arduinoUnitVersion.zip"
 $arduinoUnitSha256 = "dc2e4473aedad99d254b4169e6ec32c717004c6537f2008e87db72d8c76b08ff"
 $fqbn = "AZ3166Checkout:stm32f4:MXCHIP_AZ3166"
-$testRoot = $PSScriptRoot
-$coreRoot = Split-Path -Parent $testRoot
-$platformSource = Join-Path $coreRoot "src"
+$repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$sketchRoots = @(
+    (Join-Path $repositoryRoot "examples")
+    (Join-Path $repositoryRoot "tests/hardware")
+)
+$platformSource = Join-Path $repositoryRoot "AZ3166/src"
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) "az3166-tests-$([guid]::NewGuid().ToString('N'))"
 
 if (-not $ArduinoDataDirectory) {
@@ -48,7 +51,7 @@ if ($Sketch) {
     } | Sort-Object -Unique)
 }
 else {
-    $sketchDirectories = @(Get-ChildItem -LiteralPath $testRoot -Recurse -File |
+    $sketchDirectories = @(Get-ChildItem -LiteralPath $sketchRoots -Recurse -File |
         Where-Object {
             $_.Extension -in ".ino", ".pde" -and
             $_.BaseName -eq $_.Directory.Name
@@ -58,7 +61,7 @@ else {
 }
 
 if ($sketchDirectories.Count -eq 0) {
-    throw "No Arduino test sketches were found under $testRoot."
+    throw "No Arduino test sketches were found under $($sketchRoots -join ', ')."
 }
 
 $sketchbook = Join-Path $temporaryRoot "sketchbook"
@@ -104,7 +107,7 @@ try {
 
     $failures = [System.Collections.Generic.List[string]]::new()
     foreach ($sketchDirectory in $sketchDirectories) {
-        $relativePath = [System.IO.Path]::GetRelativePath($testRoot, $sketchDirectory)
+        $relativePath = [System.IO.Path]::GetRelativePath($repositoryRoot, $sketchDirectory)
         $buildName = $relativePath -replace '[^A-Za-z0-9_.-]', '-'
         $buildPath = Join-Path $temporaryRoot "build-$buildName"
 

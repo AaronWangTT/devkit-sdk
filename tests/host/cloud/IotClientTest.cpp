@@ -8,7 +8,7 @@
 #include <map>
 #include <string>
 
-#include "../../src/cores/arduino/WString.h"
+#include "../../../AZ3166/src/cores/arduino/WString.h"
 #include "parson.h"
 
 #define Arduino_h
@@ -108,7 +108,7 @@ void json_value_free(JSON_Value *value) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic warning "-Wunused-variable"
 #pragma GCC diagnostic warning "-Wsign-compare"
-#include "examples/VoiceToTwitter/iot_client.cpp"
+#include "../../../examples/cloud/VoiceToTwitter/iot_client.cpp"
 #pragma GCC diagnostic pop
 #undef time
 

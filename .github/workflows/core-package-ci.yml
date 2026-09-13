@@ -51,7 +51,7 @@ jobs:
         run: |
           git config core.autocrlf true
           $callerTimezone = $env:TZ
-          $result = & ./tools/Test-Az3166BoardPackage.ps1 `
+          $result = & ./tools/package/Test-Az3166BoardPackage.ps1 `
             -OutputDirectory (Join-Path $env:RUNNER_TEMP "package")
           if ($env:TZ -ne $callerTimezone) {
             throw "Package builder did not restore the caller timezone."
@@ -69,7 +69,7 @@ jobs:
         env:
           TZ: Pacific/Honolulu
         run: |
-          $result = & ./tools/Test-Az3166BoardPackage.ps1 `
+          $result = & ./tools/package/Test-Az3166BoardPackage.ps1 `
             -Revision $env:GOLDEN_VERSION `
             -ExpectedVersion $env:GOLDEN_VERSION `
             -OutputDirectory (Join-Path $env:RUNNER_TEMP "golden-package")
@@ -90,7 +90,7 @@ jobs:
             -include cstdint \
             -I AZ3166/src/cores/arduino/system \
             AZ3166/src/cores/arduino/system/SystemVersion.cpp \
-            tools/SystemVersionTest.cpp \
+            tests/host/core/SystemVersionTest.cpp \
             -o "$RUNNER_TEMP/system-version-test"
           "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
 
@@ -104,7 +104,7 @@ jobs:
             -fno-omit-frame-pointer \
             -I AZ3166/src/system/mbed-os/features/netsocket \
             -I AZ3166/src/cores/arduino/system \
-            AZ3166/tests/WiFiTest/WiFiUdpTest.cpp \
+            tests/host/wifi/WiFiUdpTest.cpp \
             -o "$RUNNER_TEMP/wifiudp-test"
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
           UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
@@ -122,7 +122,7 @@ jobs:
             -I AZ3166/src/cores/arduino/httpclient \
             -I AZ3166/src/system/azure-iot-sdk-c/deps/parson \
             -I AZ3166/src/system/azure-iot-sdk-c/c-utility/inc \
-            AZ3166/tests/VoiceToTwitter/IotClientTest.cpp \
+            tests/host/cloud/IotClientTest.cpp \
             -Wl,--gc-sections \
             -o "$RUNNER_TEMP/iot-client-test"
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
@@ -200,7 +200,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          ./AZ3166/tests/Test-Az3166Sketches.ps1 `
+          ./tools/test/Test-Az3166Sketches.ps1 `
             -ArduinoDataDirectory `
               (Join-Path $env:RUNNER_TEMP "a/portable")
 

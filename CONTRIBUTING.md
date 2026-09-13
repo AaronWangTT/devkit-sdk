@@ -26,7 +26,8 @@ That is definitely something we want to hear about. Please open an issue on gith
 *Our IoT DevKit SDK are open-source and we do accept pull-requests if you feel like taking a stab at fixing the bug and maybe adding your name to our commit history :) Please mention any relevant issue number in the pull request description.* Please see [Contribute code](#contribute-code) below.
 
 # Contribute code or documentation
-We require pull-requests for code and documentation to be submitted against the `master` branch in order to review and run it in our gated build system. 
+Submit maintained Core, test, and tooling changes against `maintenance`.
+The `master` branch preserves archived upstream history.
 
 ## Build and Run From Source
 
@@ -37,7 +38,7 @@ You'll need [git] to download source code and copy it to the Arduino target fold
 ### Windows
 
 ```
-git clone https://github.com/Microsoft/devkit-sdk
+git clone --branch maintenance https://github.com/AaronWangTT/devkit-sdk
 
 cd devkit-sdk\AZ3166\src
 
@@ -47,7 +48,7 @@ xcopy /s .\*.* C:\Users\{your name}\AppData\Local\Arduino15\packages\AZ3166\hard
 ### OS X
 
 ```
-git clone https://github.com/Microsoft/devkit-sdk
+git clone --branch maintenance https://github.com/AaronWangTT/devkit-sdk
 
 cd devkit-sdk/AZ3166
 
@@ -55,8 +56,29 @@ cp -R /src/. ~/Library/Arduino15/packages/AZ3166/hardware/stem32f4/{version}
 ```
 
 ### Validate your changes
-To test the changes you launch VS Code on the Arduino target folder for AZ3166 samples, which you are currently editing.
-Run the sample code to verify your change.
+Standalone examples are under `examples`, host tests under `tests/host`, and
+device-test projects under `tests/hardware`. Keep each Arduino sketch folder
+and its companion files together. Library-specific examples remain with their
+libraries under `AZ3166/src/libraries`.
+
+With the pinned AZ3166 toolchain installed and Arduino CLI available, compile
+all 13 standalone examples and device-test projects from the repository root
+using PowerShell 7 or later:
+
+```powershell
+pwsh -File .\tools\test\Test-Az3166Sketches.ps1
+```
+
+Native host-test commands and pinned toolchain setup are maintained in the
+[CI workflow](.github/workflows/core-package-ci.yml). To verify package generation
+from a committed revision, run:
+
+```powershell
+pwsh -File .\tools\package\Test-Az3166BoardPackage.ps1
+```
+
+Sketch compilation does not execute the hardware tests. Record physical-board
+results separately, including any fixtures or external services required.
 
 Also, have you signed the [Contribution License Agreement](https://cla.microsoft.com/) ([CLA](https://cla.microsoft.com/))? A friendly bot will remind you about it when you submit your pull-request.
 

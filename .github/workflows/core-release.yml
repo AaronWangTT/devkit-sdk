@@ -65,7 +65,11 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
           TAG_COMMIT: ${{ steps.release.outputs.tag_commit }}
         run: |
-          $result = & ./tools/Test-Az3166BoardPackage.ps1 `
+          $packageVerifier = "./tools/package/Test-Az3166BoardPackage.ps1"
+          if (-not (Test-Path -LiteralPath $packageVerifier -PathType Leaf)) {
+            $packageVerifier = "./tools/Test-Az3166BoardPackage.ps1"
+          }
+          $result = & $packageVerifier `
             -Revision $env:TAG_COMMIT `
             -ExpectedVersion $env:RELEASE_VERSION `
             -OutputDirectory (Join-Path $env:RUNNER_TEMP "package")
@@ -78,35 +82,47 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test_source=tests/host/core/SystemVersionTest.cpp
+          if [[ ! -f "$test_source" ]]; then
+            test_source=tools/SystemVersionTest.cpp
+          fi
           g++ -std=c++11 \
             -include cstdint \
             -I AZ3166/src/cores/arduino/system \
             AZ3166/src/cores/arduino/system/SystemVersion.cpp \
-            tools/SystemVersionTest.cpp \
+            "$test_source" \
             -o "$RUNNER_TEMP/system-version-test"
           "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
 
       - name: Run WiFiUDP host tests
-        if: hashFiles('AZ3166/tests/WiFiTest/WiFiUdpTest.cpp') != ''
+        if: hashFiles('tests/host/wifi/WiFiUdpTest.cpp', 'AZ3166/tests/WiFiTest/WiFiUdpTest.cpp') != ''
         shell: bash
         run: |
           set -euo pipefail
+          test_source=tests/host/wifi/WiFiUdpTest.cpp
+          if [[ ! -f "$test_source" ]]; then
+            test_source=AZ3166/tests/WiFiTest/WiFiUdpTest.cpp
+          fi
           g++ -std=c++11 -O1 -g -Wall -Wextra -Werror \
             -fsanitize=address,undefined \
             -fno-omit-frame-pointer \
             -I AZ3166/src/system/mbed-os/features/netsocket \
             -I AZ3166/src/cores/arduino/system \
-            AZ3166/tests/WiFiTest/WiFiUdpTest.cpp \
+            "$test_source" \
             -o "$RUNNER_TEMP/wifiudp-test"
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
           UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
             "$RUNNER_TEMP/wifiudp-test"
 
       - name: Run legacy client host tests
-        if: hashFiles('AZ3166/tests/VoiceToTwitter/IotClientTest.cpp') != ''
+        if: hashFiles('tests/host/cloud/IotClientTest.cpp', 'AZ3166/tests/VoiceToTwitter/IotClientTest.cpp') != ''
         shell: bash
         run: |
           set -euo pipefail
+          test_source=tests/host/cloud/IotClientTest.cpp
+          if [[ ! -f "$test_source" ]]; then
+            test_source=AZ3166/tests/VoiceToTwitter/IotClientTest.cpp
+          fi
           g++ -std=gnu++11 -O1 -g -Wall -Wextra -Werror \
             -ffunction-sections -fdata-sections \
             -fsanitize=address,undefined -fno-omit-frame-pointer \
@@ -114,7 +130,7 @@ jobs:
             -I AZ3166/src/cores/arduino/httpclient \
             -I AZ3166/src/system/azure-iot-sdk-c/deps/parson \
             -I AZ3166/src/system/azure-iot-sdk-c/c-utility/inc \
-            AZ3166/tests/VoiceToTwitter/IotClientTest.cpp \
+            "$test_source" \
             -Wl,--gc-sections \
             -o "$RUNNER_TEMP/iot-client-test"
           ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
