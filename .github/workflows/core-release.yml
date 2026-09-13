@@ -1,9 +1,17 @@
 name: Core release
+run-name: Release Core ${{ inputs.version }} (manual)
 
 on:
-  push:
-    tags:
-      - "*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing numeric semantic-version tag to publish (for example, 2.0.3)
+        required: true
+        type: string
+
+concurrency:
+  group: core-release-${{ inputs.version }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -19,12 +27,47 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate manual release request
+        id: release
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:GITHUB_REF -ne "refs/heads/maintenance") {
+            throw "Run this workflow from the maintenance branch. Received $env:GITHUB_REF."
+          }
+          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Release version must be a numeric semantic version such as 2.0.3."
+          }
+
+          $tagRef = "refs/tags/$env:RELEASE_VERSION"
+          git show-ref --verify --quiet $tagRef
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag $env:RELEASE_VERSION does not exist. Create and push it before dispatching this workflow."
+          }
+
+          $tagCommit = (git rev-parse "$tagRef^{commit}").Trim()
+          git merge-base --is-ancestor $tagCommit origin/maintenance
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag $env:RELEASE_VERSION is not on the maintenance branch."
+          }
+
+          git checkout --detach $tagCommit
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not check out release tag $env:RELEASE_VERSION."
+          }
+          "tag_commit=$tagCommit" >> $env:GITHUB_OUTPUT
+
       - name: Build and verify tagged package
         id: package
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          TAG_COMMIT: ${{ steps.release.outputs.tag_commit }}
         run: |
           $result = & ./tools/Test-Az3166BoardPackage.ps1 `
-            -ExpectedVersion $env:GITHUB_REF_NAME `
+            -Revision $env:TAG_COMMIT `
+            -ExpectedVersion $env:RELEASE_VERSION `
             -OutputDirectory (Join-Path $env:RUNNER_TEMP "package")
           "path=$($result.Path)" >> $env:GITHUB_OUTPUT
           "sha256=$($result.SHA256)" >> $env:GITHUB_OUTPUT
