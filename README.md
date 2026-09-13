@@ -2,15 +2,26 @@
 
 ## HomeTemperature maintained release
 
-Release 2.0.1 is maintained for
+The `maintenance` branch is maintained for
 [AaronWangTT/HomeTemperature](https://github.com/AaronWangTT/HomeTemperature)
-from Microsoft's final 2.0.0 release. It corrects `dtostrf()` precision and
-width formatting and makes SDK system telemetry opt-in. Build the deterministic
-Arduino Board Manager archive from a committed revision with:
+from Microsoft's final 2.0.0 release. Core 2.0.2 carries forward the corrected
+`dtostrf()` formatting and opt-in SDK telemetry behavior from 2.0.1, and fixes
+the version returned by `getDevkitVersion()`.
+
+Changes reach `maintenance` through pull requests. Core package CI validates the
+runtime version API, builds the Board Manager archive twice, and rejects any
+non-reproducible result. To perform the same package check locally from a
+committed revision:
 
 ```powershell
-& .\tools\New-Az3166BoardPackage.ps1 -OutputPath .\AZ3166-2.0.1.zip
+& .\tools\Test-Az3166BoardPackage.ps1 `
+	-ExpectedVersion 2.0.2 `
+	-OutputDirectory .\artifacts
 ```
+
+Pushing a numeric semantic-version tag that exactly matches `SystemVersion.h`
+runs the release workflow. The workflow repeats those checks and publishes the
+versioned archive and SHA-256 without modifying an existing release or tag.
 
 This SDK is used to develop and prototype Internet of Things (IoT) solutions leveraging Microsoft Azure services and the **MXChip IoT DevKit** (a.k.a **DevKit**) which is an Arduino compatible board with rich peripherals and sensors.
 

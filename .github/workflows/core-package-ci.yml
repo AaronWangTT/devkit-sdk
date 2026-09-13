@@ -1,0 +1,55 @@
+name: Core package CI
+
+on:
+  pull_request:
+    branches:
+      - maintenance
+  push:
+    branches:
+      - maintenance
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify Core package
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and verify deterministic package
+        id: package
+        shell: pwsh
+        run: |
+          $result = & ./tools/Test-Az3166BoardPackage.ps1 `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP "package")
+          "path=$($result.Path)" >> $env:GITHUB_OUTPUT
+          "sha256=$($result.SHA256)" >> $env:GITHUB_OUTPUT
+          "version=$($result.Version)" >> $env:GITHUB_OUTPUT
+          $result | Format-List
+
+      - name: Verify runtime version API
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++11 \
+            -include cstdint \
+            -I AZ3166/src/cores/arduino/system \
+            AZ3166/src/cores/arduino/system/SystemVersion.cpp \
+            tools/SystemVersionTest.cpp \
+            -o "$RUNNER_TEMP/system-version-test"
+          "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
+
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AZ3166-${{ steps.package.outputs.version }}
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
