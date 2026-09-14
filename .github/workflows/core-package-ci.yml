@@ -133,6 +133,10 @@ jobs:
           $compilerRoot = Join-Path $arduinoData "packages/AZ3166/tools/arm-none-eabi-gcc/$env:GCC_PACKAGE_VERSION"
           $compiler = Join-Path $compilerRoot "bin/arm-none-eabi-g++.exe"
           $targetHeader = Join-Path $compilerRoot "arm-none-eabi/include/c++/$env:GCC_COMPILER_VERSION/arm-none-eabi/bits/c++config.h"
+          $cachedIndex = Join-Path $arduinoData $env:AZ3166_INDEX_PATH
+          $cachedIndexHash = if (Test-Path -LiteralPath $cachedIndex -PathType Leaf) {
+            (Get-FileHash -LiteralPath $cachedIndex -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
 
           if (-not (Test-Path -LiteralPath $arduino -PathType Leaf)) {
             $archive = Join-Path $env:RUNNER_TEMP "arduino-$env:ARDUINO_IDE_VERSION-windows.zip"
@@ -158,7 +162,8 @@ jobs:
           if (
             -not (Test-Path -LiteralPath (Join-Path $coreRoot "platform.txt") -PathType Leaf) -or
             -not (Test-Path -LiteralPath $compiler -PathType Leaf) -or
-            -not (Test-Path -LiteralPath $targetHeader -PathType Leaf)
+            -not (Test-Path -LiteralPath $targetHeader -PathType Leaf) -or
+            $cachedIndexHash -ne $env:AZ3166_INDEX_SHA256
           ) {
             Remove-Item -LiteralPath (Join-Path $arduinoData "packages/AZ3166") `
               -Recurse -Force -ErrorAction SilentlyContinue
@@ -171,7 +176,6 @@ jobs:
               throw "Downloaded AZ3166 Board Manager index hash mismatch: $downloadedIndexHash"
             }
 
-            $cachedIndex = Join-Path $arduinoData $env:AZ3166_INDEX_PATH
             Remove-Item -LiteralPath $cachedIndex -Force -ErrorAction SilentlyContinue
             & $arduino `
               --install-boards "AZ3166:stm32f4:$env:CORE_VERSION" `
@@ -180,13 +184,14 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to install the pinned AZ3166 test toolchain."
             }
-            if (-not (Test-Path -LiteralPath $cachedIndex -PathType Leaf)) {
-              throw "Arduino IDE did not cache the AZ3166 Board Manager index."
-            }
-            $cachedIndexHash = (Get-FileHash -LiteralPath $cachedIndex -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($cachedIndexHash -ne $env:AZ3166_INDEX_SHA256) {
-              throw "Arduino IDE cached an unexpected AZ3166 Board Manager index: $cachedIndexHash"
-            }
+          }
+
+          if (-not (Test-Path -LiteralPath $cachedIndex -PathType Leaf)) {
+            throw "Arduino IDE did not cache the AZ3166 Board Manager index."
+          }
+          $cachedIndexHash = (Get-FileHash -LiteralPath $cachedIndex -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($cachedIndexHash -ne $env:AZ3166_INDEX_SHA256) {
+            throw "Arduino IDE cached an unexpected AZ3166 Board Manager index: $cachedIndexHash"
           }
 
           if (

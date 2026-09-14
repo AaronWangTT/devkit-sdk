@@ -96,6 +96,7 @@ Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubO
 Assert-BuildConfigurationTest ($workflow.Contains('./tests/host/build/BuildConfigurationTest.ps1')) 'Core package CI does not run the build-configuration tests.'
 Assert-BuildConfigurationTest ($workflow.Contains('Get-FileHash -LiteralPath $downloadedIndex')) 'Core package CI does not verify the index before invoking Arduino IDE.'
 Assert-BuildConfigurationTest ($workflow.Contains('Get-FileHash -LiteralPath $cachedIndex')) 'Core package CI does not verify the index cached by Arduino IDE.'
+Assert-BuildConfigurationTest ($workflow.Contains('$cachedIndexHash -ne $env:AZ3166_INDEX_SHA256')) 'Core package CI does not treat an unexpected cached index as an incomplete toolchain.'
 $workflowLiterals = @(
     $lock.core.version
     $lock.core.canonicalPackage.sha256
