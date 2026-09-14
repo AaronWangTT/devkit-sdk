@@ -219,6 +219,7 @@ function Export-Az3166BuildLockGitHubOutput {
         arduino_ide_size = $Lock.arduino.ide.windows.size
         arduino_ide_sha256 = $Lock.arduino.ide.windows.sha256
         index_revision = $Lock.boardManager.revision
+        index_path = $Lock.boardManager.indexPath
         index_url = $Lock.boardManager.indexUrl
         index_sha256 = $Lock.boardManager.sha256
         gcc_package_version = $Lock.tools.armNoneEabiGcc.version

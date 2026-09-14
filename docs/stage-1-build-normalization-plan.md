@@ -63,8 +63,9 @@ contract. This changes where values are read, not the values or build process.
 - The sketch driver reads its FQBN and ArduinoUnit values from the lock.
 - Core package CI reads canonical-package and Windows-bootstrap values from the
   lock, and keys the toolchain cache with GitHub Actions `hashFiles()` over the
-  complete lock file. Before installation, it verifies the IDE archive size and
-  hash and the immutable Board Manager index hash from the lock.
+  complete lock file. It verifies the IDE archive size and hash, preflights the
+  immutable Board Manager index hash, and verifies the exact index cached by
+  Arduino IDE before compilation proceeds.
 
 ### Validation
 

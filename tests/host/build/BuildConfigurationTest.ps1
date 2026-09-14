@@ -94,8 +94,8 @@ $workflowPath = Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml
 $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubOutput')) 'Core package CI does not export the shared build lock.'
 Assert-BuildConfigurationTest ($workflow.Contains('./tests/host/build/BuildConfigurationTest.ps1')) 'Core package CI does not run the build-configuration tests.'
-Assert-BuildConfigurationTest ($workflow.Contains('boardsmanager.additional.urls=$verifiedIndexUrl')) 'Core package CI does not install through the verified local index.'
-Assert-BuildConfigurationTest (-not $workflow.Contains('boardsmanager.additional.urls=$env:AZ3166_INDEX_URL')) 'Core package CI passes the unverified remote index URL to Arduino IDE.'
+Assert-BuildConfigurationTest ($workflow.Contains('Get-FileHash -LiteralPath $downloadedIndex')) 'Core package CI does not verify the index before invoking Arduino IDE.'
+Assert-BuildConfigurationTest ($workflow.Contains('Get-FileHash -LiteralPath $cachedIndex')) 'Core package CI does not verify the index cached by Arduino IDE.'
 $workflowLiterals = @(
     $lock.core.version
     $lock.core.canonicalPackage.sha256
@@ -103,6 +103,7 @@ $workflowLiterals = @(
     $lock.arduino.ide.version
     $lock.arduino.ide.windows.sha256
     $lock.boardManager.revision
+    $lock.boardManager.indexPath
     $lock.boardManager.indexUrl
     $lock.tools.armNoneEabiGcc.version
     $lock.tools.armNoneEabiGcc.compilerVersion
@@ -154,6 +155,7 @@ try {
         arduino_ide_size = [string]$lock.arduino.ide.windows.size
         arduino_ide_sha256 = $lock.arduino.ide.windows.sha256
         index_revision = $lock.boardManager.revision
+        index_path = $lock.boardManager.indexPath
         index_url = $lock.boardManager.indexUrl
         index_sha256 = $lock.boardManager.sha256
         gcc_package_version = $lock.tools.armNoneEabiGcc.version

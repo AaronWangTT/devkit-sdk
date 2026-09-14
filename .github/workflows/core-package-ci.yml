@@ -120,6 +120,7 @@ jobs:
           ARDUINO_IDE_URL: ${{ steps.build-lock.outputs.arduino_ide_url }}
           ARDUINO_IDE_SIZE: ${{ steps.build-lock.outputs.arduino_ide_size }}
           ARDUINO_IDE_SHA256: ${{ steps.build-lock.outputs.arduino_ide_sha256 }}
+          AZ3166_INDEX_PATH: ${{ steps.build-lock.outputs.index_path }}
           AZ3166_INDEX_URL: ${{ steps.build-lock.outputs.index_url }}
           AZ3166_INDEX_SHA256: ${{ steps.build-lock.outputs.index_sha256 }}
           GCC_PACKAGE_VERSION: ${{ steps.build-lock.outputs.gcc_package_version }}
@@ -162,134 +163,29 @@ jobs:
             Remove-Item -LiteralPath (Join-Path $arduinoData "packages/AZ3166") `
               -Recurse -Force -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Path $arduinoData -Force | Out-Null
-            $indexPath = Join-Path $env:RUNNER_TEMP "package_azureboard_index.json"
-            Invoke-WebRequest -Uri $env:AZ3166_INDEX_URL -OutFile $indexPath
-            $indexHash = (Get-FileHash -LiteralPath $indexPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($indexHash -ne $env:AZ3166_INDEX_SHA256) {
-              throw "AZ3166 Board Manager index hash mismatch: $indexHash"
+            $downloadedIndex = Join-Path $env:RUNNER_TEMP $env:AZ3166_INDEX_PATH
+            Invoke-WebRequest -Uri $env:AZ3166_INDEX_URL -OutFile $downloadedIndex
+            $downloadedIndexHash = (Get-FileHash -LiteralPath $downloadedIndex -Algorithm SHA256).Hash.ToLowerInvariant()
+            Remove-Item -LiteralPath $downloadedIndex -Force
+            if ($downloadedIndexHash -ne $env:AZ3166_INDEX_SHA256) {
+              throw "Downloaded AZ3166 Board Manager index hash mismatch: $downloadedIndexHash"
             }
 
-            $serverId = [guid]::NewGuid().ToString('N')
-            $readyEventName = "Az3166IndexServer-$serverId"
-            $portPath = Join-Path $env:RUNNER_TEMP "az3166-index-port-$serverId.txt"
-            $servedPath = Join-Path $env:RUNNER_TEMP "az3166-index-served-$serverId.txt"
-            $readyEvent = [Threading.EventWaitHandle]::new(
-              $false,
-              [Threading.EventResetMode]::ManualReset,
-              $readyEventName
-            )
-            $indexServer = Start-Job -ArgumentList `
-              $indexPath, $portPath, $servedPath, $readyEventName, $indexHash -ScriptBlock {
-                param($IndexPath, $PortPath, $ServedPath, $ReadyEventName, $IndexHash)
-
-                $ErrorActionPreference = 'Stop'
-                $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
-                $ready = [Threading.EventWaitHandle]::OpenExisting($ReadyEventName)
-                try {
-                  $indexBytes = [IO.File]::ReadAllBytes($IndexPath)
-                  $hasher = [Security.Cryptography.SHA256]::Create()
-                  try {
-                    $servedHash = [BitConverter]::ToString(
-                      $hasher.ComputeHash($indexBytes)
-                    ).Replace('-', '').ToLowerInvariant()
-                  }
-                  finally {
-                    $hasher.Dispose()
-                  }
-                  if ($servedHash -ne $IndexHash) {
-                    throw "Local AZ3166 index changed before serving: $servedHash"
-                  }
-
-                  $listener.Start()
-                  $port = ([Net.IPEndPoint]$listener.LocalEndpoint).Port
-                  [IO.File]::WriteAllText($PortPath, [string]$port, [Text.Encoding]::ASCII)
-                  $null = $ready.Set()
-                  $expectedPath = "/$([IO.Path]::GetFileName($IndexPath))"
-
-                  while ($true) {
-                    $client = $listener.AcceptTcpClient()
-                    try {
-                      $stream = $client.GetStream()
-                      $reader = [IO.StreamReader]::new(
-                        $stream,
-                        [Text.Encoding]::ASCII,
-                        $false,
-                        1024,
-                        $true
-                      )
-                      try {
-                        $requestParts = $reader.ReadLine().Split(' ')
-                        while ($reader.ReadLine()) {}
-                      }
-                      finally {
-                        $reader.Dispose()
-                      }
-
-                      if (
-                        $requestParts.Count -ne 3 -or
-                        $requestParts[0] -notin @('GET', 'HEAD') -or
-                        $requestParts[1] -cne $expectedPath
-                      ) {
-                        $response = [Text.Encoding]::ASCII.GetBytes(
-                          "HTTP/1.1 404 Not Found`r`nContent-Length: 0`r`nConnection: close`r`n`r`n"
-                        )
-                        $stream.Write($response, 0, $response.Length)
-                        throw "Unexpected local index request: $($requestParts -join ' ')"
-                      }
-
-                      $header = [Text.Encoding]::ASCII.GetBytes(
-                        "HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: $($indexBytes.Length)`r`nConnection: close`r`n`r`n"
-                      )
-                      $stream.Write($header, 0, $header.Length)
-                      if ($requestParts[0] -ceq 'GET') {
-                        $stream.Write($indexBytes, 0, $indexBytes.Length)
-                        [IO.File]::WriteAllText($ServedPath, $servedHash, [Text.Encoding]::ASCII)
-                      }
-                      $stream.Flush()
-                    }
-                    finally {
-                      $client.Dispose()
-                    }
-                  }
-                }
-                finally {
-                  $ready.Dispose()
-                  $listener.Stop()
-                }
-              }
-
-            try {
-              if (-not $readyEvent.WaitOne([TimeSpan]::FromSeconds(15))) {
-                throw "Timed out starting the verified AZ3166 index server."
-              }
-              $indexPort = [int][IO.File]::ReadAllText($portPath)
-              $verifiedIndexUrl = "http://127.0.0.1:$indexPort/$([IO.Path]::GetFileName($indexPath))"
-              & $arduino `
-                --install-boards "AZ3166:stm32f4:$env:CORE_VERSION" `
-                --pref "boardsmanager.additional.urls=$verifiedIndexUrl"
-              $installExitCode = $LASTEXITCODE
-              if ($indexServer.State -eq 'Failed') {
-                throw "Verified AZ3166 index server failed: $($indexServer.ChildJobs[0].JobStateInfo.Reason.Message)"
-              }
-              if (-not (Test-Path -LiteralPath $servedPath -PathType Leaf)) {
-                throw "Arduino IDE did not request the verified AZ3166 index."
-              }
-              $servedHash = [IO.File]::ReadAllText($servedPath)
-              if ($servedHash -ne $env:AZ3166_INDEX_SHA256) {
-                throw "Arduino IDE received an unexpected AZ3166 index: $servedHash"
-              }
-              if ($installExitCode -ne 0) {
-                throw "Failed to install the pinned AZ3166 test toolchain."
-              }
+            $cachedIndex = Join-Path $arduinoData $env:AZ3166_INDEX_PATH
+            Remove-Item -LiteralPath $cachedIndex -Force -ErrorAction SilentlyContinue
+            & $arduino `
+              --install-boards "AZ3166:stm32f4:$env:CORE_VERSION" `
+              --pref "boardsmanager.additional.urls=$env:AZ3166_INDEX_URL" `
+              --save-prefs
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to install the pinned AZ3166 test toolchain."
             }
-            finally {
-              if ($indexServer.State -eq 'Running') {
-                Stop-Job -Job $indexServer
-              }
-              Remove-Job -Job $indexServer -Force
-              $readyEvent.Dispose()
-              Remove-Item -LiteralPath $indexPath, $portPath, $servedPath `
-                -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path -LiteralPath $cachedIndex -PathType Leaf)) {
+              throw "Arduino IDE did not cache the AZ3166 Board Manager index."
+            }
+            $cachedIndexHash = (Get-FileHash -LiteralPath $cachedIndex -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($cachedIndexHash -ne $env:AZ3166_INDEX_SHA256) {
+              throw "Arduino IDE cached an unexpected AZ3166 Board Manager index: $cachedIndexHash"
             }
           }
 
