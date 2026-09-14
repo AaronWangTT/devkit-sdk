@@ -94,9 +94,12 @@ $workflowPath = Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml
 $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubOutput')) 'Core package CI does not export the shared build lock.'
 Assert-BuildConfigurationTest ($workflow.Contains('./tests/host/build/BuildConfigurationTest.ps1')) 'Core package CI does not run the build-configuration tests.'
-Assert-BuildConfigurationTest ($workflow.Contains('Get-FileHash -LiteralPath $downloadedIndex')) 'Core package CI does not verify the index before invoking Arduino IDE.'
-Assert-BuildConfigurationTest ($workflow.Contains('Get-FileHash -LiteralPath $cachedIndex')) 'Core package CI does not verify the index cached by Arduino IDE.'
-Assert-BuildConfigurationTest ($workflow.Contains('$cachedIndexHash -ne $env:AZ3166_INDEX_SHA256')) 'Core package CI does not treat an unexpected cached index as an incomplete toolchain.'
+Assert-BuildConfigurationTest ($workflow.Contains('./tests/host/build/ToolchainInstallerTest.ps1')) 'Core package CI does not run the toolchain-installer tests.'
+Assert-BuildConfigurationTest ($workflow.Contains('./tools/build/Install-Az3166BuildTools.ps1')) 'Core package CI does not invoke the shared toolchain installer.'
+Assert-BuildConfigurationTest ($workflow.Contains('-VerifyOnly')) 'Core package CI does not verify the installed toolchain.'
+Assert-BuildConfigurationTest ($workflow.Contains('-Offline')) 'Core package CI does not exercise an offline second setup.'
+Assert-BuildConfigurationTest (-not $workflow.Contains('Invoke-WebRequest')) 'Core package CI still owns a toolchain download.'
+Assert-BuildConfigurationTest (-not $workflow.Contains('arduino/setup-arduino-cli')) 'Core package CI still uses a separate Arduino CLI installer.'
 $workflowLiterals = @(
     $lock.core.version
     $lock.core.canonicalPackage.sha256
@@ -126,6 +129,8 @@ Assert-BuildConfigurationTest `
 
 $sketchDriver = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'tools/test/Test-Az3166Sketches.ps1')
 Assert-BuildConfigurationTest ($sketchDriver.Contains('Get-Az3166BuildLock')) 'The sketch driver does not consume the shared build lock.'
+Assert-BuildConfigurationTest ($sketchDriver.Contains('ArduinoUnitDirectory')) 'The sketch driver does not accept the installed ArduinoUnit path.'
+Assert-BuildConfigurationTest (-not $sketchDriver.Contains('Invoke-WebRequest')) 'The sketch driver still downloads a test dependency.'
 foreach ($literal in @(
     $lock.arduino.fqbn
     $lock.arduino.unit.version

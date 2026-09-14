@@ -6,6 +6,9 @@ param(
 
     [string]$ArduinoDataDirectory,
 
+    [Parameter(Mandatory = $true)]
+    [string]$ArduinoUnitDirectory,
+
     [string[]]$Sketch
 )
 
@@ -16,9 +19,6 @@ $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 . (Join-Path $repositoryRoot 'tools/package/Az3166PackageLayout.ps1')
 $buildLock = Get-Az3166BuildLock
-$arduinoUnitVersion = $buildLock.arduino.unit.version
-$arduinoUnitUrl = $buildLock.arduino.unit.archive.url
-$arduinoUnitSha256 = $buildLock.arduino.unit.archive.sha256
 $fqbn = $buildLock.arduino.fqbn
 $sketchRoots = @(
     (Join-Path $repositoryRoot "examples")
@@ -35,10 +35,14 @@ if (-not $ArduinoDataDirectory) {
     }
 }
 
-$arduinoCliCommand = Get-Command $ArduinoCli -ErrorAction Stop
+$arduinoCliCommand = @(Get-Command $ArduinoCli -CommandType Application -ErrorAction Stop)[0]
 $arduinoDataDirectory = [System.IO.Path]::GetFullPath($ArduinoDataDirectory)
 if (-not (Test-Path -LiteralPath $arduinoDataDirectory -PathType Container)) {
     throw "Arduino data directory does not exist: $arduinoDataDirectory"
+}
+$arduinoUnitDirectory = (Resolve-Path -LiteralPath $ArduinoUnitDirectory -ErrorAction Stop).Path
+if (-not (Test-Path -LiteralPath (Join-Path $arduinoUnitDirectory 'library.properties') -PathType Leaf)) {
+    throw "ArduinoUnit library is invalid: $arduinoUnitDirectory"
 }
 
 if ($Sketch) {
@@ -70,34 +74,16 @@ $sketchbook = Join-Path $temporaryRoot "sketchbook"
 $librariesDirectory = Join-Path $sketchbook "libraries"
 $platformDirectory = Join-Path $sketchbook "hardware\AZ3166Checkout\stm32f4"
 $downloadsDirectory = Join-Path $temporaryRoot "downloads"
-$archivePath = Join-Path $temporaryRoot "ArduinoUnit-$arduinoUnitVersion.zip"
 $configurationPath = Join-Path $temporaryRoot "arduino-cli.yaml"
 
 try {
     New-Item -ItemType Directory -Path $librariesDirectory -Force | Out-Null
     New-Item -ItemType Directory -Path $downloadsDirectory -Force | Out-Null
     Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination $platformDirectory
-
-    Invoke-WebRequest -Uri $arduinoUnitUrl -OutFile $archivePath -UseBasicParsing
-    $archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($archiveHash -ne $arduinoUnitSha256) {
-        throw "ArduinoUnit archive hash mismatch: $archiveHash"
-    }
-
-    Expand-Archive -LiteralPath $archivePath -DestinationPath $librariesDirectory
-    $compareHeader = Get-ChildItem -LiteralPath $librariesDirectory -Filter "Compare.h" -File -Recurse |
-        Select-Object -First 1
-    if (-not $compareHeader) {
-        throw "ArduinoUnit Compare.h was not found."
-    }
-
-    $compareContent = Get-Content -Raw -LiteralPath $compareHeader.FullName
-    $avrInclude = "#include <avr/pgmspace.h>"
-    if (-not $compareContent.Contains($avrInclude)) {
-        throw "ArduinoUnit $arduinoUnitVersion no longer has the expected pgmspace include."
-    }
-    $compareContent.Replace($avrInclude, "#include <pgmspace.h>") |
-        Set-Content -LiteralPath $compareHeader.FullName -Encoding ascii -NoNewline
+    Copy-Item `
+        -LiteralPath $arduinoUnitDirectory `
+        -Destination (Join-Path $librariesDirectory 'ArduinoUnit') `
+        -Recurse
 
     @{
         directories = @{

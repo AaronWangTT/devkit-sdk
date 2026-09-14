@@ -46,6 +46,11 @@ jobs:
         shell: pwsh
         run: ./tests/host/build/BuildConfigurationTest.ps1
 
+      - name: Validate toolchain installer contracts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/host/build/ToolchainInstallerTest.ps1
+
       - name: Validate package layout contracts
         shell: pwsh
         run: ./tests/host/package/PackageLayoutTest.ps1
@@ -98,117 +103,42 @@ jobs:
           ./tools/test/Test-Az3166HostTests.ps1 -Sanitize `
             -ExpectedVersion '${{ steps.package.outputs.version }}'
 
-      - name: Set up Arduino CLI
-        if: runner.os == 'Windows'
-        uses: arduino/setup-arduino-cli@v2
-        with:
-          version: ${{ steps.build-lock.outputs.arduino_cli_version }}
-
       - name: Cache AZ3166 test toolchain
         if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/a
-          key: az3166-test-toolchain-${{ hashFiles('tools/build/az3166-build-lock.json') }}-windows
+          path: |
+            ${{ runner.temp }}/a
+            ${{ runner.temp }}/az3166-downloads
+          key: az3166-build-tools-${{ hashFiles('tools/build/az3166-build-lock.json', 'tools/build/Install-Az3166BuildTools.ps1') }}-windows
 
       - name: Install pinned AZ3166 test toolchain
         if: runner.os == 'Windows'
+        id: build-tools
         shell: pwsh
-        env:
-          CORE_VERSION: ${{ steps.build-lock.outputs.core_version }}
-          ARDUINO_IDE_VERSION: ${{ steps.build-lock.outputs.arduino_ide_version }}
-          ARDUINO_IDE_URL: ${{ steps.build-lock.outputs.arduino_ide_url }}
-          ARDUINO_IDE_SIZE: ${{ steps.build-lock.outputs.arduino_ide_size }}
-          ARDUINO_IDE_SHA256: ${{ steps.build-lock.outputs.arduino_ide_sha256 }}
-          AZ3166_INDEX_PATH: ${{ steps.build-lock.outputs.index_path }}
-          AZ3166_INDEX_URL: ${{ steps.build-lock.outputs.index_url }}
-          AZ3166_INDEX_SHA256: ${{ steps.build-lock.outputs.index_sha256 }}
-          GCC_PACKAGE_VERSION: ${{ steps.build-lock.outputs.gcc_package_version }}
-          GCC_COMPILER_VERSION: ${{ steps.build-lock.outputs.gcc_compiler_version }}
         run: |
-          $arduinoRoot = Join-Path $env:RUNNER_TEMP "a"
-          $arduino = Join-Path $arduinoRoot "arduino_debug.exe"
-          $arduinoData = Join-Path $arduinoRoot "portable"
-          $coreRoot = Join-Path $arduinoData "packages/AZ3166/hardware/stm32f4/$env:CORE_VERSION"
-          $compilerRoot = Join-Path $arduinoData "packages/AZ3166/tools/arm-none-eabi-gcc/$env:GCC_PACKAGE_VERSION"
-          $compiler = Join-Path $compilerRoot "bin/arm-none-eabi-g++.exe"
-          $targetHeader = Join-Path $compilerRoot "arm-none-eabi/include/c++/$env:GCC_COMPILER_VERSION/arm-none-eabi/bits/c++config.h"
-          $cachedIndex = Join-Path $arduinoData $env:AZ3166_INDEX_PATH
-          $cachedIndexHash = if (Test-Path -LiteralPath $cachedIndex -PathType Leaf) {
-            (Get-FileHash -LiteralPath $cachedIndex -Algorithm SHA256).Hash.ToLowerInvariant()
+          $arguments = @{
+            Root = Join-Path $env:RUNNER_TEMP "a"
+            DownloadCache = Join-Path $env:RUNNER_TEMP "az3166-downloads"
           }
-
-          if (-not (Test-Path -LiteralPath $arduino -PathType Leaf)) {
-            $archive = Join-Path $env:RUNNER_TEMP "arduino-$env:ARDUINO_IDE_VERSION-windows.zip"
-            $expandedRoot = Join-Path $env:RUNNER_TEMP "arduino-$env:ARDUINO_IDE_VERSION"
-            Remove-Item -LiteralPath $arduinoRoot -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath $expandedRoot -Recurse -Force -ErrorAction SilentlyContinue
-            Invoke-WebRequest `
-              -Uri $env:ARDUINO_IDE_URL `
-              -OutFile $archive
-            $archiveSize = (Get-Item -LiteralPath $archive).Length
-            if ($archiveSize -ne [long]$env:ARDUINO_IDE_SIZE) {
-              throw "Arduino IDE archive size mismatch: $archiveSize"
-            }
-            $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($archiveHash -ne $env:ARDUINO_IDE_SHA256) {
-              throw "Arduino IDE archive hash mismatch: $archiveHash"
-            }
-            Expand-Archive -LiteralPath $archive -DestinationPath $env:RUNNER_TEMP
-            Move-Item -LiteralPath $expandedRoot -Destination $arduinoRoot
-            Remove-Item -LiteralPath $archive -Force
+          $tools = & ./tools/build/Install-Az3166BuildTools.ps1 @arguments
+          $second = & ./tools/build/Install-Az3166BuildTools.ps1 @arguments -Offline
+          $null = & ./tools/build/Install-Az3166BuildTools.ps1 @arguments -VerifyOnly
+          if ($second.Changed) {
+            throw "The second toolchain setup modified the installation."
           }
-
-          if (
-            -not (Test-Path -LiteralPath (Join-Path $coreRoot "platform.txt") -PathType Leaf) -or
-            -not (Test-Path -LiteralPath $compiler -PathType Leaf) -or
-            -not (Test-Path -LiteralPath $targetHeader -PathType Leaf) -or
-            $cachedIndexHash -ne $env:AZ3166_INDEX_SHA256
-          ) {
-            Remove-Item -LiteralPath (Join-Path $arduinoData "packages/AZ3166") `
-              -Recurse -Force -ErrorAction SilentlyContinue
-            New-Item -ItemType Directory -Path $arduinoData -Force | Out-Null
-            $downloadedIndex = Join-Path $env:RUNNER_TEMP $env:AZ3166_INDEX_PATH
-            Invoke-WebRequest -Uri $env:AZ3166_INDEX_URL -OutFile $downloadedIndex
-            $downloadedIndexHash = (Get-FileHash -LiteralPath $downloadedIndex -Algorithm SHA256).Hash.ToLowerInvariant()
-            Remove-Item -LiteralPath $downloadedIndex -Force
-            if ($downloadedIndexHash -ne $env:AZ3166_INDEX_SHA256) {
-              throw "Downloaded AZ3166 Board Manager index hash mismatch: $downloadedIndexHash"
-            }
-
-            Remove-Item -LiteralPath $cachedIndex -Force -ErrorAction SilentlyContinue
-            & $arduino `
-              --install-boards "AZ3166:stm32f4:$env:CORE_VERSION" `
-              --pref "boardsmanager.additional.urls=$env:AZ3166_INDEX_URL" `
-              --save-prefs
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to install the pinned AZ3166 test toolchain."
-            }
-          }
-
-          if (-not (Test-Path -LiteralPath $cachedIndex -PathType Leaf)) {
-            throw "Arduino IDE did not cache the AZ3166 Board Manager index."
-          }
-          $cachedIndexHash = (Get-FileHash -LiteralPath $cachedIndex -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($cachedIndexHash -ne $env:AZ3166_INDEX_SHA256) {
-            throw "Arduino IDE cached an unexpected AZ3166 Board Manager index: $cachedIndexHash"
-          }
-
-          if (
-            -not (Test-Path -LiteralPath (Join-Path $coreRoot "platform.txt") -PathType Leaf) -or
-            -not (Test-Path -LiteralPath $compiler -PathType Leaf) -or
-            -not (Test-Path -LiteralPath $targetHeader -PathType Leaf)
-          ) {
-            throw "The AZ3166 test toolchain installation is incomplete."
-          }
+          "arduino_cli=$($tools.ArduinoCliPath)" >> $env:GITHUB_OUTPUT
+          "arduino_data=$($tools.ArduinoDataDirectory)" >> $env:GITHUB_OUTPUT
+          "arduino_unit=$($tools.ArduinoUnitDirectory)" >> $env:GITHUB_OUTPUT
 
       - name: Compile Arduino test sketches
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           ./tools/test/Test-Az3166Sketches.ps1 `
-            -ArduinoDataDirectory `
-              (Join-Path $env:RUNNER_TEMP "a/portable")
+            -ArduinoCli '${{ steps.build-tools.outputs.arduino_cli }}' `
+            -ArduinoDataDirectory '${{ steps.build-tools.outputs.arduino_data }}' `
+            -ArduinoUnitDirectory '${{ steps.build-tools.outputs.arduino_unit }}'
 
       - name: Upload verified package
         uses: actions/upload-artifact@v4
