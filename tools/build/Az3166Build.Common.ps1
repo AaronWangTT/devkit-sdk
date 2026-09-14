@@ -127,6 +127,13 @@ function Get-Az3166BuildLock {
     Assert-Az3166BuildLockString `
         (Get-Az3166BuildLockProperty $windows 'shortToolchainRootName' 'hostPrerequisites.windows') `
         'hostPrerequisites.windows.shortToolchainRootName'
+    $maximumToolchainRootLength = Get-Az3166BuildLockProperty `
+        $windows 'maximumToolchainRootLength' 'hostPrerequisites.windows'
+    $parsedMaximumToolchainRootLength = 0
+    Assert-Az3166BuildLockCondition `
+        ([int]::TryParse([string]$maximumToolchainRootLength, [ref]$parsedMaximumToolchainRootLength) -and
+            $parsedMaximumToolchainRootLength -gt 0) `
+        'hostPrerequisites.windows.maximumToolchainRootLength must be a positive integer.'
     Assert-Az3166BuildLockString `
         (Get-Az3166BuildLockProperty $windows 'pathConstraintStatus' 'hostPrerequisites.windows') `
         'hostPrerequisites.windows.pathConstraintStatus'
@@ -210,6 +217,8 @@ function Export-Az3166BuildLockGitHubOutput {
 
     $values = [ordered]@{
         lock_sha256 = (Get-FileHash -LiteralPath $LockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        short_toolchain_root_name = $Lock.hostPrerequisites.windows.shortToolchainRootName
+        maximum_toolchain_root_length = $Lock.hostPrerequisites.windows.maximumToolchainRootLength
         core_version = $Lock.core.version
         core_package_size = $Lock.core.canonicalPackage.size
         core_package_sha256 = $Lock.core.canonicalPackage.sha256

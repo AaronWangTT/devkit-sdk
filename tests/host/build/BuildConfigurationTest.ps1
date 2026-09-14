@@ -47,7 +47,8 @@ function Assert-BuildLockRejected {
 
 $lock = Get-Az3166BuildLock
 Assert-BuildConfigurationTest ($lock.tools.armNoneEabiGcc.compilerVersion -ceq '5.4.1') 'The Stage 1 baseline must preserve GCC 5.4.1.'
-Assert-BuildConfigurationTest ($lock.hostPrerequisites.windows.pathConstraintStatus -like '*not yet validated*') 'The Windows path limit must remain explicitly unvalidated until the path experiment runs.'
+Assert-BuildConfigurationTest ($lock.hostPrerequisites.windows.maximumToolchainRootLength -eq 70) 'The measured Windows toolchain-root limit must remain 70 characters.'
+Assert-BuildConfigurationTest ($lock.hostPrerequisites.windows.pathConstraintStatus -like '*71 passed and 72 failed*') 'The Windows path constraint must retain its measured boundary.'
 Write-Host 'PASS repository build lock is valid'
 
 Assert-BuildLockRejected {
@@ -90,6 +91,12 @@ Assert-BuildLockRejected {
 } 'Invalid AZ3166 build lock: hostPrerequisites.powershell.minimumVersion must be 7.0 or later.'
 Write-Host 'PASS unsupported PowerShell minimum is rejected'
 
+Assert-BuildLockRejected {
+    param($fixture)
+    $fixture.hostPrerequisites.windows.maximumToolchainRootLength = 0
+} 'Invalid AZ3166 build lock: hostPrerequisites.windows.maximumToolchainRootLength must be a positive integer.'
+Write-Host 'PASS invalid Windows toolchain-root limit is rejected'
+
 $workflowPath = Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml'
 $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubOutput')) 'Core package CI does not export the shared build lock.'
@@ -100,6 +107,7 @@ Assert-BuildConfigurationTest ($workflow.Contains('-VerifyOnly')) 'Core package 
 Assert-BuildConfigurationTest ($workflow.Contains('-Offline')) 'Core package CI does not exercise an offline second setup.'
 Assert-BuildConfigurationTest (-not $workflow.Contains('Invoke-WebRequest')) 'Core package CI still owns a toolchain download.'
 Assert-BuildConfigurationTest (-not $workflow.Contains('arduino/setup-arduino-cli')) 'Core package CI still uses a separate Arduino CLI installer.'
+Assert-BuildConfigurationTest ($workflow.Contains('steps.build-lock.outputs.short_toolchain_root_name')) 'Core package CI does not use the locked short toolchain-root name.'
 $workflowLiterals = @(
     $lock.core.version
     $lock.core.canonicalPackage.sha256
@@ -152,6 +160,8 @@ try {
     }
     $expectedOutput = [ordered]@{
         lock_sha256 = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        short_toolchain_root_name = $lock.hostPrerequisites.windows.shortToolchainRootName
+        maximum_toolchain_root_length = [string]$lock.hostPrerequisites.windows.maximumToolchainRootLength
         core_version = $lock.core.version
         core_package_size = [string]$lock.core.canonicalPackage.size
         core_package_sha256 = $lock.core.canonicalPackage.sha256
@@ -181,4 +191,4 @@ finally {
 }
 Write-Host 'PASS GitHub output matches the build lock'
 
-Write-Host '9 build-configuration tests passed.'
+Write-Host '10 build-configuration tests passed.'

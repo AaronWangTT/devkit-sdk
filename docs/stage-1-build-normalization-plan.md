@@ -137,6 +137,11 @@ preflight limit only after those results exist. Until then, use a short root
 named `a` under a drive or runner temporary directory and keep the constraint
 explicitly marked as unvalidated in the lock.
 
+The experiment is recorded in
+[`windows-toolchain-path-limit.md`](windows-toolchain-path-limit.md). Root length
+71 passed and 72 failed, so the lock and installer enforce a conservative
+70-character maximum while CI retains the short root named `a`.
+
 ### Validation
 
 - fresh setup succeeds on `windows-2022`;

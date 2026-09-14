@@ -14,7 +14,8 @@ if (-not $IsWindows) {
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $installerPath = Join-Path $repositoryRoot 'tools/build/Install-Az3166BuildTools.ps1'
 $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
-$fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) "az3166-installer-test-$([guid]::NewGuid().ToString('N'))"
+$volumeRoot = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
+$fixtureRoot = Join-Path $volumeRoot "ati-$([guid]::NewGuid().ToString('N'))"
 
 function Assert-InstallerTest {
     param(
@@ -40,7 +41,7 @@ function Assert-InstallerRejected {
     catch {
         foreach ($expectedMessage in $ExpectedMessages) {
             if ($_.Exception.Message -notlike $expectedMessage) {
-                throw
+                throw "Expected error '$expectedMessage', received '$($_.Exception.Message)'."
             }
         }
         $rejected = $true
@@ -62,6 +63,22 @@ try {
         -Arguments @{ Root = $root; DownloadCache = (Join-Path $root 'downloads') } `
         -ExpectedMessages @('*-Root and -DownloadCache must be separate directories.*')
     Write-Host 'PASS overlapping managed and cache roots are rejected'
+
+    $maximumRoot = Join-Path $volumeRoot ('p' * (70 - $volumeRoot.Length))
+    Assert-InstallerTest ($maximumRoot.Length -eq 70) 'The maximum-length fixture root is not 70 characters long.'
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $maximumRoot; DownloadCache = $cache; VerifyOnly = $true } `
+        -ExpectedMessages @('*AZ3166 build tools are not installed at*')
+    Assert-InstallerTest (-not (Test-Path -LiteralPath $maximumRoot)) 'Maximum-length validation created the missing root.'
+    Write-Host 'PASS a 70-character toolchain root reaches normal validation'
+
+    $longRoot = Join-Path $volumeRoot ('p' * (71 - $volumeRoot.Length))
+    Assert-InstallerTest ($longRoot.Length -eq 71) 'The over-limit fixture root is not 71 characters long.'
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $longRoot; DownloadCache = $cache; VerifyOnly = $true } `
+        -ExpectedMessages @('*root length 71 exceeds the supported maximum of 70*')
+    Assert-InstallerTest (-not (Test-Path -LiteralPath $longRoot)) 'Path-limit validation created the rejected root.'
+    Write-Host 'PASS toolchain roots longer than 70 characters are rejected'
 
     Assert-InstallerRejected `
         -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
@@ -144,4 +161,4 @@ finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host '8 toolchain-installer tests passed.'
+Write-Host '10 toolchain-installer tests passed.'

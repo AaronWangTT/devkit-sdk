@@ -33,6 +33,10 @@ $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorC
 if ($rootPath -ceq [IO.Path]::GetPathRoot($rootPath)) {
     throw "Refusing to manage a volume root: $rootPath"
 }
+$maximumRootLength = [int]$buildLock.hostPrerequisites.windows.maximumToolchainRootLength
+if ($rootPath.Length -gt $maximumRootLength) {
+    throw "AZ3166 toolchain root length $($rootPath.Length) exceeds the supported maximum of $maximumRootLength`: $rootPath"
+}
 if (-not $DownloadCache) {
     $DownloadCache = "$rootPath-downloads"
 }
@@ -313,10 +317,10 @@ else {
 }
 
 $rootParent = Split-Path -Parent $rootPath
-$rootName = Split-Path -Leaf $rootPath
 New-Item -ItemType Directory -Path $rootParent -Force | Out-Null
-$stagingRoot = Join-Path $rootParent ".$rootName.installing-$([guid]::NewGuid().ToString('N'))"
-$backupRoot = Join-Path $rootParent ".$rootName.replaced-$([guid]::NewGuid().ToString('N'))"
+$operationId = [guid]::NewGuid().ToString('N')
+$stagingRoot = Join-Path $rootParent ".az3166-installing-$operationId"
+$backupRoot = Join-Path $rootParent ".az3166-replaced-$operationId"
 
 try {
     New-Item -ItemType Directory -Path $stagingRoot | Out-Null

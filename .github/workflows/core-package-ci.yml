@@ -108,7 +108,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ${{ runner.temp }}/a
+            ${{ runner.temp }}/${{ steps.build-lock.outputs.short_toolchain_root_name }}
             ${{ runner.temp }}/az3166-downloads
           key: az3166-build-tools-${{ hashFiles('tools/build/az3166-build-lock.json', 'tools/build/Install-Az3166BuildTools.ps1') }}-windows
 
@@ -118,7 +118,7 @@ jobs:
         shell: pwsh
         run: |
           $arguments = @{
-            Root = Join-Path $env:RUNNER_TEMP "a"
+            Root = Join-Path $env:RUNNER_TEMP '${{ steps.build-lock.outputs.short_toolchain_root_name }}'
             DownloadCache = Join-Path $env:RUNNER_TEMP "az3166-downloads"
           }
           $tools = & ./tools/build/Install-Az3166BuildTools.ps1 @arguments

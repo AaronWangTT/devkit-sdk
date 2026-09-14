@@ -13,7 +13,8 @@
       "runner": "windows-2022",
       "architecture": "x86_64",
       "shortToolchainRootName": "a",
-      "pathConstraintStatus": "Maximum supported path length is not yet validated; preserve the historical short installation root."
+      "maximumToolchainRootLength": 70,
+      "pathConstraintStatus": "Measured with GCC 5.4.1 on Windows 10.0.26200; root length 71 passed and 72 failed, so 70 is the enforced conservative limit."
     },
     "linux": {
       "runner": "ubuntu-24.04",

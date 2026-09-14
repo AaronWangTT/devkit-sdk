@@ -51,6 +51,9 @@ installer. It verifies Arduino CLI 1.5.1, the Arduino IDE 1.8.19 bootstrap,
 AZ3166 GCC `5_4-2016q3`, OpenOCD 0.10.0, ArduinoUnit 2.2.0, and the immutable
 Board Manager index. Keep the historical installation path short; changing its
 version or ABI flags is not part of this layout migration.
+The measured GCC 5.4.1 boundary and the enforced 70-character toolchain-root
+maximum are documented in
+[`windows-toolchain-path-limit.md`](windows-toolchain-path-limit.md).
 
 ### Compile All Target Projects
 

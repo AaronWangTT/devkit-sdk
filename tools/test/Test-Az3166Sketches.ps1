@@ -9,6 +9,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ArduinoUnitDirectory,
 
+    [switch]$VerboseBuild,
+
     [string[]]$Sketch
 )
 
@@ -100,18 +102,28 @@ try {
         $buildPath = Join-Path $temporaryRoot "build-$buildName"
 
         Write-Host "Compiling $relativePath"
-        $output = (& $arduinoCliCommand.Source `
-            --config-file $configurationPath `
-            compile `
-            --fqbn $fqbn `
-            --build-path $buildPath `
-            --warnings all `
-            $sketchDirectory 2>&1 | Out-String)
+        $arguments = @(
+            '--config-file', $configurationPath,
+            'compile',
+            '--fqbn', $fqbn,
+            '--build-path', $buildPath,
+            '--warnings', 'all'
+        )
+        if ($VerboseBuild) {
+            $arguments += '--verbose'
+        }
+        $arguments += $sketchDirectory
+        $output = (& $arduinoCliCommand.Source @arguments 2>&1 | Out-String)
         $exitCode = $LASTEXITCODE
 
         if ($exitCode -ne 0) {
             Write-Host $output
             $failures.Add($relativePath)
+            continue
+        }
+
+        if ($VerboseBuild) {
+            Write-Host $output
             continue
         }
 
