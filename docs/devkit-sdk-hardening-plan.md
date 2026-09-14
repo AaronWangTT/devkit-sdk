@@ -243,7 +243,7 @@ the shared host-test runner.
 | --- | --- |
 | Core package CI: Windows and Ubuntu | Run `PackageLayoutTest.ps1`; run `Test-Az3166BoardPackage.ps1` for the current revision and canonical 2.0.2; verify caller state; upload the resulting package. |
 | Core package CI: Ubuntu | Run `Test-Az3166HostTests.ps1 -Sanitize` with the verified package version, executing both regression suites and the version test. |
-| Core package CI: Windows | Set up the pinned Arduino CLI and checksum-verified IDE/Core toolchain; run `Test-Az3166Sketches.ps1` for all 13 projects. |
+| Core package CI: Windows | Run `ToolchainInstallerTest.ps1`; use `Install-Az3166BuildTools.ps1` for pinned CLI, IDE, Core, GCC, OpenOCD, and ArduinoUnit setup; check offline no-op setup and `-VerifyOnly`; compile all 13 projects with `Test-Az3166Sketches.ps1` using the returned paths. |
 | Core package CI: comparison | Download both packages and require equal sizes and SHA-256 hashes. |
 | Core release | Validate/check out the requested tag; call its package verifier, layout tests, and shared host-test runner when available; use historical compatibility commands for older tags; publish only after its steps succeed. |
 
@@ -252,9 +252,9 @@ to `maintenance`, and supports manual dispatch. A platform-inapplicable matrix
 step is intentionally skipped: Ubuntu executes native C++ tests, while Windows
 compiles ARM sketches. A skipped hardware execution is not a hardware pass.
 
-Further orchestration work: share the pinned bootstrap with local setup, retain
-full compiler/test artifacts, add machine-readable test/coverage reports, and
-make a reusable full CI validation gate a prerequisite for tagged publication.
+Further orchestration work: retain full compiler/test artifacts, add
+machine-readable test/coverage reports, and make a reusable full CI validation
+gate a prerequisite for tagged publication.
 
 ## First-Pass Status
 

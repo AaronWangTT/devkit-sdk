@@ -2,6 +2,15 @@
 
 Set-StrictMode -Version Latest
 
+function Test-Az3166ToolVersion {
+    param(
+        [string]$Output,
+        [string]$Version
+    )
+
+    return $Output -match ('(?<![0-9.])' + [regex]::Escape($Version) + '(?![0-9.])')
+}
+
 function Assert-Az3166BuildLockCondition {
     param(
         [bool]$Condition,

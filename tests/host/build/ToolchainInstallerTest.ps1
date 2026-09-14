@@ -16,6 +16,7 @@ $installerPath = Join-Path $repositoryRoot 'tools/build/Install-Az3166BuildTools
 $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
 $volumeRoot = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
 $fixtureRoot = Join-Path $volumeRoot "ati-$([guid]::NewGuid().ToString('N'))"
+. (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 
 function Assert-InstallerTest {
     param(
@@ -53,6 +54,16 @@ try {
     New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
     $root = Join-Path $fixtureRoot 'root'
     $cache = Join-Path $fixtureRoot 'cache'
+
+    foreach ($version in @('1.5.1', '5.4.1', '0.10.0')) {
+        foreach ($output in @("Version: $version", "Version: $version (release)", "Version: $version-rc1")) {
+            Assert-InstallerTest (Test-Az3166ToolVersion -Output $output -Version $version) "Exact version token was rejected: $output"
+        }
+        foreach ($output in @("Version: ${version}0", "Version: ${version}1", "Version: ${version}.0", "Version: 1$version", "Version: 9.$version", 'no version')) {
+            Assert-InstallerTest (-not (Test-Az3166ToolVersion -Output $output -Version $version)) "Different version token was accepted: $output"
+        }
+    }
+    Write-Host 'PASS tool identity checks require complete numeric version tokens'
 
     Assert-InstallerRejected `
         -Arguments @{ Root = $root; DownloadCache = $cache; Clean = $true; VerifyOnly = $true } `
@@ -148,6 +159,19 @@ try {
         )
     Write-Host 'PASS partial managed installations are diagnosed'
 
+    $idePath = Join-Path $root 'arduino_debug.exe'
+    Copy-Item -LiteralPath (Join-Path $PSHOME 'pwsh.exe') -Destination $idePath
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+        -ExpectedMessages @("*Arduino IDE product version is *, expected '$($lock.arduino.ide.version)'*")
+    Write-Host 'PASS VerifyOnly rejects a different IDE product version'
+
+    Set-Content -LiteralPath $idePath -Value 'not an executable' -Encoding ascii
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+        -ExpectedMessages @("*Arduino IDE product version is '', expected '$($lock.arduino.ide.version)'*")
+    Write-Host 'PASS VerifyOnly rejects an IDE without version metadata'
+
     New-Item -ItemType Directory -Path $cache | Out-Null
     Set-Content -LiteralPath (Join-Path $cache $lock.arduino.cli.windowsX64.archiveFileName) -Value 'corrupt' -Encoding ascii
     Remove-Item -LiteralPath $root -Recurse -Force
@@ -156,9 +180,46 @@ try {
         -ExpectedMessages @("*$($lock.arduino.cli.windowsX64.archiveFileName): size is*")
     Assert-InstallerTest (-not (Test-Path -LiteralPath $root)) 'Corrupt offline cache input was extracted.'
     Write-Host 'PASS corrupt cached assets fail before extraction'
+
+    $archiveFixture = Join-Path $fixtureRoot 'cli-fixture.zip'
+    Set-Content -LiteralPath $archiveFixture -Value 'verified fixture' -Encoding ascii
+    $cacheLock = Get-Content -Raw -LiteralPath $lockPath | ConvertFrom-Json
+    $cacheLock.arduino.cli.windowsX64.size = (Get-Item -LiteralPath $archiveFixture).Length
+    $cacheLock.arduino.cli.windowsX64.sha256 = (Get-FileHash -LiteralPath $archiveFixture -Algorithm SHA256).Hash.ToLowerInvariant()
+    $fixtureLockPath = Join-Path $fixtureRoot 'cache-lock.json'
+    $cacheLock | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $fixtureLockPath -Encoding utf8
+    $cacheEntry = Join-Path $cache $cacheLock.arduino.cli.windowsX64.archiveFileName
+    Remove-Item -LiteralPath $cacheEntry -Force
+    New-Item -ItemType Directory -Path (Join-Path $cacheEntry 'nested') -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $cacheEntry 'nested/stale.txt') -Value 'invalid cache entry' -Encoding ascii
+    $siblingPath = Join-Path $cache 'keep.txt'
+    Set-Content -LiteralPath $siblingPath -Value 'keep' -Encoding ascii
+
+    & {
+        function Invoke-WebRequest {
+            param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
+
+            if ($Uri -ne $cacheLock.arduino.cli.windowsX64.url) {
+                throw 'Fixture stopped before IDE download.'
+            }
+            Copy-Item -LiteralPath $archiveFixture -Destination $OutFile
+        }
+
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $root; DownloadCache = $cache; LockPath = $fixtureLockPath } `
+            -ExpectedMessages @('Fixture stopped before IDE download.')
+    }
+
+    Assert-InstallerTest (Test-Path -LiteralPath $cacheEntry -PathType Leaf) 'The invalid cache directory was not replaced by a file.'
+    Assert-InstallerTest `
+        ((Get-FileHash -LiteralPath $cacheEntry -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $cacheLock.arduino.cli.windowsX64.sha256) `
+        'The repaired cache entry does not contain the verified download.'
+    Assert-InstallerTest ((Get-Content -Raw -LiteralPath $siblingPath).Trim() -ceq 'keep') 'Repair modified a sibling cache entry.'
+    Assert-InstallerTest (-not (Test-Path -LiteralPath $root)) 'The download fixture unexpectedly reached extraction.'
+    Write-Host 'PASS online repair replaces only the invalid cache directory with a verified file'
 }
 finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host '10 toolchain-installer tests passed.'
+Write-Host '14 toolchain-installer tests passed.'

@@ -166,6 +166,12 @@ function Get-Az3166InstallationProblems {
             $problems.Add("Board Manager index SHA-256 is $indexHash")
         }
     }
+    if (Test-Path -LiteralPath $Paths.ArduinoIdePath -PathType Leaf) {
+        $ideVersion = (Get-Item -LiteralPath $Paths.ArduinoIdePath).VersionInfo.ProductVersion
+        if ($ideVersion -cne $buildLock.arduino.ide.version) {
+            $problems.Add("Arduino IDE product version is '$ideVersion', expected '$($buildLock.arduino.ide.version)'")
+        }
+    }
     $compareHeader = Get-ChildItem `
         -LiteralPath $Paths.ArduinoUnitDirectory `
         -Filter 'Compare.h' -File -Recurse -ErrorAction SilentlyContinue |
@@ -185,17 +191,17 @@ function Get-Az3166InstallationProblems {
 
     if ($problems.Count -eq 0) {
         $cliOutput = (& $Paths.ArduinoCliPath version 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or $cliOutput -notmatch [regex]::Escape($buildLock.arduino.cli.version)) {
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Az3166ToolVersion -Output $cliOutput -Version $buildLock.arduino.cli.version)) {
             $problems.Add("Arduino CLI did not report version $($buildLock.arduino.cli.version)")
         }
 
         $compilerOutput = (& $Paths.CompilerPath --version 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or $compilerOutput -notmatch [regex]::Escape($buildLock.tools.armNoneEabiGcc.compilerVersion)) {
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Az3166ToolVersion -Output $compilerOutput -Version $buildLock.tools.armNoneEabiGcc.compilerVersion)) {
             $problems.Add("GCC did not report version $($buildLock.tools.armNoneEabiGcc.compilerVersion)")
         }
 
         $openOcdOutput = (& $Paths.OpenOcdPath --version 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or $openOcdOutput -notmatch [regex]::Escape($buildLock.tools.openocd.version)) {
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Az3166ToolVersion -Output $openOcdOutput -Version $buildLock.tools.openocd.version)) {
             $problems.Add("OpenOCD did not report version $($buildLock.tools.openocd.version)")
         }
     }
@@ -307,7 +313,9 @@ else {
             if ($problem) {
                 throw "Downloaded $($asset.Name) is invalid: $problem"
             }
-            Remove-Item -LiteralPath $cachePath -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $cachePath) {
+                Remove-Item -LiteralPath $cachePath -Recurse -Force
+            }
             Move-Item -LiteralPath $temporaryPath -Destination $cachePath
         }
         finally {
