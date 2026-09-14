@@ -102,6 +102,9 @@ function Get-Az3166BuildLock {
     Assert-Az3166BuildLockCondition `
         ([version]::TryParse([string]$minimumPowerShell, [ref]$parsedPowerShellVersion)) `
         'hostPrerequisites.powershell.minimumVersion must be a version.'
+    Assert-Az3166BuildLockCondition `
+        ($parsedPowerShellVersion -ge [version]'7.0') `
+        'hostPrerequisites.powershell.minimumVersion must be 7.0 or later.'
 
     $git = Get-Az3166BuildLockProperty $hostPrerequisites 'git' 'hostPrerequisites'
     $gitCapabilities = @(Get-Az3166BuildLockProperty $git 'requiredCapabilities' 'hostPrerequisites.git')

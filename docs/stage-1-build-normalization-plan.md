@@ -109,7 +109,7 @@ The installer must:
 3. Retain Arduino IDE 1.8.19 as the Board Manager bootstrap.
 4. Install the Core from the immutable index URL into the IDE portable data
    directory.
-5. verify the installed Core metadata, GCC and OpenOCD executables, reported GCC
+5. Verify the installed Core metadata, GCC and OpenOCD executables, reported GCC
    5.4.1 identity, and the historical target `c++config.h` path;
 6. return a structured object containing Arduino CLI, IDE, data-directory,
    compiler, and OpenOCD paths;

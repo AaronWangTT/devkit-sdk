@@ -84,10 +84,18 @@ Assert-BuildLockRejected {
 } 'Invalid AZ3166 build lock: hostPrerequisites contains unsupported entries: macos.'
 Write-Host 'PASS unsupported host is rejected'
 
+Assert-BuildLockRejected {
+    param($fixture)
+    $fixture.hostPrerequisites.powershell.minimumVersion = '5.1'
+} 'Invalid AZ3166 build lock: hostPrerequisites.powershell.minimumVersion must be 7.0 or later.'
+Write-Host 'PASS unsupported PowerShell minimum is rejected'
+
 $workflowPath = Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml'
 $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubOutput')) 'Core package CI does not export the shared build lock.'
 Assert-BuildConfigurationTest ($workflow.Contains('./tests/host/build/BuildConfigurationTest.ps1')) 'Core package CI does not run the build-configuration tests.'
+Assert-BuildConfigurationTest ($workflow.Contains('boardsmanager.additional.urls=$verifiedIndexUrl')) 'Core package CI does not install through the verified local index.'
+Assert-BuildConfigurationTest (-not $workflow.Contains('boardsmanager.additional.urls=$env:AZ3166_INDEX_URL')) 'Core package CI passes the unverified remote index URL to Arduino IDE.'
 $workflowLiterals = @(
     $lock.core.version
     $lock.core.canonicalPackage.sha256
@@ -165,4 +173,4 @@ finally {
 }
 Write-Host 'PASS GitHub output matches the build lock'
 
-Write-Host '8 build-configuration tests passed.'
+Write-Host '9 build-configuration tests passed.'
