@@ -8,10 +8,11 @@ request. [PR #8](https://github.com/AaronWangTT/devkit-sdk/pull/8) separated exa
 tests, and maintained tools. [PR #9](https://github.com/AaronWangTT/devkit-sdk/pull/9)
 separated root source/libraries and archived tooling and was squash-merged as
 `8e4d1b76d1dd3ec33bbe77dc2b9d4f39171d5cfc`.
-[PR #10](https://github.com/AaronWangTT/devkit-sdk/pull/10) implements the final
-ownership layout on `refactor/final-source-layout`, with a shared package map
-and build/test entry points. Compiler upgrades, binary-library rebuildability,
-hardware automation, and repository policy changes remain future work.
+[PR #10](https://github.com/AaronWangTT/devkit-sdk/pull/10) implemented the final
+ownership layout with a shared package map and build/test entry points and was
+squash-merged as `d55d91677cfde6bbbc9c2478df15412344617bb8`. Compiler upgrades,
+binary-library rebuildability, hardware automation, and repository policy
+changes remain future work.
 
 ## Current Checkpoint
 
@@ -48,9 +49,11 @@ PowerShell 7 or later and Git with support for `git archive --mtime`.
 For target builds, use the existing pinned Windows toolchain: Arduino CLI 1.5.1,
 Arduino IDE 1.8.19 bootstrap, AZ3166 GCC `5_4-2016q3`, and the immutable package
 index specified by [Core package CI](../.github/workflows/core-package-ci.yml).
-The workflow installs and verifies the toolchain on a clean Windows runner. Keep
-the historical GCC installation path short; changing its version or ABI flags is
-not part of this layout migration.
+The workflow verifies the IDE archive and immutable index before Board Manager
+uses the index package checksums on a clean Windows runner. Direct installed-tool
+identity checks belong to the shared Stage 1 installer. Keep the historical GCC
+installation path short; changing its version or ABI flags is not part of this
+layout migration.
 
 ### Compile All Target Projects
 
@@ -522,6 +525,10 @@ tool versions, library generations, or optional-feature linkage. The remaining
 payload moves followed only after package mapping was validated.
 
 ## Stage 1: Normalize Build Tools And Parameters
+
+The concrete pull-request sequence, implementation boundaries, evidence, and
+acceptance gates are defined in the
+[Stage 1 build normalization plan](stage-1-build-normalization-plan.md).
 
 - Centralize versions, checksums, immutable index pins, and host prerequisites.
 - Share local/CI setup and build entry points; verify clean and idempotent setup.

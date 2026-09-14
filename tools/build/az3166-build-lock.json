@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "hostPrerequisites": {
+    "powershell": {
+      "minimumVersion": "7.0.0"
+    },
+    "git": {
+      "requiredCapabilities": [
+        "archive --mtime"
+      ]
+    },
+    "windows": {
+      "runner": "windows-2022",
+      "architecture": "x86_64",
+      "shortToolchainRootName": "a",
+      "pathConstraintStatus": "Maximum supported path length is not yet validated; preserve the historical short installation root."
+    },
+    "linux": {
+      "runner": "ubuntu-24.04",
+      "architecture": "x86_64"
+    }
+  },
+  "arduino": {
+    "fqbn": "AZ3166Checkout:stm32f4:MXCHIP_AZ3166",
+    "cli": {
+      "version": "1.5.1",
+      "windowsX64": {
+        "url": "https://github.com/arduino/arduino-cli/releases/download/v1.5.1/arduino-cli_1.5.1_Windows_64bit.zip",
+        "archiveFileName": "arduino-cli_1.5.1_Windows_64bit.zip",
+        "sha256": "fabe42e0eb04d00e776a66178299ff95a46c623dbc260f997e58fd514853dd40",
+        "size": 17965819
+      }
+    },
+    "ide": {
+      "version": "1.8.19",
+      "windows": {
+        "url": "https://downloads.arduino.cc/arduino-1.8.19-windows.zip",
+        "archiveFileName": "arduino-1.8.19-windows.zip",
+        "sha256": "c704a821089eab2588f1deae775916219b1517febd1dd574ff29958dca873945",
+        "size": 210670368
+      }
+    },
+    "unit": {
+      "version": "2.2.0",
+      "archive": {
+        "url": "https://downloads.arduino.cc/libraries/github.com/mmurdoch/ArduinoUnit-2.2.0.zip",
+        "archiveFileName": "ArduinoUnit-2.2.0.zip",
+        "sha256": "dc2e4473aedad99d254b4169e6ec32c717004c6537f2008e87db72d8c76b08ff",
+        "size": 311217
+      }
+    }
+  },
+  "boardManager": {
+    "repository": "AaronWangTT/azureiotdevkit_tools",
+    "revision": "ac5055ec3a8fddd3135b1c367a9f630d33f65ef8",
+    "indexPath": "package_azureboard_index.json",
+    "indexUrl": "https://raw.githubusercontent.com/AaronWangTT/azureiotdevkit_tools/ac5055ec3a8fddd3135b1c367a9f630d33f65ef8/package_azureboard_index.json",
+    "sha256": "38a7ebbfa56839b449543f8b945e4f1c970244f31aa6f9b784eb8a17685e7d4c"
+  },
+  "core": {
+    "version": "2.0.2",
+    "canonicalPackage": {
+      "url": "https://github.com/AaronWangTT/devkit-sdk/releases/download/2.0.2/AZ3166-2.0.2.zip",
+      "archiveFileName": "AZ3166-2.0.2.zip",
+      "sha256": "5914d3e7b988fdc50b00ff241b7ac191fd6fb9bdc234b4a3f86c51ed0d5e9677",
+      "size": 5497641
+    },
+    "toolDependencies": [
+      {
+        "name": "arm-none-eabi-gcc",
+        "version": "5_4-2016q3"
+      },
+      {
+        "name": "openocd",
+        "version": "0.10.0"
+      }
+    ]
+  },
+  "tools": {
+    "armNoneEabiGcc": {
+      "packageName": "arm-none-eabi-gcc",
+      "version": "5_4-2016q3",
+      "compilerVersion": "5.4.1",
+      "windows": {
+        "url": "https://github.com/VSChina/azureiotdevkit_tools/releases/download/1.0/gcc-arm-none-eabi-5_4-2016q3-20160926-win32.zip",
+        "archiveFileName": "gcc-arm-none-eabi-5_4-2016q3-20160926-win32.zip",
+        "sha256": "2c9cf891fa0f594d07a97508e2fb0ac05dddf9a68f13d831200a29e6b5ac7011",
+        "size": 121781693
+      }
+    },
+    "openocd": {
+      "packageName": "openocd",
+      "version": "0.10.0",
+      "windows": {
+        "url": "https://github.com/VSChina/azureiotdevkit_tools/releases/download/1.0/openocd-0.10.0-32.zip",
+        "archiveFileName": "openocd-0.10.0-32.zip",
+        "sha256": "1c66db9a08a8a96a6305ea6f1ba15152b618cf0263c0ebda5cfc2d896b2e167d",
+        "size": 2751074
+      }
+    }
+  }
+}
