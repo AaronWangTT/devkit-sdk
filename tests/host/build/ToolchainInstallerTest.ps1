@@ -523,11 +523,15 @@ try {
         Assert-InstallerTest ($boundaryRoot.Length -eq 70) 'The boundary installation root must be 70 characters long.'
         $boundaryArguments = @{ Root = $boundaryRoot; DownloadCache = $DownloadCache }
         $boundaryTools = & $installerPath @boundaryArguments -Offline
+        Assert-InstallerTest (@($boundaryTools).Count -eq 1 -and $boundaryTools.PSObject.TypeNames[0] -ceq 'Az3166.BuildTools') 'Fresh installation must return exactly one typed result.'
         Assert-InstallerTest $boundaryTools.Changed 'The fresh boundary installation did not report a change.'
         $secondBoundary = & $installerPath @boundaryArguments -Offline
+        Assert-InstallerTest (@($secondBoundary).Count -eq 1 -and $secondBoundary.PSObject.TypeNames[0] -ceq 'Az3166.BuildTools') 'No-op installation must return exactly one typed result.'
         Assert-InstallerTest (-not $secondBoundary.Changed) 'The second boundary setup changed the installation.'
-        $null = & $installerPath @boundaryArguments -VerifyOnly
+        $verifiedBoundary = & $installerPath @boundaryArguments -VerifyOnly
+        Assert-InstallerTest (@($verifiedBoundary).Count -eq 1 -and $verifiedBoundary.PSObject.TypeNames[0] -ceq 'Az3166.BuildTools') 'VerifyOnly must return exactly one typed result.'
         $cleanBoundary = & $installerPath @boundaryArguments -Clean -Offline
+        Assert-InstallerTest (@($cleanBoundary).Count -eq 1 -and $cleanBoundary.PSObject.TypeNames[0] -ceq 'Az3166.BuildTools') 'Clean installation must return exactly one typed result.'
         Assert-InstallerTest $cleanBoundary.Changed 'The clean boundary replacement did not report a change.'
         Assert-InstallerTest (@(Get-ChildItem -LiteralPath $boundaryParent -Filter '.az3166-*' -Force).Count -eq 0) 'Boundary replacement left staging or backup directories.'
         $testCount++
@@ -675,7 +679,7 @@ try {
         $testCount++
         Write-Host 'PASS failed linked candidates are quarantined and the previous installation is restored'
 
-        $lockedRollbackFault = @{ Handle = $null }
+        $lockedRollbackFault = @{ Handle = $null; StagingPath = $null }
         try {
             & {
                 function Move-Item {
@@ -691,9 +695,28 @@ try {
                     }
                 }
 
+                function Remove-Item {
+                    [CmdletBinding()]
+                    param([string]$LiteralPath, [switch]$Recurse, [switch]$Force)
+
+                    if ($Recurse -and (Split-Path -Path $LiteralPath -Leaf) -like '.az3166-installing-*') {
+                        $lockedRollbackFault.StagingPath = $LiteralPath
+                        $stageLock = [IO.File]::Open((Join-Path $LiteralPath 'cleanup-locked.txt'), [IO.FileMode]::Create, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+                        try {
+                            Microsoft.PowerShell.Management\Remove-Item @PSBoundParameters
+                        }
+                        finally {
+                            $stageLock.Dispose()
+                        }
+                    }
+                    else {
+                        Microsoft.PowerShell.Management\Remove-Item @PSBoundParameters
+                    }
+                }
+
                 Assert-InstallerRejected `
                     -Arguments ($boundaryArguments + @{ Clean = $true; Offline = $true }) `
-                    -ExpectedMessages @('*rollback requires recovery*', '*record: *.az3166-recovery-*.json*')
+                    -ExpectedMessages @('*rollback requires recovery*', '*record: *.az3166-recovery-*.json*', '*Staging cleanup failed at*')
             }
         }
         finally {
@@ -713,8 +736,10 @@ try {
         [IO.Directory]::Move($recoveryRecord.backupRoot, $boundaryRoot)
         $null = & $installerPath @boundaryArguments -VerifyOnly
         Remove-Item -LiteralPath $recoveryFiles[0].FullName -Force
+        Assert-InstallerTest (Test-Path -LiteralPath $lockedRollbackFault.StagingPath -PathType Container) 'The staging-cleanup fault did not retain its path.'
+        Remove-Item -LiteralPath $lockedRollbackFault.StagingPath -Recurse -Force
         $testCount++
-        Write-Host 'PASS blocked rollback preserves the known-good backup and explicit recovery paths'
+        Write-Host 'PASS blocked rollback and staging cleanup preserve the backup and both failure diagnostics'
 
         $stagingFault = @{ Path = $null }
         & {

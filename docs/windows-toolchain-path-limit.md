@@ -94,6 +94,8 @@ the retained path. Release any file lock and remove that exact temporary artifac
 before retrying; these failures are not reported as a successful clean setup.
 If promotion already completed, `-VerifyOnly` can check the installed root without
 removing the retained staging directory.
+If installation or rollback already failed, the staging cleanup error is appended
+to that primary error so its recovery paths remain visible.
 
 If promotion or final verification fails, rollback renames the failed candidate
 to an operation-specific `.az3166-failed-*` sibling without traversing its

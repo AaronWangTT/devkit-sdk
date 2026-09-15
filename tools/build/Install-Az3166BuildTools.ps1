@@ -574,6 +574,7 @@ $operationId = [guid]::NewGuid().ToString('N')
 $stagingRoot = Join-Path $rootParent ".az3166-installing-$operationId"
 $backupRoot = Join-Path $rootParent ".az3166-replaced-$operationId"
 $rollbackAttempted = $false
+$primaryFailure = $null
 
 try {
     New-Item -ItemType Directory -Path $stagingRoot | Out-Null
@@ -760,6 +761,10 @@ try {
         $null = Remove-Az3166PendingBackup -Paths $installedPaths -Manifest $installedState.Manifest
     }
 }
+catch {
+    $primaryFailure = $_.Exception
+    throw
+}
 finally {
     try {
         Assert-Az3166NoReparsePoint -Path $stagingRoot -Recurse
@@ -768,7 +773,11 @@ finally {
         }
     }
     catch {
-        throw "Staging cleanup failed at ${stagingRoot}: $($_.Exception.Message)"
+        $cleanupMessage = "Staging cleanup failed at ${stagingRoot}: $($_.Exception.Message)"
+        if ($null -ne $primaryFailure) {
+            throw [Exception]::new("$($primaryFailure.Message)`n$cleanupMessage", $primaryFailure)
+        }
+        throw $cleanupMessage
     }
     finally {
         if (
