@@ -118,6 +118,21 @@ function Get-Az3166BuildCommands {
     return ,@($ordered)
 }
 
+function Get-Az3166CompilerDatabase {
+    param([string]$Path)
+
+    $database = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json -NoEnumerate
+    if ($database -isnot [array] -or $database.Count -eq 0) { throw 'Compiler equivalence requires a nonempty compilation database array.' }
+    foreach ($entry in $database) {
+        $arguments = $entry.PSObject.Properties['arguments']
+        if ($null -eq $arguments -or $arguments.Value -isnot [array] -or $arguments.Value.Count -eq 0 -or
+            @($arguments.Value | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count -ne 0) {
+            throw 'Compiler equivalence requires arguments-array entries from the pinned CLI; command-string entries are unsupported.'
+        }
+    }
+    return ,$database
+}
+
 function Export-Az3166CompilerEvidence {
     param([string]$Directory)
 
@@ -126,7 +141,7 @@ function Export-Az3166CompilerEvidence {
     if ($context.status -cne 'passed') { throw "Cannot compare an unsuccessful sketch: $Directory" }
     $commands = Get-Az3166BuildCommands -LogPath (Join-Path $Directory 'build.stdout.log')
     ConvertTo-Json -InputObject $commands -Depth 6 | Set-Content -LiteralPath (Join-Path $Directory 'commands.json') -Encoding utf8
-    $database = Get-Content -Raw -LiteralPath (Join-Path $Directory 'compile_commands.build.json') | ConvertFrom-Json
+    $database = Get-Az3166CompilerDatabase -Path (Join-Path $Directory 'compile_commands.build.json')
     $databaseCommands = @($database | ForEach-Object {
         [ordered]@{ directory = $_.directory; file = $_.file; arguments = @($_.arguments) }
     })

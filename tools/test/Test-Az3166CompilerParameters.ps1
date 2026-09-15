@@ -49,13 +49,13 @@ function Invoke-Az3166FixedRootBuild {
 
         if ($Path.Count -eq 1 -and $Path[0] -eq [IO.Path]::GetTempPath() -and
             $ChildPath -cmatch '\Aaz3166-tests-[0-9a-f]{32}\z') {
-            $routing.Count++
+            $routing['Count']++
             return $FixedStagingDirectory
         }
         Microsoft.PowerShell.Management\Join-Path @PSBoundParameters
     }
     & $DriverPath @BuildArguments
-    if ($routing.Count -ne 1) { throw 'The driver did not use exactly one controlled private staging root.' }
+    if ($routing['Count'] -ne 1) { throw 'The driver did not use exactly one controlled private staging root.' }
     if (Test-Path -LiteralPath $FixedStagingDirectory) { throw 'Private staging was not cleaned between comparison builds.' }
 }
 

@@ -101,6 +101,9 @@ Database comparisons use full entry records, ignoring only parallel compiler
 entry order; the report retains raw hashes and a separate `byteEqual` result
 so byte differences are visible rather than claimed equal. Unknown database
 fields and duplicate entries are not dropped.
+This pinned-CLI harness explicitly requires nonempty `arguments` arrays; it
+rejects command-string-only databases rather than applying a shell parser or
+guessing arguments. The general PR 3 database validator remains unchanged.
 CLI-rendered quoted strings are decoded using a structured
 JSON string parser. The only rewritten argument value is a preprocessing `-o`
 path matching the observed CLI-only `<OS temp>/<digits>/sketch_merged.cpp` form.

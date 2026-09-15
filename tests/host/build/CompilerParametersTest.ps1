@@ -108,6 +108,43 @@ try {
     Assert-CompilerParameters $rejected 'Missing required command coverage was accepted.'
     Write-Host 'PASS narrow CLI temporary-path canonicalization, object ordering, and required command coverage'
 
+    $databasePath = Join-Path $fixtureRoot 'database.json'
+    '[{"directory":"fixed","file":"source.cpp","arguments":["g++","-c","source.cpp"]}]' |
+        Set-Content -LiteralPath $databasePath -Encoding utf8
+    Assert-CompilerParameters ((Get-Az3166CompilerDatabase $databasePath).Count -eq 1) 'Pinned CLI arguments-form database was rejected.'
+    foreach ($invalid in @('[]', '{}', '[{"command":"g++ -c source.cpp","file":"source.cpp"}]', '[{"arguments":null}]', '[{"arguments":[1]}]')) {
+        Set-Content -LiteralPath $databasePath -Value $invalid -Encoding utf8
+        $rejected = $false
+        try { $null = Get-Az3166CompilerDatabase $databasePath }
+        catch { $rejected = $true }
+        Assert-CompilerParameters $rejected "Unsupported compiler database was accepted: $invalid"
+    }
+    Write-Host 'PASS pinned CLI arguments-form database is explicit and command-string entries are rejected'
+
+    $harnessPath = Join-Path $repositoryRoot 'tools/test/Test-Az3166CompilerParameters.ps1'
+    $routingFunction = [Management.Automation.Language.Parser]::ParseFile($harnessPath, [ref]$null, [ref]$null).Find({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Invoke-Az3166FixedRootBuild'
+    }, $true)
+    . ([scriptblock]::Create($routingFunction.Extent.Text))
+    $fakeDriver = Join-Path $fixtureRoot 'driver.ps1'
+    @'
+param([int]$Calls, [string]$Expected)
+for ($index = 0; $index -lt $Calls; $index++) {
+    $actual = Join-Path ([IO.Path]::GetTempPath()) "az3166-tests-$([guid]::NewGuid().ToString('N'))"
+    if ($actual -cne $Expected) { throw 'Staging path was not intercepted.' }
+}
+'@ | Set-Content -LiteralPath $fakeDriver -Encoding utf8
+    $fixedStaging = Join-Path $fixtureRoot 'controlled-staging'
+    Invoke-Az3166FixedRootBuild -DriverPath $fakeDriver -FixedStagingDirectory $fixedStaging -BuildArguments @{ Calls = 1; Expected = $fixedStaging }
+    foreach ($calls in @(0, 2)) {
+        $rejected = $false
+        try { Invoke-Az3166FixedRootBuild -DriverPath $fakeDriver -FixedStagingDirectory $fixedStaging -BuildArguments @{ Calls = $calls; Expected = $fixedStaging } }
+        catch { $rejected = $true }
+        Assert-CompilerParameters $rejected "Fixed-root routing accepted $calls intercepted paths."
+    }
+    Write-Host 'PASS fixed-root routing accepts exactly one intercepted staging path'
+
     $beforePath = Join-Path $fixtureRoot 'before'
     $afterPath = Join-Path $fixtureRoot 'after'
     $context = @{
