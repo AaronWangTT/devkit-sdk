@@ -95,15 +95,19 @@ diagnostic, not an automated pass/fail suite. Native build commands are in the
 The sketch test script requires PowerShell 7 or later (`pwsh`), matching the CI
 shell. Windows PowerShell 5.1 (`powershell.exe`) is not supported.
 
-With the pinned toolchain installed and Arduino CLI on `PATH`, run from the
-repository root:
+Install the pinned toolchain and run the sketch checks from the repository root:
 
 ```powershell
-pwsh -File .\tools\test\Test-Az3166Sketches.ps1
+$tools = .\tools\build\Install-Az3166BuildTools.ps1 `
+	-Root C:\a -DownloadCache C:\az3166-downloads
+.\tools\test\Test-Az3166Sketches.ps1 `
+	-ArduinoCli $tools.ArduinoCliPath `
+	-ArduinoDataDirectory $tools.ArduinoDataDirectory `
+	-ArduinoUnitDirectory $tools.ArduinoUnitDirectory
 ```
 
-Use `-Sketch .\tests\hardware\UnitTest` to compile a single project, or
-`-ArduinoCli <path-to-arduino-cli>` if the CLI is not on `PATH`.
+Add `-Sketch .\tests\hardware\UnitTest` to the sketch-test command to compile a
+single project. The toolchain root must not exceed 70 characters.
 
 The release workflow selects the relocated tools and host tests when present,
 and falls back to their original paths for historical tags. Package source paths

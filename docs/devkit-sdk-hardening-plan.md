@@ -46,19 +46,24 @@ changes remain future work.
 Run commands below from the repository root. The maintained entry points require
 PowerShell 7 or later and Git with support for `git archive --mtime`.
 
-For target builds, use the existing pinned Windows toolchain: Arduino CLI 1.5.1,
-Arduino IDE 1.8.19 bootstrap, AZ3166 GCC `5_4-2016q3`, and the immutable package
-index specified by [Core package CI](../.github/workflows/core-package-ci.yml).
-The workflow verifies the IDE archive and immutable index before Board Manager
-uses the index package checksums on a clean Windows runner. Direct installed-tool
-identity checks belong to the shared Stage 1 installer. Keep the historical GCC
-installation path short; changing its version or ABI flags is not part of this
-layout migration.
+For target builds, install the pinned Windows toolchain through the shared
+installer. It verifies Arduino CLI 1.5.1, the Arduino IDE 1.8.19 bootstrap,
+AZ3166 GCC `5_4-2016q3`, OpenOCD 0.10.0, ArduinoUnit 2.2.0, and the immutable
+Board Manager index. Keep the historical installation path short; changing its
+version or ABI flags is not part of this layout migration.
+The measured GCC 5.4.1 boundary and the enforced 70-character toolchain-root
+maximum are documented in
+[`windows-toolchain-path-limit.md`](windows-toolchain-path-limit.md).
 
 ### Compile All Target Projects
 
 ```powershell
-pwsh -File ./tools/test/Test-Az3166Sketches.ps1
+$tools = ./tools/build/Install-Az3166BuildTools.ps1 `
+  -Root C:/a -DownloadCache C:/az3166-downloads
+./tools/test/Test-Az3166Sketches.ps1 `
+  -ArduinoCli $tools.ArduinoCliPath `
+  -ArduinoDataDirectory $tools.ArduinoDataDirectory `
+  -ArduinoUnitDirectory $tools.ArduinoUnitDirectory
 ```
 
 This discovers the same 13 projects under `examples` and `tests/hardware`, stages
@@ -72,16 +77,17 @@ prebuilt archives. The 15 library examples are not part of this default scan.
 Compile one project or supply explicit installed tool locations:
 
 ```powershell
-pwsh -File ./tools/test/Test-Az3166Sketches.ps1 -Sketch ./tests/hardware/UnitTest
-pwsh -File ./tools/test/Test-Az3166Sketches.ps1 `
-  -ArduinoCli C:/tools/arduino-cli.exe -ArduinoDataDirectory C:/a/portable
+./tools/test/Test-Az3166Sketches.ps1 `
+  -ArduinoCli $tools.ArduinoCliPath `
+  -ArduinoDataDirectory $tools.ArduinoDataDirectory `
+  -ArduinoUnitDirectory $tools.ArduinoUnitDirectory `
+  -Sketch ./tests/hardware/UnitTest
 ```
 
-The second command illustrates custom paths; use the locations actually installed
-on the machine. The default data directory on Windows is `%LOCALAPPDATA%/Arduino15`.
-Builds fail on compiler errors and report flash/RAM usage. Temporary build files
-are currently removed when the driver exits; retaining diagnostics/artifacts is
-still a hardening task.
+Builds fail on compiler errors and report flash/RAM usage. The installer owns
+only the selected root and leaves its verified download cache intact when
+`-Clean` is used. Temporary build files are currently removed when the driver
+exits; retaining diagnostics/artifacts is still a hardening task.
 
 ### Inspect Or Integrate The Platform
 
@@ -237,7 +243,7 @@ the shared host-test runner.
 | --- | --- |
 | Core package CI: Windows and Ubuntu | Run `PackageLayoutTest.ps1`; run `Test-Az3166BoardPackage.ps1` for the current revision and canonical 2.0.2; verify caller state; upload the resulting package. |
 | Core package CI: Ubuntu | Run `Test-Az3166HostTests.ps1 -Sanitize` with the verified package version, executing both regression suites and the version test. |
-| Core package CI: Windows | Set up the pinned Arduino CLI and checksum-verified IDE/Core toolchain; run `Test-Az3166Sketches.ps1` for all 13 projects. |
+| Core package CI: Windows | Run `ToolchainInstallerTest.ps1`; use `Install-Az3166BuildTools.ps1` for pinned CLI, IDE, Core, GCC, OpenOCD, and ArduinoUnit setup; check offline no-op setup and `-VerifyOnly`; compile all 13 projects with `Test-Az3166Sketches.ps1` using the returned paths. |
 | Core package CI: comparison | Download both packages and require equal sizes and SHA-256 hashes. |
 | Core release | Validate/check out the requested tag; call its package verifier, layout tests, and shared host-test runner when available; use historical compatibility commands for older tags; publish only after its steps succeed. |
 
@@ -246,9 +252,9 @@ to `maintenance`, and supports manual dispatch. A platform-inapplicable matrix
 step is intentionally skipped: Ubuntu executes native C++ tests, while Windows
 compiles ARM sketches. A skipped hardware execution is not a hardware pass.
 
-Further orchestration work: share the pinned bootstrap with local setup, retain
-full compiler/test artifacts, add machine-readable test/coverage reports, and
-make a reusable full CI validation gate a prerequisite for tagged publication.
+Further orchestration work: retain full compiler/test artifacts, add
+machine-readable test/coverage reports, and make a reusable full CI validation
+gate a prerequisite for tagged publication.
 
 ## First-Pass Status
 

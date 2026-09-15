@@ -61,17 +61,21 @@ libraries under `libraries`. Archived tooling is documented in
 [legacy/README.md](legacy/README.md); relocating it does not make it supported
 or safe to run against production services.
 
-With the pinned AZ3166 toolchain installed and Arduino CLI available, compile
-all 13 standalone examples and device-test projects from the repository root
-using PowerShell 7 or later:
+Install the pinned AZ3166 toolchain and compile all 13 standalone examples and
+device-test projects from the repository root using PowerShell 7 or later:
 
 ```powershell
-pwsh -File .\tools\test\Test-Az3166Sketches.ps1
+$tools = .\tools\build\Install-Az3166BuildTools.ps1 `
+     -Root C:\a -DownloadCache C:\az3166-downloads
+.\tools\test\Test-Az3166Sketches.ps1 `
+     -ArduinoCli $tools.ArduinoCliPath `
+     -ArduinoDataDirectory $tools.ArduinoDataDirectory `
+     -ArduinoUnitDirectory $tools.ArduinoUnitDirectory
 ```
 
-Native host-test commands and pinned toolchain setup are maintained in the
-[CI workflow](.github/workflows/core-package-ci.yml). Run the shared native tests
-using PowerShell 7 and GCC with sanitizer support:
+The toolchain root must not exceed 70 characters. Native host-test commands and
+pinned toolchain setup are maintained in the [CI workflow](.github/workflows/core-package-ci.yml).
+Run the shared native tests using PowerShell 7 and GCC with sanitizer support:
 
 ```powershell
 pwsh -File ./tests/host/package/PackageLayoutTest.ps1

@@ -54,18 +54,19 @@ contract. This changes where values are read, not the values or build process.
     Windows archive metadata published by the pinned index;
   - ArduinoUnit version and archive metadata;
   - FQBN, supported CI hosts, PowerShell minimum, required Git capability, and
-    the unresolved short-path constraint.
+    the measured Windows short-path constraint with a 70-character root limit.
 - `tools/build/Az3166Build.Common.ps1` loads and validates the schema and exports
   selected values to GitHub Actions without duplicating them in YAML.
 - `tests/host/build/BuildConfigurationTest.ps1` rejects malformed hashes,
   mutable index references, mismatched tool dependencies, and duplicated
   consumer literals.
-- The sketch driver reads its FQBN and ArduinoUnit values from the lock.
+- The sketch driver reads its FQBN from the lock and accepts the ArduinoUnit
+  directory returned by the shared installer.
 - Core package CI reads canonical-package and Windows-bootstrap values from the
-  lock, and keys the toolchain cache with GitHub Actions `hashFiles()` over the
-  complete lock file. It verifies the IDE archive size and hash, preflights the
-  immutable Board Manager index hash, and verifies the exact index cached by
-  Arduino IDE before compilation proceeds.
+  lock, and keys the download cache with GitHub Actions `hashFiles()` over the
+  lock and direct installer dependencies. The installer verifies archives and
+  the immutable Board Manager index before installation, then verifies installed
+  identities before compilation proceeds.
 
 ### Validation
 
@@ -78,12 +79,10 @@ contract. This changes where values are read, not the values or build process.
    FQBN, and flags.
 5. Confirm Windows and Ubuntu still produce byte-identical current packages.
 
-Network availability is not required for the contract test. Downloaded content
-continues to be verified at the point where it is consumed. The existing Arduino
-CLI action still consumes only the locked CLI version, while Board Manager uses
-the verified immutable index and its package checksums for Core, GCC, and
-OpenOCD. PR 2 will move every download behind the shared installer and verify
-the installed tool identities directly.
+Network availability is not required for the contract test. The shared installer
+now owns every toolchain download and verifies the locked archives and index.
+It checks installed CLI, IDE, Core, GCC, OpenOCD, and ArduinoUnit identities;
+the sketch driver consumes the returned paths without downloading dependencies.
 
 ## PR 2: Shared And Idempotent Toolchain Setup
 
@@ -96,7 +95,7 @@ point while retaining the known working installation mechanism and short path.
 
 Add `tools/build/Install-Az3166BuildTools.ps1` with these parameters:
 
-- `-Root` selects the installation root;
+- `-Root` selects a nonexistent or installer-owned installation root;
 - `-DownloadCache` permits verified archive reuse;
 - `-Clean` removes only directories owned by this installer;
 - `-Offline` forbids network access and reports every missing cached archive;
@@ -121,6 +120,11 @@ The installer must:
 CI calls this script directly. Documentation uses the same command and consumes
 the returned paths when invoking `Test-Az3166Sketches.ps1`.
 
+CI caches verified downloads only, not managed installation roots. Ownership
+manifests remain bound to the absolute installation root, so each runner creates
+or verifies its own installation from those portable downloads. The cache key
+includes the lock and direct installer script dependencies.
+
 ### Windows Path Experiment
 
 Before changing the IDE bootstrap, run one representative sketch in fresh roots
@@ -132,10 +136,15 @@ tool versions, data layout, and command identical. For each root, retain:
 - pass/fail status and the first failing diagnostic;
 - whether shortening only the root restores the build.
 
-Record the longest passing and shortest failing roots. Encode a conservative
-preflight limit only after those results exist. Until then, use a short root
-named `a` under a drive or runner temporary directory and keep the constraint
-explicitly marked as unvalidated in the lock.
+Record the longest passing and shortest failing roots when repeating this
+experiment. Keep the current conservative preflight limit and short root named
+`a` under a drive or runner temporary directory unless new measurements justify
+a change.
+
+The experiment is recorded in
+[`windows-toolchain-path-limit.md`](windows-toolchain-path-limit.md). Root length
+71 passed and 72 failed, so the lock and installer enforce a conservative
+70-character maximum while CI retains the short root named `a`.
 
 ### Validation
 
