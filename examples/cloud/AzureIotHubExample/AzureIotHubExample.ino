@@ -3,7 +3,7 @@
 #include "iot_hub_mqtt_example.h"
 
 static char msgText[1024];
-static char temp[100];
+static char temp[100] __attribute__((unused));
 
 #define pulsePin USER_BUTTON_A
 #define lightPin LED_BUILTIN

@@ -357,7 +357,7 @@ void BSP_AUDIO_OUT_TransferComplete_CallBack(void)
 
         // Check if the end of file has been reached
         uint16_t *bufferTail = (uint16_t *)(_wavFile + _audioFileSize);
-        int remainingSize = (bufferTail - _playCursor) / STEREO;
+        int remainingSize __attribute__((unused)) = (bufferTail - _playCursor) / STEREO;
 
         if (_audioRemSize > 0)
         {

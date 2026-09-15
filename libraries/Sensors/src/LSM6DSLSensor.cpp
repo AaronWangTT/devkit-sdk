@@ -70,7 +70,7 @@ LSM6DSLSensor::LSM6DSLSensor(DevI2C &i2c, PinName int1_pin, PinName int2_pin, ui
  * @param[in] init pointer to device specific initialization structure.
  * @retval    "0" in case of success, an error code otherwise.
  */
-int LSM6DSLSensor::init(void *init)
+int LSM6DSLSensor::init(void *init __attribute__((unused)))
 {
   /* Enable register address automatically incremented during a multiple byte
      access with a serial interface. */

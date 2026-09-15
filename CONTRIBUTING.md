@@ -80,10 +80,15 @@ Use a fresh sketch output directory for each run. Successful and failed builds
 retain complete evidence; CI uploads it even after failure for 30 days. See
 [persistent build evidence](docs/persistent-build-evidence.md) for artifact names,
 failure-retention tests, and findings deferred beyond PR 3.
+The driver enforces the [first-party warning policy](docs/first-party-warning-policy.md):
+first-party and unclassified warnings fail, and complete inventories also reject
+stale historical allowances. Raw diagnostics and count-by-rule reports remain
+in the retained evidence.
 Run the shared native tests using PowerShell 7 and GCC with sanitizer support:
 
 ```powershell
 pwsh -File ./tests/host/build/BuildEvidenceTest.ps1
+pwsh -File ./tests/host/build/WarningPolicyTest.ps1
 pwsh -File ./tests/host/package/PackageLayoutTest.ps1
 pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Sanitize
 ```

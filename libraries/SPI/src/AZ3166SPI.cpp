@@ -53,7 +53,7 @@ void SPIClass::endTransaction(void)
 {
 }
 
-void SPIClass::setBitOrder(uint8_t bitOrder)
+void SPIClass::setBitOrder(uint8_t bitOrder __attribute__((unused)))
 {
   // Only support MSB
 }

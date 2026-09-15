@@ -18,11 +18,10 @@ compiler.libstm.c.flags={compiler.includes.system} {compiler.includes.mbed} {com
 
 compiler.warnings.suppressed=-w
 compiler.warnings.first_party=-Wall -Wextra
-compiler.warnings.historical=-Wno-unused-parameter -Wno-missing-field-initializers
 compiler.warnings.cpp=-Wvla
-compiler.warning_flags={compiler.warnings.suppressed}
+compiler.warning_flags={compiler.warnings.first_party}
 compiler.warning_flags.none={compiler.warnings.suppressed}
-compiler.warning_flags.default={compiler.warnings.suppressed}
+compiler.warning_flags.default={compiler.warnings.first_party}
 compiler.warning_flags.more=-Wall
 compiler.warning_flags.all={compiler.warnings.first_party}
 
@@ -61,7 +60,7 @@ compiler.c.elf.flags={compiler.optimization.flags} {compiler.debug.flags} {compi
 compiler.S.cmd=arm-none-eabi-gcc
 compiler.S.flags=-c {compiler.language.assembly.flags} {compiler.libstm.c.flags} {compiler.defines.assembly}
 compiler.cpp.cmd=arm-none-eabi-g++
-compiler.cpp.flags=-c {compiler.optimization.flags} {compiler.debug.flags} {compiler.warning_flags} {compiler.language.cpp.flags} {compiler.warnings.historical} {compiler.diagnostics.message.flags} {compiler.codegen.sections.flags} {compiler.codegen.runtime.flags} {compiler.codegen.cpp.statics.flags} {compiler.codegen.inline.flags} {compiler.codegen.cpp.rtti.flags} {compiler.warnings.cpp} {compiler.defines.target} {compiler.codegen.dependencies.flags} {compiler.libstm.c.flags}
+compiler.cpp.flags=-c {compiler.optimization.flags} {compiler.debug.flags} {compiler.warning_flags} {compiler.language.cpp.flags} {compiler.diagnostics.message.flags} {compiler.codegen.sections.flags} {compiler.codegen.runtime.flags} {compiler.codegen.cpp.statics.flags} {compiler.codegen.inline.flags} {compiler.codegen.cpp.rtti.flags} {compiler.warnings.cpp} {compiler.defines.target} {compiler.codegen.dependencies.flags} {compiler.libstm.c.flags}
 compiler.ar.cmd=arm-none-eabi-ar
 compiler.ar.flags=rcs
 compiler.objcopy.cmd=arm-none-eabi-objcopy

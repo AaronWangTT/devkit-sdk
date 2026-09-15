@@ -34,14 +34,14 @@ typedef struct IOTHUB_CLIENT_SAMPLE_INFO_TAG
     int stop_running;
 } IOTHUB_CLIENT_SAMPLE_INFO;
 
-static CLIENT_SAMPLE_INFO user_ctx = { 0 };
+static CLIENT_SAMPLE_INFO user_ctx = {};
 static DPS_AUTH_TYPE g_auth_type = DPS_AUTH_X509_INDIVIDUAL;
 bool is_iothub_from_dps = false;
 static bool g_trace_on = true;
 extern void* __start_riot_core;
 extern void* __stop_riot_core;
 
-DICE_DATA DiceData = { 0 };
+DICE_DATA DiceData = {};
 DICE_CMPND_ID DiceCDI = { DICE_CMPND_TAG , { 0x00 } };
 DICE_UDS DiceUDS = { DICE_UDS_TAG, 0 };
 

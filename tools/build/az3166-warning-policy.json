@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "warningProfile": "all",
+  "inventorySketches": [
+    "examples/board/BoardInit",
+    "examples/cloud/AzureIotHubExample",
+    "examples/cloud/VoiceToTwitter",
+    "examples/peripherals/i2c/SFRRanger_reader",
+    "examples/peripherals/i2c/digital_potentiometer",
+    "examples/peripherals/i2c/master_reader",
+    "examples/peripherals/i2c/master_writer",
+    "examples/peripherals/i2c/slave_receiver",
+    "examples/peripherals/i2c/slave_sender",
+    "examples/peripherals/spi/BarometricPressureSensor",
+    "examples/peripherals/spi/DigitalPotControl",
+    "tests/hardware/UnitTest",
+    "tests/hardware/manual/HttpTest"
+  ],
+  "vendorSnapshots": [
+    {
+      "source": "libraries/Audio/src/nau88c10.c",
+      "component": "ST-MXCHIP audio codec",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "sha256": "66895359b8146aebc9593ce5e73044658c69f9bb837980b044b97a56f307af23"
+    },
+    {
+      "source": "libraries/Audio/src/stm32412g_discovery_audio.c",
+      "component": "ST-MXCHIP discovery audio",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "sha256": "ec54596a0907db229fe4d6b32cbbaa00e8e6076e1afe2681873c12b9aed1959b"
+    },
+    {
+      "source": "libraries/Audio/src/stm32412g_discovery.c",
+      "component": "ST-MXCHIP discovery peripherals",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "sha256": "b5685b25c7eaddad41e05979f0e7ec75c8e8d59a2ecbbb4454596e48c54fa449"
+    }
+  ],
+  "allowances": [
+    {
+      "id": "azure-enum-type-limits",
+      "ownership": "vendor",
+      "sourceGlob": "vendor/azure-iot-sdk-c/deps/azure-macro-utils-c/inc/azure_macro_utils/macro_utils.h",
+      "option": "-Wtype-limits",
+      "component": "azure-macro-utils-c (Azure IoT SDK 1.3.8)",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "Historical enum-to-string macro compares unsigned enum values against zero.",
+      "removalCondition": "Remove when the vendor macro snapshot is replaced or its enum range check is corrected."
+    },
+    {
+      "id": "arduinounit-signed-comparison",
+      "ownership": "test-dependency",
+      "sourceGlob": "ArduinoUnit/src/ArduinoUnitUtility/Compare.h",
+      "option": "-Wsign-compare",
+      "component": "ArduinoUnit",
+      "version": "2.2.0",
+      "rationale": "The pinned test library compares assertion operands with different signedness.",
+      "removalCondition": "Remove when ArduinoUnit is replaced or provides warning-free mixed-type comparisons."
+    },
+    {
+      "id": "arduinounit-string-vla",
+      "ownership": "test-dependency",
+      "sourceGlob": "ArduinoUnit/src/ArduinoUnitUtility/ArduinoUnit.cpp",
+      "option": "-Wvla",
+      "component": "ArduinoUnit",
+      "version": "2.2.0",
+      "rationale": "The pinned test library uses two variable-length buffers for flash-string comparison.",
+      "removalCondition": "Remove when the pinned library replaces its variable-length comparison buffers."
+    },
+    {
+      "id": "binutils-data-alignment",
+      "ownership": "toolchain",
+      "sourceGlob": "toolchain/arm-none-eabi/bin/ld.exe",
+      "messageRegex": "^changing start of section \\.data by 4 bytes$",
+      "component": "arm-none-eabi-gcc",
+      "version": "5_4-2016q3",
+      "rationale": "Pinned binutils 2.26.2 reports the unchanged four-byte data alignment with the historical linker script and vendor archives.",
+      "removalCondition": "Remove after a separately reviewed linker or vendor ABI change eliminates this exact alignment diagnostic."
+    },
+    {
+      "id": "audio-codec-unused-parameters",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/nau88c10.c",
+      "option": "-Wunused-parameter",
+      "component": "ST-MXCHIP audio codec",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "The frozen codec implementation does not consume every generic audio-driver argument.",
+      "removalCondition": "Remove when this content-pinned codec snapshot is maintained or replaced."
+    },
+    {
+      "id": "audio-codec-unused-variables",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/nau88c10.c",
+      "option": "-Wunused-variable",
+      "component": "ST-MXCHIP audio codec",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "The frozen codec initialization retains unused generic device-selection locals.",
+      "removalCondition": "Remove when this content-pinned codec snapshot is maintained or replaced."
+    },
+    {
+      "id": "audio-codec-missing-return",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/nau88c10.c",
+      "option": "-Wreturn-type",
+      "component": "ST-MXCHIP audio codec",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "Historical codec initialization omits its return value; the baseline caller ignores it. Adding a return changes linked firmware and requires separate behavior review.",
+      "removalCondition": "Remove after reviewing codec status propagation and accepting a new firmware baseline."
+    },
+    {
+      "id": "audio-discovery-unused-parameters",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/stm32412g_discovery_audio.c",
+      "option": "-Wunused-parameter",
+      "component": "ST-MXCHIP discovery audio",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "The frozen discovery audio callbacks and board hooks retain generic interface parameters.",
+      "removalCondition": "Remove when the content-pinned board audio snapshot is maintained or replaced."
+    },
+    {
+      "id": "audio-discovery-unused-variable",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/stm32412g_discovery_audio.c",
+      "option": "-Wunused-variable",
+      "component": "ST-MXCHIP discovery audio",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "The frozen output MSP setup retains an unused receive-DMA handle.",
+      "removalCondition": "Remove when the content-pinned board audio snapshot is maintained or replaced."
+    },
+    {
+      "id": "audio-discovery-unused-status",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/stm32412g_discovery_audio.c",
+      "option": "-Wunused-but-set-variable",
+      "component": "ST-MXCHIP discovery audio",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "The frozen transfer wrapper records but does not propagate the HAL status.",
+      "removalCondition": "Remove after a separate audio error-propagation review of this pinned snapshot."
+    },
+    {
+      "id": "audio-discovery-missing-return",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/stm32412g_discovery_audio.c",
+      "option": "-Wreturn-type",
+      "component": "ST-MXCHIP discovery audio",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "The historical stop wrapper omits a return value; preserve the frozen driver pending audio status review.",
+      "removalCondition": "Remove after reviewing and specifying stop-status propagation for this snapshot."
+    },
+    {
+      "id": "audio-peripheral-unused-parameter",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/stm32412g_discovery.c",
+      "option": "-Wunused-parameter",
+      "component": "ST-MXCHIP discovery peripherals",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "The frozen I2C error hook does not consume its address argument.",
+      "removalCondition": "Remove when the content-pinned peripheral snapshot is maintained or replaced."
+    },
+    {
+      "id": "audio-peripheral-unused-variable",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/stm32412g_discovery.c",
+      "option": "-Wunused-variable",
+      "component": "ST-MXCHIP discovery peripherals",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "The frozen peripheral implementation retains an unused external-I2C handle.",
+      "removalCondition": "Remove when the content-pinned peripheral snapshot is maintained or replaced."
+    },
+    {
+      "id": "audio-peripheral-unused-function",
+      "ownership": "vendor",
+      "sourceGlob": "libraries/Audio/src/stm32412g_discovery.c",
+      "option": "-Wunused-function",
+      "component": "ST-MXCHIP discovery peripherals",
+      "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
+      "rationale": "The frozen discovery peripheral snapshot retains its unused I2C readiness helper.",
+      "removalCondition": "Remove when the content-pinned peripheral snapshot is maintained or replaced."
+    }
+  ]
+}

@@ -28,7 +28,7 @@ int _check_iot_ready_for_request();
 // Public methods
 int iot_client_set_connection_string(const char *conn_str)
 {
-    int len = strlen(conn_str);
+    int len __attribute__((unused)) = strlen(conn_str);
     strcpy(temp, conn_str);
 
     char *pch;
@@ -39,7 +39,7 @@ int iot_client_set_connection_string(const char *conn_str)
 
         String keyValuePair(pch);
         int equalPos = keyValuePair.indexOf(EQUAL_CHARACTOR);
-        if (equalPos > 0 && equalPos < keyValuePair.length() - 1)
+        if (equalPos > 0 && static_cast<unsigned int>(equalPos) < keyValuePair.length() - 1)
         {
             String key = keyValuePair.substring(0, equalPos);
             String value = keyValuePair.substring(equalPos + 1);

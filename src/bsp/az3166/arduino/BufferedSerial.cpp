@@ -24,7 +24,7 @@
 #include "mbed.h"
 #include <stdarg.h>
 
-BufferedSerial::BufferedSerial(PinName tx, PinName rx, uint32_t buf_size, uint32_t tx_multiple, const char* name, int sample_rate)
+BufferedSerial::BufferedSerial(PinName tx, PinName rx, uint32_t buf_size, uint32_t tx_multiple, const char* name __attribute__((unused)), int sample_rate)
     : RawSerial(tx, rx, sample_rate) , _rxbuf(buf_size), _txbuf((uint32_t)(tx_multiple*buf_size))
 {
     RawSerial::attach(callback(this, &BufferedSerial::rxIrq), RawSerial::RxIrq);

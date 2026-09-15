@@ -116,12 +116,12 @@ void HttpResponseParser::finish()
     http_parser_execute(parser, settings, NULL, 0);
 }
 
-int HttpResponseParser::on_message_begin(http_parser* parser)
+int HttpResponseParser::on_message_begin(http_parser* parser __attribute__((unused)))
 {
     return 0;
 }
 
-int HttpResponseParser::on_url(http_parser* parser, const char *at, size_t length)
+int HttpResponseParser::on_url(http_parser* parser __attribute__((unused)), const char *at __attribute__((unused)), size_t length __attribute__((unused)))
 {
     return 0;
 }
@@ -132,24 +132,24 @@ int HttpResponseParser::on_status(http_parser* parser, const char *at, size_t le
     return 0;
 }
 
-int HttpResponseParser::on_header_field(http_parser* parser, const char *at, size_t length)
+int HttpResponseParser::on_header_field(http_parser* parser __attribute__((unused)), const char *at, size_t length)
 {
     response->set_header_field(at, length);
     return 0;
 }
 
-int HttpResponseParser::on_header_value(http_parser* parser, const char *at, size_t length)
+int HttpResponseParser::on_header_value(http_parser* parser __attribute__((unused)), const char *at, size_t length)
 {
     response->set_header_value(at, length);
     return 0;
 }
 
-int HttpResponseParser::on_headers_complete(http_parser* parser)
+int HttpResponseParser::on_headers_complete(http_parser* parser __attribute__((unused)))
 {
     return 0;
 }
 
-int HttpResponseParser::on_body(http_parser* parser, const char *at, size_t length)
+int HttpResponseParser::on_body(http_parser* parser __attribute__((unused)), const char *at, size_t length)
 {
     if (body_callback) 
     {
@@ -161,18 +161,18 @@ int HttpResponseParser::on_body(http_parser* parser, const char *at, size_t leng
     return 0;
 }
 
-int HttpResponseParser::on_message_complete(http_parser* parser)
+int HttpResponseParser::on_message_complete(http_parser* parser __attribute__((unused)))
 {
     response->set_message_complete();
     return 0;
 }
 
-int HttpResponseParser::on_chunk_header(http_parser* parser)
+int HttpResponseParser::on_chunk_header(http_parser* parser __attribute__((unused)))
 {
     return 0;
 }
 
-int HttpResponseParser::on_chunk_complete(http_parser* parser)
+int HttpResponseParser::on_chunk_complete(http_parser* parser __attribute__((unused)))
 {
     return 0;
 }
