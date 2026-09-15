@@ -46,6 +46,10 @@ jobs:
         shell: pwsh
         run: ./tests/host/build/BuildConfigurationTest.ps1
 
+      - name: Validate build evidence contracts
+        shell: pwsh
+        run: ./tests/host/build/BuildEvidenceTest.ps1
+
       - name: Validate toolchain installer contracts
         if: runner.os == 'Windows'
         shell: pwsh
@@ -143,7 +147,45 @@ jobs:
           ./tools/test/Test-Az3166Sketches.ps1 `
             -ArduinoCli '${{ steps.build-tools.outputs.arduino_cli }}' `
             -ArduinoDataDirectory '${{ steps.build-tools.outputs.arduino_data }}' `
-            -ArduinoUnitDirectory '${{ steps.build-tools.outputs.arduino_unit }}'
+            -ArduinoUnitDirectory '${{ steps.build-tools.outputs.arduino_unit }}' `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP 'az3166-build-evidence')
+
+      - name: Validate failed-build evidence
+        if: always() && runner.os == 'Windows' && steps.build-tools.outcome == 'success'
+        shell: pwsh
+        run: |
+          ./tests/host/build/BuildEvidenceTest.ps1 `
+            -ArduinoCli '${{ steps.build-tools.outputs.arduino_cli }}' `
+            -ArduinoDataDirectory '${{ steps.build-tools.outputs.arduino_data }}' `
+            -ArduinoUnitDirectory '${{ steps.build-tools.outputs.arduino_unit }}' `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP 'az3166-build-evidence/failure-fixtures')
+
+      - name: Upload complete build evidence
+        if: always() && runner.os == 'Windows'
+        id: build-evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-evidence-${{ matrix.artifact_suffix }}
+          path: ${{ runner.temp }}/az3166-build-evidence
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize sketch build evidence
+        if: always() && runner.os == 'Windows' && steps.build-evidence.outputs.artifact-url != ''
+        shell: pwsh
+        env:
+          BUILD_EVIDENCE_URL: ${{ steps.build-evidence.outputs.artifact-url }}
+        run: |
+          . ./tools/test/Az3166BuildEvidence.ps1
+          Get-Az3166EvidenceSummary `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP 'az3166-build-evidence') `
+            -ArtifactUrl $env:BUILD_EVIDENCE_URL |
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          Get-Az3166EvidenceSummary `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP 'az3166-build-evidence/failure-fixtures') `
+            -ArtifactUrl $env:BUILD_EVIDENCE_URL |
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
 
       - name: Upload verified package
         uses: actions/upload-artifact@v4

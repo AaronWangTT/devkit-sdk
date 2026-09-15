@@ -70,14 +70,20 @@ $tools = .\tools\build\Install-Az3166BuildTools.ps1 `
 .\tools\test\Test-Az3166Sketches.ps1 `
      -ArduinoCli $tools.ArduinoCliPath `
      -ArduinoDataDirectory $tools.ArduinoDataDirectory `
-     -ArduinoUnitDirectory $tools.ArduinoUnitDirectory
+     -ArduinoUnitDirectory $tools.ArduinoUnitDirectory `
+     -OutputDirectory .\artifacts\sketches
 ```
 
 The toolchain root must not exceed 70 characters. Native host-test commands and
 pinned toolchain setup are maintained in the [CI workflow](.github/workflows/core-package-ci.yml).
+Use a fresh sketch output directory for each run. Successful and failed builds
+retain complete evidence; CI uploads it even after failure for 30 days. See
+[persistent build evidence](docs/persistent-build-evidence.md) for artifact names,
+failure-retention tests, and findings deferred beyond PR 3.
 Run the shared native tests using PowerShell 7 and GCC with sanitizer support:
 
 ```powershell
+pwsh -File ./tests/host/build/BuildEvidenceTest.ps1
 pwsh -File ./tests/host/package/PackageLayoutTest.ps1
 pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Sanitize
 ```
