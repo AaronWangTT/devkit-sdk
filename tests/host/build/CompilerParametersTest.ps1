@@ -81,6 +81,7 @@ try {
     $compiler = Join-Path $fixtureRoot 'arm-none-eabi-gcc'
     $lines = @(
         "$compiler -c input.c -o output.o"
+        "$compiler -c other.c -o other.o"
         "$fixtureRoot/arm-none-eabi-ar rcs core.a first.o second.o"
         "$compiler first.o core.a -o firmware.elf"
         "$fixtureRoot/arm-none-eabi-objcopy -O binary firmware.elf firmware.bin"
@@ -93,6 +94,13 @@ try {
         '<arduino-preprocess>/sketch_merged.cpp') 'The CLI-only preprocessing path was not canonicalized.'
     $archiver = @($captured | Where-Object { $_.kind -ceq 'archiver' })[0]
     Assert-CompilerParameters (($archiver.arguments[-2..-1] -join ',') -ceq 'first.o,second.o') 'Archiver object order was changed.'
+    $parallelReordered = @($lines[1], $lines[0]) + $lines[2..($lines.Count - 1)]
+    $parallelReordered | Set-Content -LiteralPath $logPath -Encoding utf8
+    $canonical = ConvertTo-Json -InputObject $captured -Depth 5 -Compress
+    Assert-CompilerParameters ($canonical -ceq (ConvertTo-Json -InputObject (Get-Az3166BuildCommands $logPath) -Depth 5 -Compress)) 'Independent compiler reordering changed the comparison.'
+    $sequentialReordered = @($lines[0], $lines[1], $lines[2], $lines[4], $lines[3], $lines[5], $lines[6])
+    $sequentialReordered | Set-Content -LiteralPath $logPath -Encoding utf8
+    Assert-CompilerParameters ($canonical -cne (ConvertTo-Json -InputObject (Get-Az3166BuildCommands $logPath) -Depth 5 -Compress)) 'Linker/objcopy phase reordering was hidden.'
     ($lines | Where-Object { $_ -notmatch 'arm-none-eabi-objcopy' }) | Set-Content -LiteralPath $logPath -Encoding utf8
     $rejected = $false
     try { $null = Get-Az3166BuildCommands -LogPath $logPath }
@@ -112,26 +120,39 @@ try {
         }
         artifacts = @(@{ name = 'sketch.bin' }, @{ name = 'sketch.elf' }, @{ name = 'sketch.map' })
     }
-    $artifactNames = @('commands.json', 'database-commands.json', 'size.txt', 'size.json', 'elf-sections-program-headers.txt', 'sketch.bin', 'sketch.elf', 'sketch.map')
+    $artifactNames = @('commands.json', 'compile_commands.build.json', 'database-commands.json', 'size.txt', 'size.json', 'elf-sections-program-headers.txt', 'sketch.bin', 'sketch.elf', 'sketch.map')
+    $databaseFixture = '[{"directory":"fixed","file":"first.cpp","arguments":["g++","first.cpp"],"output":"first.o"},{"directory":"fixed","file":"second.cpp","arguments":["g++","second.cpp"],"output":"second.o"}]'
     foreach ($directory in @($beforePath, $afterPath)) {
         New-Item -ItemType Directory -Path $directory | Out-Null
         $context | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $directory 'build-context.json') -Encoding utf8
-        foreach ($name in $artifactNames) { Set-Content -LiteralPath (Join-Path $directory $name) -Value "unchanged $name" -Encoding utf8 }
+        foreach ($name in $artifactNames) {
+            $value = if ($name -in 'compile_commands.build.json', 'database-commands.json') { $databaseFixture } else { "unchanged $name" }
+            Set-Content -LiteralPath (Join-Path $directory $name) -Value $value -Encoding utf8
+        }
     }
     Assert-CompilerParameters (Compare-Az3166CompilerEvidence -Before $beforePath -After $afterPath).passed 'Identical fixture evidence was rejected.'
     foreach ($name in $artifactNames) {
         Set-Content -LiteralPath (Join-Path $afterPath $name) -Value 'unexpected change' -Encoding utf8
         $comparison = Compare-Az3166CompilerEvidence -Before $beforePath -After $afterPath
         Assert-CompilerParameters (-not $comparison.passed -and @($comparison.files | Where-Object { -not $_.equal }).Count -eq 1) "Changed evidence was not isolated: $name"
-        Set-Content -LiteralPath (Join-Path $afterPath $name) -Value "unchanged $name" -Encoding utf8
+        $value = if ($name -in 'compile_commands.build.json', 'database-commands.json') { $databaseFixture } else { "unchanged $name" }
+        Set-Content -LiteralPath (Join-Path $afterPath $name) -Value $value -Encoding utf8
     }
+    $entries = $databaseFixture | ConvertFrom-Json
+    ConvertTo-Json -InputObject @($entries[1], $entries[0]) -Depth 5 | Set-Content -LiteralPath (Join-Path $afterPath 'compile_commands.build.json') -Encoding utf8
+    $comparison = Compare-Az3166CompilerEvidence -Before $beforePath -After $afterPath
+    $rawDatabase = @($comparison.files | Where-Object { $_.file -ceq 'compile_commands.build.json' })[0]
+    Assert-CompilerParameters ($comparison.passed -and -not $rawDatabase.byteEqual) 'Parallel database entry order was not explicitly reported.'
+    $entries[0].output = 'different.o'
+    ConvertTo-Json -InputObject $entries -Depth 5 | Set-Content -LiteralPath (Join-Path $afterPath 'compile_commands.build.json') -Encoding utf8
+    Assert-CompilerParameters (-not (Compare-Az3166CompilerEvidence -Before $beforePath -After $afterPath).passed) 'A raw database field outside the argument projection was dropped.'
     $context.environment.lockSha256 = 'different-lock'
     $context | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $afterPath 'build-context.json') -Encoding utf8
     $rejected = $false
     try { $null = Compare-Az3166CompilerEvidence -Before $beforePath -After $afterPath }
     catch { $rejected = $true }
     Assert-CompilerParameters $rejected 'Different comparison toolchain inputs were accepted.'
-    Write-Host 'PASS injected command, binary, ELF, map, size, and toolchain-input differences fail equivalence'
+    Write-Host 'PASS sequential command order, complete raw database fields, binary/ELF/map/size changes, and toolchain identities are checked'
 }
 finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue

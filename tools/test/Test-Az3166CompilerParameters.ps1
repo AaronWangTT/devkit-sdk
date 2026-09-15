@@ -67,9 +67,12 @@ try {
     $result = Invoke-Az3166EvidenceProcess -FilePath $git -Arguments @('-C', $checkout, 'checkout', '--quiet', '--detach', $sourceRevision) `
         -LogPath (Join-Path $root 'harness.log')
     if ($result.ExitCode -ne 0) { throw 'Could not check out the comparison source revision.' }
-    foreach ($driverFile in @('Test-Az3166Sketches.ps1', 'Az3166BuildEvidence.ps1')) {
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $driverFile) -Destination (Join-Path $checkout "tools/test/$driverFile")
-    }
+    $driverIdentities = @(
+        foreach ($driverFile in @('Test-Az3166Sketches.ps1', 'Az3166BuildEvidence.ps1')) {
+            $path = Join-Path $checkout "tools/test/$driverFile"
+            [ordered]@{ path = "tools/test/$driverFile"; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+        }
+    )
     [Environment]::CurrentDirectory = $checkout
     $captures = @{}
     foreach ($phase in @('before', 'after')) {
@@ -116,7 +119,8 @@ try {
         fixedCheckout = $checkout
         fixedBuildRoot = $buildRoot
         fixedStagingRoot = $fixedStage
-        canonicalization = @('CLI quoted-string escaping', 'preprocessor -o <temporary directory>/<digits>/sketch_merged.cpp only', 'parallel command record order; argument order unchanged')
+        driverScripts = $driverIdentities
+        canonicalization = @('CLI quoted-string escaping', 'preprocessor -o <temporary directory>/<digits>/sketch_merged.cpp only', 'contiguous parallel compiler/assembler groups only; sequential commands and argument order unchanged', 'complete database compiler records compared independently of parallel entry order; raw files and hashes retained')
         commandCaptures = $captures
         comparisons = $comparisons
         passed = @($comparisons | Where-Object { -not $_.passed }).Count -eq 0

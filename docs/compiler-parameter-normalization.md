@@ -60,6 +60,8 @@ private staging path, and build path. Only the two parameter files differ: the
 first pass uses the pinned baseline versions, the second uses the working-tree
 versions. The same evidence driver is used in both passes. No working-checkout
 files are overwritten.
+Both driver scripts execute directly from the isolated source revision, never
+from uncommitted copies. Their SHA-256 identities are recorded in the report.
 
 Each build pass moves its complete evidence tree to `before` or `after` before
 the next pass starts. The fixed `build` path is therefore empty for the second
@@ -72,7 +74,7 @@ Each sketch retains the PR 3 evidence plus:
 
 - `build.stdout.log` and `build.stderr.log`: original compile output channels;
 - `commands.json`: actual verbose tool argument arrays;
-- `database-commands.json`: the original compilation database in source order;
+- `database-commands.json`: database arguments in original entry order;
 - `elf-sections-program-headers.txt`: locked `readelf -W -S -l` output;
 - `inspection.log`: the exact ELF-inspection invocation and output.
 
@@ -82,16 +84,24 @@ It checks commands, database arguments, structured sizes, ELF section/program
 headers, binary SHA-256, and byte equality of the entire ELF and map. Complete
 map equality also covers symbols, memory regions, and linked libraries; complete
 ELF equality is stronger than section-size/program-header equality alone.
-Raw size reports also match, and each pass independently requires its verbose
+Every full entry in the raw `compile_commands.build.json` and the raw size reports
+also match, and each pass independently requires its verbose
 compiler/assembler arguments to match the original compilation database before
 the two passes are compared. Failed builds and differing firmware artifact sets
 are rejected.
 
 ## Canonicalization
 
-Argument order inside every invocation is immutable. Whole command records are
-sorted only because Arduino compiles independent sources in parallel; duplicate
-records are retained. CLI-rendered quoted strings are decoded using a structured
+Argument order inside every invocation is immutable. Only contiguous runs of
+compiler/assembler commands are sorted because Arduino compiles independent
+sources in parallel; duplicate records are retained. Every sequential
+preprocessor, archiver, linker, objcopy, and size command keeps its position.
+The compilation database retains its original entry order and all raw fields.
+Database comparisons use full entry records, ignoring only parallel compiler
+entry order; the report retains raw hashes and a separate `byteEqual` result
+so byte differences are visible rather than claimed equal. Unknown database
+fields and duplicate entries are not dropped.
+CLI-rendered quoted strings are decoded using a structured
 JSON string parser. The only rewritten argument value is a preprocessing `-o`
 path matching the observed CLI-only `<OS temp>/<digits>/sketch_merged.cpp` form.
 It becomes `<arduino-preprocess>/sketch_merged.cpp`. No source/include/object,
@@ -145,3 +155,7 @@ archive and reports each sketch's result. The isolated clone is not uploaded.
    that future compiler or warning changes are forbidden. PR 5 must deliberately
    advance the expected warning-command baseline while retaining PR 4 evidence;
    unexplained differences must not be hidden by broadening canonicalization.
+6. The original compilation database is populated in parallel compiler order.
+   Even zero-change passes can reorder entries. Both raw files are retained and
+   hashed; complete entry contents are compared independently of their order.
+   Sequential preprocessor/archive/link/objcopy/size records are not reordered.

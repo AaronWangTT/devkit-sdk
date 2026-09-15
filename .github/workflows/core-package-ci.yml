@@ -176,7 +176,7 @@ jobs:
           retention-days: 30
 
       - name: Verify compiler parameter equivalence
-        if: runner.os == 'Windows'
+        if: always() && runner.os == 'Windows' && steps.build-tools.outcome == 'success'
         shell: pwsh
         run: |
           ./tools/test/Test-Az3166CompilerParameters.ps1 `

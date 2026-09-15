@@ -98,7 +98,24 @@ function Get-Az3166BuildCommands {
             throw "No $required commands were captured from $LogPath"
         }
     }
-    return ,@($commands | Sort-Object { ConvertTo-Json -InputObject $_ -Depth 4 -Compress } -CaseSensitive)
+    $ordered = [Collections.Generic.List[object]]::new()
+    $index = 0
+    while ($index -lt $commands.Count) {
+        if ($commands[$index].kind -notin 'compiler', 'assembler') {
+            $ordered.Add($commands[$index])
+            $index++
+            continue
+        }
+        $parallelGroup = [Collections.Generic.List[object]]::new()
+        do {
+            $parallelGroup.Add($commands[$index])
+            $index++
+        } while ($index -lt $commands.Count -and $commands[$index].kind -in 'compiler', 'assembler')
+        foreach ($command in ($parallelGroup | Sort-Object { ConvertTo-Json -InputObject $_ -Depth 4 -Compress } -CaseSensitive)) {
+            $ordered.Add($command)
+        }
+    }
+    return ,@($ordered)
 }
 
 function Export-Az3166CompilerEvidence {
@@ -112,7 +129,7 @@ function Export-Az3166CompilerEvidence {
     $database = Get-Content -Raw -LiteralPath (Join-Path $Directory 'compile_commands.build.json') | ConvertFrom-Json
     $databaseCommands = @($database | ForEach-Object {
         [ordered]@{ directory = $_.directory; file = $_.file; arguments = @($_.arguments) }
-    } | Sort-Object { $_.file } -CaseSensitive)
+    })
     $compilerTokens = @($commands | Where-Object { $_.kind -in 'compiler', 'assembler' } |
         ForEach-Object { ConvertTo-Json -InputObject $_.arguments -Compress } | Sort-Object -CaseSensitive)
     $databaseTokens = @($databaseCommands | ForEach-Object { ConvertTo-Json -InputObject $_.arguments -Compress } | Sort-Object -CaseSensitive)
@@ -150,7 +167,7 @@ function Compare-Az3166CompilerEvidence {
     if ($beforeContext.buildDirectory -cne $afterContext.buildDirectory) { throw 'Comparison build paths differ.' }
     if ((ConvertTo-Json -InputObject $beforeContext.environment.tools -Depth 5 -Compress) -cne
         (ConvertTo-Json -InputObject $afterContext.environment.tools -Depth 5 -Compress)) { throw 'Comparison tool identities differ.' }
-    $files = @('commands.json', 'database-commands.json', 'size.txt', 'size.json', 'elf-sections-program-headers.txt') +
+    $files = @('commands.json', 'compile_commands.build.json', 'database-commands.json', 'size.txt', 'size.json', 'elf-sections-program-headers.txt') +
         @($beforeContext.artifacts | ForEach-Object { $_.name })
     $results = @(
         foreach ($name in $files) {
@@ -159,7 +176,27 @@ function Compare-Az3166CompilerEvidence {
             if ($beforeFile.Length -eq 0 -or $afterFile.Length -eq 0) { throw "Empty comparison artifact: $name" }
             $beforeHash = (Get-FileHash -LiteralPath $beforeFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             $afterHash = (Get-FileHash -LiteralPath $afterFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            [ordered]@{ file = $name; equal = $beforeHash -ceq $afterHash; beforeSha256 = $beforeHash; afterSha256 = $afterHash }
+            $byteEqual = $beforeHash -ceq $afterHash
+            $equal = $byteEqual
+            $method = 'byte equality'
+            if ($name -in 'compile_commands.build.json', 'database-commands.json') {
+                $method = 'complete compiler records; parallel entry order ignored'
+                try {
+                    $records = @(
+                        foreach ($file in @($beforeFile, $afterFile)) {
+                            $database = Get-Content -Raw -LiteralPath $file.FullName | ConvertFrom-Json -NoEnumerate
+                            if ($database -isnot [array] -or $database.Count -eq 0) { throw 'Expected a nonempty compilation database array.' }
+                            $entries = @($database | ForEach-Object { ConvertTo-Json -InputObject $_ -Depth 100 -Compress } | Sort-Object -CaseSensitive)
+                            ConvertTo-Json -InputObject $entries -Compress
+                        }
+                    )
+                    $equal = $records[0] -ceq $records[1]
+                }
+                catch {
+                    $equal = $false
+                }
+            }
+            [ordered]@{ file = $name; equal = $equal; byteEqual = $byteEqual; method = $method; beforeSha256 = $beforeHash; afterSha256 = $afterHash }
         }
     )
     return [ordered]@{
