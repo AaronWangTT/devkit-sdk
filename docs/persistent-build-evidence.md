@@ -91,7 +91,8 @@ pwsh -File ./tests/host/build/BuildEvidenceTest.ps1
 ```
 
 On Windows, also exercise the real locked tools with an early compiler error,
-an undefined-symbol link error, and a later successful sketch:
+an undefined-symbol link error, an injected evidence-preparation error, and a
+later successful sketch:
 
 ```powershell
 .\tests\host\build\BuildEvidenceTest.ps1 `
@@ -102,13 +103,17 @@ an undefined-symbol link error, and a later successful sketch:
 ```
 
 The expected failures make the driver fail; the harness succeeds only after
-checking both diagnostics, native exit codes, retained generated source and
+checking compiler/linker diagnostics, native exit codes, retained generated source and
 partial map/objects, the later successful build's complete evidence, artifact
 hashes, both compilation databases, selection by an `.ino` file path, and
 rejection of output reuse without modifying prior evidence. File selections
 retain the original driver behavior: they select their parent sketch directory.
 The pinned CLI still requires a main `.ino` or `.pde` matching that directory's
 name; a differently named file without that main file is not a valid sketch.
+Preparation failures are finalized with a failed context and diagnostic log
+where the output remains writable, and appear in the summary despite never
+starting the compiler. Ubuntu contracts also verify that case-only distinct
+sketch directories are rejected, not silently deduplicated during discovery.
 
 ## Validation Record
 

@@ -198,6 +198,22 @@ Total                 492
     }
     Write-Host 'PASS root evidence filenames cannot collide with sketch names'
 
+    if (-not $IsWindows) {
+        $caseSketches = @(@('CaseSketch', 'casesketch') | ForEach-Object { Join-Path $fixtureRoot $_ })
+        foreach ($directory in $caseSketches) { New-Item -ItemType Directory -Path $directory | Out-Null }
+        $unusedOutput = Join-Path $fixtureRoot 'case-collision-output'
+        $failure = $null
+        try {
+            & $driver -ArduinoCli (Join-Path $PSHOME 'pwsh') `
+                -ArduinoDataDirectory $fixtureRoot -ArduinoUnitDirectory $preflightUnit `
+                -OutputDirectory $unusedOutput -Sketch $caseSketches
+        }
+        catch { $failure = $_.Exception.Message }
+        Assert-EvidenceTest ($failure -like 'Sketch names must be unique safe directory names and not reserved for evidence:*') 'Case-only sketch selections were silently deduplicated.'
+        Assert-EvidenceTest (-not (Test-Path -LiteralPath $unusedOutput)) 'Case-collision rejection created output.'
+        Write-Host 'PASS distinct case-only sketch paths are rejected rather than silently deduplicated'
+    }
+
     if ($IsWindows) {
         $longOutput = Join-Path ([IO.Path]::GetPathRoot($fixtureRoot)) "az3166-length-$([guid]::NewGuid().ToString('N'))"
         $longOutput += 'p' * (141 - $longOutput.Length - '\Preflight\build'.Length)
@@ -219,6 +235,7 @@ Total                 492
         $sources = [ordered]@{
             ACompileFailure = "#error AZ3166_EXPECTED_COMPILE_FAILURE`nvoid setup() {}`nvoid loop() {}`n"
             BLinkFailure = "extern void AZ3166_EXPECTED_LINK_FAILURE();`nvoid setup() { AZ3166_EXPECTED_LINK_FAILURE(); }`nvoid loop() {}`n"
+            CPreparationFailure = "void setup() {}`nvoid loop() {}`n"
             ZValidEvidence = "void setup() {}`nvoid loop() {}`n"
         }
         $sketches = @(
@@ -238,12 +255,28 @@ Total                 492
             Sketch = $sketches
         }
         $failure = $null
-        try { & $driver @arguments }
+        try {
+            & {
+                function Copy-Item {
+                    [CmdletBinding()]
+                    param([string]$LiteralPath, [string]$Destination, [switch]$Recurse)
+
+                    if ((Split-Path -Leaf $Destination) -eq 'compiler-versions.txt' -and
+                        (Split-Path -Leaf (Split-Path -Parent $Destination)) -eq 'CPreparationFailure') {
+                        throw 'AZ3166_EXPECTED_PREPARATION_FAILURE'
+                    }
+                    Microsoft.PowerShell.Management\Copy-Item @PSBoundParameters
+                }
+                & $driver @arguments
+            }
+        }
         catch { $failure = $_.Exception.Message }
-        Assert-EvidenceTest ($failure -like '2 Arduino test sketch build(s) failed:*') "Expected aggregate failure of two sketches, received: $failure"
+        Assert-EvidenceTest ($failure -like '3 Arduino test sketch build(s) failed:*') "Expected aggregate failure of three sketches, received: $failure"
         foreach ($name in $sources.Keys) {
             $directory = Join-Path $OutputDirectory $name
-            foreach ($file in @('build.log', 'build-context.json', 'compiler-versions.txt')) {
+            $required = @('build.log', 'build-context.json')
+            if ($name -ne 'CPreparationFailure') { $required += 'compiler-versions.txt' }
+            foreach ($file in $required) {
                 Assert-EvidenceTest ((Get-Item -LiteralPath (Join-Path $directory $file)).Length -gt 0) "Missing retained $name/$file"
             }
             $context = Get-Content -Raw -LiteralPath (Join-Path $directory 'build-context.json') | ConvertFrom-Json
@@ -252,6 +285,14 @@ Total                 492
             Assert-EvidenceTest ($context.compilationDatabase.arguments -contains '--only-compilation-database') 'The driver did not explicitly request a compilation database.'
             foreach ($property in @('os', 'architecture', 'powershell', 'tools', 'coreVersion', 'fqbn', 'lockSha256', 'revision', 'dirtyWorktree')) {
                 Assert-EvidenceTest ($property -in @($context.environment.PSObject.Properties.Name)) "Missing context identity: $property"
+            }
+            if ($name -eq 'CPreparationFailure') {
+                Assert-EvidenceTest ($context.status -eq 'failed' -and $null -eq $context.compile.exitCode -and
+                    $logContent.Contains('AZ3166_EXPECTED_PREPARATION_FAILURE') -and
+                    ($context.errors -join ' ').Contains('AZ3166_EXPECTED_PREPARATION_FAILURE')) 'Evidence preparation failure was not retained with an honest unstarted compile status.'
+                $summary = Get-Content -Raw -LiteralPath (Join-Path $OutputDirectory 'summary.md')
+                Assert-EvidenceTest ($summary.Contains('| CPreparationFailure | failed |') -and $summary.Contains('CPreparationFailure/build.log')) 'Preparation failure was omitted from the retained summary.'
+                continue
             }
             if ($name -ne 'ZValidEvidence') {
                 $diagnostic = if ($name -eq 'ACompileFailure') { 'AZ3166_EXPECTED_COMPILE_FAILURE' } else { 'AZ3166_EXPECTED_LINK_FAILURE' }
@@ -305,7 +346,7 @@ Total                 492
             -Arguments @('--config-file', $layoutConfig, 'compile', '--fqbn', $fqbn, '--only-compilation-database', $invalidLayout) `
             -LogPath (Join-Path $OutputDirectory 'invalid-sketch-layout.log') -CaptureOutput
         Assert-EvidenceTest ($invalidResult.ExitCode -ne 0 -and $invalidResult.Output.Contains('main file missing from sketch')) 'Pinned CLI unexpectedly accepted a sketch without its matching main file.'
-        Write-Host 'PASS real compiler/linker failures, complete diagnostics, partial artifacts, continued builds, native statuses, identities, space-containing paths, and stale-evidence rejection'
+        Write-Host 'PASS compiler/linker and evidence-preparation failures, complete diagnostics, partial artifacts, continued builds, native statuses, identities, space-containing paths, and stale-evidence rejection'
     }
 }
 finally {

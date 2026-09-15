@@ -61,7 +61,7 @@ if ($Sketch) {
         else {
             Split-Path -Parent $resolved.Path
         }
-    } | Sort-Object -Unique)
+    } | Sort-Object -Unique -CaseSensitive)
 }
 else {
     $sketchDirectories = @(Get-ChildItem -LiteralPath $sketchRoots -Recurse -File |
@@ -70,7 +70,7 @@ else {
             $_.BaseName -eq $_.Directory.Name
         } |
         ForEach-Object { $_.Directory.FullName } |
-        Sort-Object -Unique)
+        Sort-Object -Unique -CaseSensitive)
 }
 
 if ($sketchDirectories.Count -eq 0) {
@@ -213,7 +213,15 @@ try {
             $context | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $contextPath -Encoding utf8
         }
         catch {
-            Write-Host "Could not prepare evidence for ${relativePath}: $($_.Exception.Message)"
+            $issues.Add("Could not prepare evidence for ${relativePath}: $($_.Exception.Message)")
+            Write-Host $issues[-1]
+            try {
+                New-Item -ItemType Directory -Path $evidencePath -Force | Out-Null
+                Complete-Az3166BuildEvidence -Context $context -Issues $issues -ContextPath $contextPath -LogPath $logPath
+            }
+            catch {
+                Write-Host "Could not retain preparation failure at ${evidencePath}: $($_.Exception.Message)"
+            }
             $failures.Add($relativePath)
             continue
         }
