@@ -150,6 +150,13 @@ Total                 492
     Assert-EvidenceTest ($summary.Contains('[summary/Failed/build.log](https://example.test/artifact)')) 'Nested evidence labels are not relative to the uploaded archive root.'
     $summary = (Get-Az3166EvidenceSummary -OutputDirectory (Join-Path $fixtureRoot 'not-created')) -join "`n"
     Assert-EvidenceTest ($summary.Contains('No sketch evidence was produced.')) 'An interrupted setup could not be summarized.'
+    $hiddenPath = Join-Path $summaryRoot '.HiddenSketch'
+    $hiddenDirectory = New-Item -ItemType Directory -Path $hiddenPath
+    if ($IsWindows) { $hiddenDirectory.Attributes = $hiddenDirectory.Attributes -bor [IO.FileAttributes]::Hidden }
+    @{ status = 'failed'; artifacts = @() } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $hiddenPath 'build-context.json') -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $hiddenPath 'build.log') -Value 'retained hidden-sketch error' -Encoding utf8
+    $summary = (Get-Az3166EvidenceSummary -OutputDirectory $summaryRoot) -join "`n"
+    Assert-EvidenceTest ($summary.Contains('[.HiddenSketch/build.log](.HiddenSketch/build.log)')) 'Hidden sketch evidence was omitted from the summary.'
     Write-Host 'PASS failed builds without firmware retain working summary links'
 
     $workflow = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml')

@@ -201,7 +201,7 @@ function Get-Az3166EvidenceSummary {
     }
     '| Sketch | Status | Log | Sizes | Firmware |'
     '| --- | --- | --- | --- | --- |'
-    foreach ($directory in (Get-ChildItem -LiteralPath $OutputDirectory -Directory | Sort-Object Name)) {
+    foreach ($directory in (Get-ChildItem -LiteralPath $OutputDirectory -Directory -Force | Sort-Object Name)) {
         $contextPath = Join-Path $directory.FullName 'build-context.json'
         if (-not (Test-Path -LiteralPath $contextPath -PathType Leaf)) { continue }
         $context = Get-Content -Raw -LiteralPath $contextPath | ConvertFrom-Json
