@@ -177,7 +177,10 @@ $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubOutput')) 'Core package CI does not export the shared build lock.'
 Assert-BuildConfigurationTest ($workflow.Contains('./tests/host/build/BuildConfigurationTest.ps1')) 'Core package CI does not run the build-configuration tests.'
 Assert-BuildConfigurationTest ($workflow.Contains('./tests/host/build/ToolchainInstallerTest.ps1')) 'Core package CI does not run the toolchain-installer tests.'
-Assert-BuildConfigurationTest ($workflow.Contains('Verify maximum supported toolchain root')) 'Core package CI does not exercise a full boundary installation.'
+Assert-BuildConfigurationTest `
+    ([regex]::Matches($workflow, [regex]::Escape('./tests/host/build/ToolchainInstallerTest.ps1')).Count -eq 1) `
+    'Core package CI must not repeat the toolchain-installer tests with a full boundary installation.'
+Assert-BuildConfigurationTest (-not $workflow.Contains('./tools/test/Test-Az3166CompilerParameters.ps1')) 'Core package CI must not repeat all target builds for compiler equivalence.'
 Assert-BuildConfigurationTest ($workflow.Contains('./tools/build/Install-Az3166BuildTools.ps1')) 'Core package CI does not invoke the shared toolchain installer.'
 Assert-BuildConfigurationTest ($workflow.Contains('-VerifyOnly')) 'Core package CI does not verify the installed toolchain.'
 Assert-BuildConfigurationTest ($workflow.Contains('-Offline')) 'Core package CI does not exercise an offline second setup.'
