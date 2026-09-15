@@ -42,7 +42,7 @@ function Get-Az3166UnambiguousPath {
         if ($component -in @('', '.', '..')) {
             continue
         }
-        if ($component -match '[. ]\z|~' -or
+        if ($component -match '[. ]\z|[~\[\]]' -or
             $component.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0 -or
             $component -match '\A(CON|PRN|AUX|NUL|COM[1-9\u00b9\u00b2\u00b3]|LPT[1-9\u00b9\u00b2\u00b3])(\.|\z)') {
             throw "Ambiguous Windows path is not supported: $Path"
@@ -215,7 +215,9 @@ function Get-Az3166ManagedState {
         $manifest.schemaVersion -ne 1 -or
         $manifest.installer -cne $installerId -or
         $manifest.root -isnot [string] -or
-        -not $manifest.root.Equals($Paths.Root, [StringComparison]::OrdinalIgnoreCase)
+        -not $manifest.root.Equals($Paths.Root, [StringComparison]::OrdinalIgnoreCase) -or
+        ('pendingBackupId' -in $properties -and
+            ($manifest.pendingBackupId -isnot [string] -or $manifest.pendingBackupId -cnotmatch '\A[0-9a-f]{32}\z'))
     ) {
         return [pscustomobject]@{ Name = 'Foreign'; Manifest = $manifest }
     }
@@ -336,10 +338,78 @@ function Get-Az3166InstallationProblems {
     return @($problems)
 }
 
+function Get-Az3166PendingCleanupPath {
+    param([object]$Paths, [object]$Manifest)
+
+    if ('pendingBackupId' -notin @($Manifest.PSObject.Properties.Name)) {
+        return $null
+    }
+    $pendingPath = Join-Path (Split-Path -Path $Paths.Root -Parent) ".az3166-replaced-$($Manifest.pendingBackupId)"
+    $pendingIdentity = Get-Az3166LocalPathIdentity -Path $pendingPath
+    $installationIdentity = Get-Az3166LocalPathIdentity -Path $Paths.Root
+    if ($pendingIdentity.Equals($installationIdentity, [StringComparison]::OrdinalIgnoreCase) -or
+        (Test-Az3166PathContains -Parent $pendingIdentity -Child $installationIdentity) -or
+        (Test-Az3166PathContains -Parent $installationIdentity -Child $pendingIdentity)) {
+        throw "Pending backup overlaps the installation root: $pendingPath"
+    }
+    if ($pendingIdentity.Equals($downloadCacheIdentity, [StringComparison]::OrdinalIgnoreCase) -or
+        (Test-Az3166PathContains -Parent $pendingIdentity -Child $downloadCacheIdentity) -or
+        (Test-Az3166PathContains -Parent $downloadCacheIdentity -Child $pendingIdentity)) {
+        throw "Pending backup overlaps the download cache: $pendingPath"
+    }
+    return $pendingPath
+}
+
+function Remove-Az3166PendingBackup {
+    param([object]$Paths, [object]$Manifest)
+
+    $pendingPath = Get-Az3166PendingCleanupPath -Paths $Paths -Manifest $Manifest
+    if (-not $pendingPath) {
+        return $false
+    }
+    Assert-Az3166NoReparsePoint -Path $pendingPath -Recurse
+    if ((Test-Path -LiteralPath $pendingPath) -and -not (Test-Path -LiteralPath $pendingPath -PathType Container)) {
+        throw "Pending backup is not a directory: $pendingPath"
+    }
+    $backupManifestPath = Join-Path $pendingPath $manifestName
+    if (Test-Path -LiteralPath $backupManifestPath) {
+        $backupState = Get-Az3166ManagedState -Paths ([pscustomobject]@{ Root = $Paths.Root; ManifestPath = $backupManifestPath })
+        if ($backupState.Name -ne 'Managed') {
+            throw "Refusing to clean a backup not owned by this installation: $pendingPath"
+        }
+    }
+
+    $journalPath = $null
+    $changed = $false
+    try {
+        if (Test-Path -LiteralPath $pendingPath -PathType Container) {
+            $changed = $true
+            Remove-Item -LiteralPath $pendingPath -Recurse -Force
+        }
+        $updatedManifest = $Manifest.PSObject.Copy()
+        $updatedManifest.PSObject.Properties.Remove('pendingBackupId')
+        $journalPath = "$($Paths.ManifestPath).$([guid]::NewGuid().ToString('N')).tmp"
+        $updatedManifest | ConvertTo-Json | Set-Content -LiteralPath $journalPath -Encoding utf8
+        [IO.File]::Move($journalPath, $Paths.ManifestPath, $true)
+        $Manifest.PSObject.Properties.Remove('pendingBackupId')
+        return $true
+    }
+    catch {
+        Write-Warning "Installation is valid; backup cleanup is pending at ${pendingPath}. Run setup again to retry: $($_.Exception.Message)"
+        return $changed
+    }
+    finally {
+        if ($journalPath) {
+            Remove-Item -LiteralPath $journalPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function New-Az3166InstallerResult {
     param(
         [object]$Paths,
-        [bool]$Changed
+        [bool]$Changed,
+        [object]$Manifest
     )
 
     return [pscustomobject]@{
@@ -356,6 +426,7 @@ function New-Az3166InstallerResult {
         TargetHeaderPath = $Paths.TargetHeaderPath
         ArduinoUnitDirectory = $Paths.ArduinoUnitDirectory
         LockSha256 = $lockHash
+        PendingCleanupPath = Get-Az3166PendingCleanupPath -Paths $Paths -Manifest $Manifest
     }
 }
 
@@ -367,8 +438,19 @@ if ($state.Name -eq 'Foreign') {
 
 if ($state.Name -eq 'Managed') {
     $problems = @(Get-Az3166InstallationProblems -Paths $paths -Manifest $state.Manifest)
+    $cleanupChanged = $false
+    $pendingCleanupPath = Get-Az3166PendingCleanupPath -Paths $paths -Manifest $state.Manifest
+    if ($pendingCleanupPath -and -not $VerifyOnly) {
+        if ($problems.Count -gt 0) {
+            throw "Installation is invalid with a retained backup at ${pendingCleanupPath}; recover or remove that backup before repairing this root."
+        }
+        $cleanupChanged = Remove-Az3166PendingBackup -Paths $paths -Manifest $state.Manifest
+        if ($Clean -and (Get-Az3166PendingCleanupPath -Paths $paths -Manifest $state.Manifest)) {
+            throw "Backup cleanup must finish before another clean replacement: $pendingCleanupPath"
+        }
+    }
     if ($problems.Count -eq 0 -and -not $Clean) {
-        return (New-Az3166InstallerResult -Paths $paths -Changed $false)
+        return (New-Az3166InstallerResult -Paths $paths -Changed $cleanupChanged -Manifest $state.Manifest)
     }
     if ($VerifyOnly) {
         throw "AZ3166 build tools are invalid:`n - $($problems -join "`n - ")"
@@ -580,6 +662,8 @@ try {
         if ($currentState.Name -ne 'Managed') {
             throw "Refusing to replace an installation root not owned by this installer: $rootPath"
         }
+        $manifest['pendingBackupId'] = $operationId
+        $manifest | ConvertTo-Json | Set-Content -LiteralPath $candidatePaths.ManifestPath -Encoding utf8
         Move-Item -LiteralPath $rootPath -Destination $backupRoot
     }
     try {
@@ -614,9 +698,8 @@ try {
         throw
     }
 
-    if ($hadPreviousRoot -and (Test-Path -LiteralPath $backupRoot -PathType Container)) {
-        Assert-Az3166NoReparsePoint -Path $backupRoot -Recurse
-        Remove-Item -LiteralPath $backupRoot -Recurse -Force
+    if ($hadPreviousRoot) {
+        $null = Remove-Az3166PendingBackup -Paths $installedPaths -Manifest $installedState.Manifest
     }
 }
 finally {
@@ -634,4 +717,4 @@ finally {
     }
 }
 
-New-Az3166InstallerResult -Paths $installedPaths -Changed $true
+New-Az3166InstallerResult -Paths $installedPaths -Changed $true -Manifest $installedState.Manifest

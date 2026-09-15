@@ -18,7 +18,7 @@ $installerPath = Join-Path $repositoryRoot 'tools/build/Install-Az3166BuildTools
 $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
 $volumeRoot = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
 $fixtureRoot = Join-Path $volumeRoot "ati-$([guid]::NewGuid().ToString('N'))"
-$testCount = 27
+$testCount = 28
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 
 function Assert-InstallerTest {
@@ -96,7 +96,8 @@ try {
 
     foreach ($ambiguousPath in @(
         "$root.", "$root ", (Join-Path "$root." 'child'), (Join-Path "$root " 'child'),
-        "${root}:stream", (Join-Path $fixtureRoot 'ROOT~1'), "\\?\$root", "\\.\$root"
+        "${root}:stream", (Join-Path $fixtureRoot 'ROOT~1'), "\\?\$root", "\\.\$root",
+        "$root[1]", "$root[", "$root]"
     )) {
         Assert-InstallerRejected `
             -Arguments @{ Root = $ambiguousPath; DownloadCache = $cache; VerifyOnly = $true } `
@@ -253,6 +254,39 @@ try {
             '*expected exactly one openocd.exe*'
         )
     Write-Host 'PASS partial managed installations are diagnosed'
+
+    $manifestPath = Join-Path $root '.az3166-build-tools.json'
+    $originalManifest = Get-Content -Raw -LiteralPath $manifestPath
+    foreach ($badBackupId in @($null, 42, '', '..', '..\outside', ('g' * 32))) {
+        $journalManifest = $originalManifest | ConvertFrom-Json
+        $journalManifest | Add-Member -NotePropertyName pendingBackupId -NotePropertyValue $badBackupId
+        $journalManifest | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding utf8
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+            -ExpectedMessages @('*not owned by this installer*')
+    }
+    $backupId = [guid]::NewGuid().ToString('N')
+    $journalManifest.pendingBackupId = $backupId
+    $journalManifest | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding utf8
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $root; DownloadCache = (Join-Path $fixtureRoot ".az3166-replaced-$backupId"); VerifyOnly = $true } `
+        -ExpectedMessages @('*Pending backup overlaps the download cache:*')
+    Set-Content -LiteralPath $manifestPath -Value $originalManifest -Encoding utf8
+
+    $selfBackupRoot = Join-Path $volumeRoot ".az3166-replaced-$backupId"
+    New-Item -ItemType Directory -Path $selfBackupRoot | Out-Null
+    try {
+        $journalManifest.root = $selfBackupRoot
+        $journalManifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $selfBackupRoot '.az3166-build-tools.json') -Encoding utf8
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $selfBackupRoot; DownloadCache = $cache; VerifyOnly = $true } `
+            -ExpectedMessages @('*Pending backup overlaps the installation root:*')
+        Assert-InstallerTest (Test-Path -LiteralPath $selfBackupRoot -PathType Container) 'Journal validation removed the installation.'
+    }
+    finally {
+        Remove-Item -LiteralPath $selfBackupRoot -Recurse -Force
+    }
+    Write-Host 'PASS malformed or overlapping backup journals cannot authorize cleanup'
 
     $linkedTarget = Join-Path $fixtureRoot 'linked-target'
     New-Item -ItemType Directory -Path $linkedTarget | Out-Null
@@ -482,6 +516,46 @@ try {
         $null = & $installerPath @boundaryArguments -VerifyOnly
         $testCount++
         Write-Host 'PASS corrupt native executables are diagnosed and repaired offline'
+
+        Set-Content -LiteralPath (Join-Path $boundaryRoot 'cleanup-locked.txt') -Value 'locked backup fixture' -Encoding ascii
+        $pendingCleanup = & {
+            function Remove-Item {
+                [CmdletBinding()]
+                param([string]$LiteralPath, [switch]$Recurse, [switch]$Force)
+
+                if ($Recurse -and (Split-Path -Path $LiteralPath -Leaf) -like '.az3166-replaced-*') {
+                    $lockedFile = [IO.File]::Open((Join-Path $LiteralPath 'cleanup-locked.txt'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+                    try {
+                        Microsoft.PowerShell.Management\Remove-Item @PSBoundParameters
+                    }
+                    finally {
+                        $lockedFile.Dispose()
+                    }
+                }
+                else {
+                    Microsoft.PowerShell.Management\Remove-Item @PSBoundParameters
+                }
+            }
+
+            & $installerPath @boundaryArguments -Clean -Offline
+        }
+        Assert-InstallerTest $pendingCleanup.Changed 'The verified replacement did not report installation success.'
+        Assert-InstallerTest (Test-Path -LiteralPath $pendingCleanup.PendingCleanupPath -PathType Container) 'The deferred backup path was not reported.'
+        $manifestBeforeVerify = Get-Content -Raw -LiteralPath (Join-Path $boundaryRoot '.az3166-build-tools.json')
+        $verifiedPending = & $installerPath @boundaryArguments -VerifyOnly
+        Assert-InstallerTest ($verifiedPending.PendingCleanupPath -ceq $pendingCleanup.PendingCleanupPath) 'VerifyOnly did not report the pending backup.'
+        Assert-InstallerTest ((Get-Content -Raw -LiteralPath (Join-Path $boundaryRoot '.az3166-build-tools.json')) -ceq $manifestBeforeVerify) 'VerifyOnly modified the cleanup journal.'
+        Assert-InstallerTest (Test-Path -LiteralPath $pendingCleanup.PendingCleanupPath -PathType Container) 'VerifyOnly removed the deferred backup.'
+        $installedCliTime = (Get-Item -LiteralPath $boundaryTools.ArduinoCliPath).LastWriteTimeUtc
+        $cleanupRetry = & $installerPath @boundaryArguments -Offline
+        Assert-InstallerTest $cleanupRetry.Changed 'Normal setup did not report the cleanup-only change.'
+        Assert-InstallerTest (-not $cleanupRetry.PendingCleanupPath) 'Successful retry still reports pending cleanup.'
+        Assert-InstallerTest (-not (Test-Path -LiteralPath $pendingCleanup.PendingCleanupPath)) 'Cleanup retry left the old backup behind.'
+        Assert-InstallerTest ((Get-Item -LiteralPath $boundaryTools.ArduinoCliPath).LastWriteTimeUtc -eq $installedCliTime) 'Cleanup retry reinstalled the CLI.'
+        $afterCleanup = & $installerPath @boundaryArguments -Offline
+        Assert-InstallerTest (-not $afterCleanup.Changed) 'The invocation after cleanup was not a no-op.'
+        $testCount++
+        Write-Host 'PASS locked backup cleanup is reported and retried without reinstalling'
     }
 }
 finally {

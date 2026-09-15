@@ -8,7 +8,8 @@ network-mapped, and `subst` paths are not supported. Overlap checks compare nati
 volume identities, not just drive letters. An existing installation root must
 have a valid ownership manifest; even empty unowned directories are refused.
 Components
-ending in dots or spaces, DOS short names containing `~`, alternate data streams,
+ending in dots or spaces, DOS short names containing `~`, wildcard brackets,
+alternate data streams,
 device namespaces, drive-relative paths, and reserved device names are rejected
 before normalization. Directory junctions and symbolic links are also rejected,
 including ancestors and entries inside either tree.
@@ -76,6 +77,15 @@ without removing the external executable.
 The integration test also corrupts CLI, GCC, and OpenOCD executables in the
 managed installation, checks that launch failures become verification
 diagnostics, and requires normal offline setup to repair all three.
+
+If the old installation cannot be deleted after a verified replacement, setup
+reports a warning and returns its exact path in `PendingCleanupPath`. The active
+manifest records the backup ID before promotion, so a later normal setup can
+retry cleanup without reinstalling. `-VerifyOnly` reports the pending path
+without writing, and another `-Clean` requires cleanup to finish first. Cleanup
+never selects directories by a wildcard; malformed or overlapping records and
+linked backup trees are rejected. The integration test holds a backup file open
+to exercise deferred cleanup and the next-run retry.
 
 The candidate's staging prefix is longer than the final root. Extraction and
 Board Manager installation run there, but the compiler is only queried for its
