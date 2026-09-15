@@ -89,6 +89,12 @@ manifest, which cleanup preserves until every payload entry is removed. A missin
 backup path only clears the stale journal. The integration test holds a backup
 file open to exercise deferred cleanup and the next-run retry.
 
+Temporary-download and staging cleanup failures stop setup with an error naming
+the retained path. Release any file lock and remove that exact temporary artifact
+before retrying; these failures are not reported as a successful clean setup.
+If promotion already completed, `-VerifyOnly` can check the installed root without
+removing the retained staging directory.
+
 If promotion or final verification fails, rollback renames the failed candidate
 to an operation-specific `.az3166-failed-*` sibling without traversing its
 contents, then restores the previous installation. Failed candidates are retained

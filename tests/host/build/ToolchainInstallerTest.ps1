@@ -18,7 +18,7 @@ $installerPath = Join-Path $repositoryRoot 'tools/build/Install-Az3166BuildTools
 $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
 $volumeRoot = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
 $fixtureRoot = Join-Path $volumeRoot "ati-$([guid]::NewGuid().ToString('N'))"
-$testCount = 29
+$testCount = 30
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 
 function Assert-InstallerTest {
@@ -492,6 +492,31 @@ try {
     Assert-InstallerTest (-not (Test-Path -LiteralPath $root)) 'The download fixture unexpectedly reached extraction.'
     Write-Host 'PASS online repair replaces only the invalid cache directory with a verified file'
 
+    $downloadFault = @{ Handle = $null; Path = $null }
+    try {
+        & {
+            function Invoke-WebRequest {
+                param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
+
+                Set-Content -LiteralPath $OutFile -Value 'partial download' -Encoding ascii
+                $downloadFault.Path = $OutFile
+                $downloadFault.Handle = [IO.File]::Open($OutFile, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+                throw 'Fixture download interrupted.'
+            }
+
+            Assert-InstallerRejected `
+                -Arguments @{ Root = $root; DownloadCache = $cache; LockPath = $fixtureLockPath } `
+                -ExpectedMessages @('*Temporary download cleanup failed at*')
+        }
+        Assert-InstallerTest (Test-Path -LiteralPath $downloadFault.Path -PathType Leaf) 'The locked download fixture was not retained.'
+        Assert-InstallerTest (-not (Test-Path -LiteralPath $root)) 'Interrupted download cleanup created an installation.'
+    }
+    finally {
+        if ($null -ne $downloadFault.Handle) { $downloadFault.Handle.Dispose() }
+        if ($downloadFault.Path) { Remove-Item -LiteralPath $downloadFault.Path -Force }
+    }
+    Write-Host 'PASS locked partial-download cleanup failures are surfaced with the retained path'
+
     if ($DownloadCache) {
         $boundaryParent = Join-Path $fixtureRoot ('p' * (70 - $fixtureRoot.Length - 3))
         $boundaryRoot = Join-Path $boundaryParent 'a'
@@ -690,6 +715,37 @@ try {
         Remove-Item -LiteralPath $recoveryFiles[0].FullName -Force
         $testCount++
         Write-Host 'PASS blocked rollback preserves the known-good backup and explicit recovery paths'
+
+        $stagingFault = @{ Path = $null }
+        & {
+            function Remove-Item {
+                [CmdletBinding()]
+                param([string]$LiteralPath, [switch]$Recurse, [switch]$Force)
+
+                if ($Recurse -and (Split-Path -Path $LiteralPath -Leaf) -like '.az3166-installing-*') {
+                    $stagingFault.Path = $LiteralPath
+                    $lockedStageFile = [IO.File]::Open((Join-Path $LiteralPath 'cleanup-locked.txt'), [IO.FileMode]::Create, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+                    try {
+                        Microsoft.PowerShell.Management\Remove-Item @PSBoundParameters
+                    }
+                    finally {
+                        $lockedStageFile.Dispose()
+                    }
+                }
+                else {
+                    Microsoft.PowerShell.Management\Remove-Item @PSBoundParameters
+                }
+            }
+
+            Assert-InstallerRejected `
+                -Arguments ($boundaryArguments + @{ Clean = $true; Offline = $true }) `
+                -ExpectedMessages @('*Staging cleanup failed at*')
+        }
+        Assert-InstallerTest (Test-Path -LiteralPath $stagingFault.Path -PathType Container) 'The locked staging fixture was not retained.'
+        $null = & $installerPath @boundaryArguments -VerifyOnly
+        Remove-Item -LiteralPath $stagingFault.Path -Recurse -Force
+        $testCount++
+        Write-Host 'PASS locked staging cleanup fails explicitly without damaging the promoted installation'
     }
 }
 finally {

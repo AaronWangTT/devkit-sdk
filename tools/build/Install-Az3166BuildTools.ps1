@@ -555,7 +555,15 @@ else {
             Move-Item -LiteralPath $temporaryPath -Destination $cachePath
         }
         finally {
-            Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+            try {
+                Assert-Az3166NoReparsePoint -Path $temporaryPath
+                if (Test-Path -LiteralPath $temporaryPath) {
+                    Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction Stop
+                }
+            }
+            catch {
+                throw "Temporary download cleanup failed at ${temporaryPath}: $($_.Exception.Message)"
+            }
         }
     }
 }
@@ -755,7 +763,12 @@ try {
 finally {
     try {
         Assert-Az3166NoReparsePoint -Path $stagingRoot -Recurse
-        Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $stagingRoot) {
+            Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction Stop
+        }
+    }
+    catch {
+        throw "Staging cleanup failed at ${stagingRoot}: $($_.Exception.Message)"
     }
     finally {
         if (

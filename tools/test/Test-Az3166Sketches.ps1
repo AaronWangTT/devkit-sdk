@@ -93,7 +93,7 @@ try {
             downloads = $downloadsDirectory
             user = $sketchbook
         }
-    } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $configurationPath -Encoding ascii
+    } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $configurationPath -Encoding utf8
 
     $failures = [System.Collections.Generic.List[string]]::new()
     foreach ($sketchDirectory in $sketchDirectories) {

@@ -235,6 +235,17 @@ function Get-Az3166BuildLock {
         (Get-Az3166BuildLockProperty $tools.armNoneEabiGcc 'compilerVersion' 'tools.armNoneEabiGcc') `
         'tools.armNoneEabiGcc.compilerVersion'
 
+    $cacheNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($cacheName in @(
+        $cli.windowsX64.archiveFileName, $ide.windows.archiveFileName,
+        $unit.archive.archiveFileName, $core.canonicalPackage.archiveFileName,
+        $tools.armNoneEabiGcc.windows.archiveFileName, $tools.openocd.windows.archiveFileName,
+        $boardManager.indexPath
+    )) {
+        Assert-Az3166BuildLockCondition ($cacheNames.Add($cacheName)) `
+            'cache asset basenames must be unique (case-insensitive).'
+    }
+
     return $lock
 }
 

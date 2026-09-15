@@ -148,6 +148,30 @@ foreach ($propertyPath in @(
 }
 Write-Host 'PASS unsafe tool identity path components are rejected'
 
+foreach ($assetPath in @(
+    'arduino.ide.windows', 'arduino.unit.archive', 'core.canonicalPackage',
+    'tools.armNoneEabiGcc.windows', 'tools.openocd.windows', 'boardManager'
+)) {
+    foreach ($uppercaseName in @($false, $true)) {
+        Assert-BuildLockRejected {
+            param($fixture)
+            $duplicateName = $fixture.arduino.cli.windowsX64.archiveFileName
+            if ($uppercaseName) { $duplicateName = $duplicateName.ToUpperInvariant() }
+            $asset = $fixture
+            foreach ($propertyName in $assetPath.Split('.')) { $asset = $asset.$propertyName }
+            if ($assetPath -eq 'boardManager') {
+                $asset.indexPath = $duplicateName
+                $asset.indexUrl = "https://raw.githubusercontent.com/$($asset.repository)/$($asset.revision)/$duplicateName"
+            }
+            else {
+                $asset.archiveFileName = $duplicateName
+                $asset.url = [Uri]::new([Uri]$asset.url, $duplicateName).AbsoluteUri
+            }
+        } 'Invalid AZ3166 build lock: cache asset basenames must be unique (case-insensitive).'
+    }
+}
+Write-Host 'PASS colliding cache asset basenames are rejected'
+
 $workflowPath = Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml'
 $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubOutput')) 'Core package CI does not export the shared build lock.'
@@ -213,6 +237,29 @@ foreach ($literal in @(
 }
 Write-Host 'PASS build consumers use the shared lock'
 
+$configurationPipeline = [Management.Automation.Language.Parser]::ParseInput($sketchDriver, [ref]$null, [ref]$null).Find({
+    param($node)
+    $node -is [Management.Automation.Language.PipelineAst] -and
+        $node.Extent.Text -match 'Set-Content -LiteralPath \$configurationPath'
+}, $true)
+Assert-BuildConfigurationTest ($null -ne $configurationPipeline) 'The sketch driver configuration writer was not found.'
+$configurationPath = Join-Path ([IO.Path]::GetTempPath()) "az3166-cli-config-$([guid]::NewGuid().ToString('N')).json"
+try {
+    $unicodeProfile = "C:\Users\Jos$([char]0xe9)"
+    $arduinoDataDirectory = "$unicodeProfile\Arduino15"
+    $downloadsDirectory = "$unicodeProfile\Downloads"
+    $sketchbook = "$unicodeProfile\Sketchbook"
+    & ([scriptblock]::Create($configurationPipeline.Extent.Text))
+    $configuration = Get-Content -Raw -LiteralPath $configurationPath -Encoding utf8 | ConvertFrom-Json
+    Assert-BuildConfigurationTest ($configuration.directories.data -ceq $arduinoDataDirectory) 'CLI data path lost Unicode characters.'
+    Assert-BuildConfigurationTest ($configuration.directories.downloads -ceq $downloadsDirectory) 'CLI download path lost Unicode characters.'
+    Assert-BuildConfigurationTest ($configuration.directories.user -ceq $sketchbook) 'CLI sketchbook path lost Unicode characters.'
+}
+finally {
+    Remove-Item -LiteralPath $configurationPath -Force -ErrorAction SilentlyContinue
+}
+Write-Host 'PASS sketch driver configuration preserves Unicode paths'
+
 $githubOutputPath = Join-Path ([IO.Path]::GetTempPath()) "az3166-github-output-$([guid]::NewGuid().ToString('N'))"
 try {
     Export-Az3166BuildLockGitHubOutput -Lock $lock -Path $githubOutputPath
@@ -255,4 +302,4 @@ finally {
 }
 Write-Host 'PASS GitHub output matches the build lock'
 
-Write-Host '13 build-configuration tests passed.'
+Write-Host '15 build-configuration tests passed.'
