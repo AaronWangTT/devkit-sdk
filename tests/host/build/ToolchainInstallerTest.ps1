@@ -18,7 +18,7 @@ $installerPath = Join-Path $repositoryRoot 'tools/build/Install-Az3166BuildTools
 $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
 $volumeRoot = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
 $fixtureRoot = Join-Path $volumeRoot "ati-$([guid]::NewGuid().ToString('N'))"
-$testCount = 28
+$testCount = 29
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 
 function Assert-InstallerTest {
@@ -257,6 +257,31 @@ try {
 
     $manifestPath = Join-Path $root '.az3166-build-tools.json'
     $originalManifest = Get-Content -Raw -LiteralPath $manifestPath
+    foreach ($badField in @(
+        @{ Name = 'installer'; Value = @('devkit-sdk.az3166-build-tools') },
+        @{ Name = 'installer'; Value = $null },
+        @{ Name = 'schemaVersion'; Value = @(1) },
+        @{ Name = 'schemaVersion'; Value = '1' },
+        @{ Name = 'root'; Value = @($root) },
+        @{ Name = 'lockSha256'; Value = @(('a' * 64)) },
+        @{ Name = 'lockSha256'; Value = 'not-a-hash' }
+    )) {
+        $ownershipManifest = $originalManifest | ConvertFrom-Json
+        $ownershipManifest.($badField.Name) = $badField.Value
+        $ownershipManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+            -ExpectedMessages @('*not owned by this installer*')
+    }
+    foreach ($manifestJson in @('null', '{}', '[]', "[$originalManifest]", '"unowned"')) {
+        Set-Content -LiteralPath $manifestPath -Value $manifestJson -Encoding utf8
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+            -ExpectedMessages @('*not owned by this installer*')
+    }
+    Set-Content -LiteralPath $manifestPath -Value $originalManifest -Encoding utf8
+    Write-Host 'PASS ownership manifests require a single object and scalar fields'
+
     foreach ($badBackupId in @($null, 42, '', '..', '..\outside', ('g' * 32))) {
         $journalManifest = $originalManifest | ConvertFrom-Json
         $journalManifest | Add-Member -NotePropertyName pendingBackupId -NotePropertyValue $badBackupId
@@ -517,14 +542,45 @@ try {
         $testCount++
         Write-Host 'PASS corrupt native executables are diagnosed and repaired offline'
 
+        $installedManifestPath = Join-Path $boundaryRoot '.az3166-build-tools.json'
+        $installedManifestContent = Get-Content -Raw -LiteralPath $installedManifestPath
+        $foreignBackupId = [guid]::NewGuid().ToString('N')
+        $foreignBackupPath = Join-Path $boundaryParent ".az3166-replaced-$foreignBackupId"
+        New-Item -ItemType Directory -Path $foreignBackupPath | Out-Null
+        $foreignBackupSentinel = Join-Path $foreignBackupPath 'keep.txt'
+        Set-Content -LiteralPath $foreignBackupSentinel -Value 'unowned sibling' -Encoding ascii
+        try {
+            $foreignJournal = $installedManifestContent | ConvertFrom-Json
+            $foreignJournal | Add-Member -NotePropertyName pendingBackupId -NotePropertyValue $foreignBackupId
+            $foreignJournal | ConvertTo-Json | Set-Content -LiteralPath $installedManifestPath -Encoding utf8
+            Assert-InstallerRejected `
+                -Arguments ($boundaryArguments + @{ Offline = $true }) `
+                -ExpectedMessages @('*Refusing to clean a backup not owned by this installation:*')
+            Assert-InstallerTest ((Get-Content -Raw -LiteralPath $foreignBackupSentinel).Trim() -ceq 'unowned sibling') 'Cleanup modified an unowned sibling.'
+        }
+        finally {
+            Set-Content -LiteralPath $installedManifestPath -Value $installedManifestContent -Encoding utf8
+            Remove-Item -LiteralPath $foreignBackupPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        $foreignJournal | ConvertTo-Json | Set-Content -LiteralPath $installedManifestPath -Encoding utf8
+        $staleCleanup = & $installerPath @boundaryArguments -Offline
+        Assert-InstallerTest ($staleCleanup.Changed -and -not $staleCleanup.PendingCleanupPath) 'A missing backup did not clear its stale journal.'
+        Assert-InstallerTest (-not (Test-Path -LiteralPath $foreignBackupPath)) 'Clearing a stale journal created a backup directory.'
+        $testCount++
+        Write-Host 'PASS backup cleanup requires ownership and clears only missing-path journals'
+
         Set-Content -LiteralPath (Join-Path $boundaryRoot 'cleanup-locked.txt') -Value 'locked backup fixture' -Encoding ascii
         $pendingCleanup = & {
             function Remove-Item {
                 [CmdletBinding()]
                 param([string]$LiteralPath, [switch]$Recurse, [switch]$Force)
 
-                if ($Recurse -and (Split-Path -Path $LiteralPath -Leaf) -like '.az3166-replaced-*') {
-                    $lockedFile = [IO.File]::Open((Join-Path $LiteralPath 'cleanup-locked.txt'), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+                $backupRootRemoval = $Recurse -and (Split-Path -Path $LiteralPath -Leaf) -like '.az3166-replaced-*'
+                $lockedFileRemoval = (Split-Path -Path $LiteralPath -Leaf) -eq 'cleanup-locked.txt' -and
+                    (Split-Path -Path (Split-Path -Path $LiteralPath -Parent) -Leaf) -like '.az3166-replaced-*'
+                if ($backupRootRemoval -or $lockedFileRemoval) {
+                    $lockPath = if ($backupRootRemoval) { Join-Path $LiteralPath 'cleanup-locked.txt' } else { $LiteralPath }
+                    $lockedFile = [IO.File]::Open($lockPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
                     try {
                         Microsoft.PowerShell.Management\Remove-Item @PSBoundParameters
                     }
@@ -541,6 +597,7 @@ try {
         }
         Assert-InstallerTest $pendingCleanup.Changed 'The verified replacement did not report installation success.'
         Assert-InstallerTest (Test-Path -LiteralPath $pendingCleanup.PendingCleanupPath -PathType Container) 'The deferred backup path was not reported.'
+        Assert-InstallerTest (Test-Path -LiteralPath (Join-Path $pendingCleanup.PendingCleanupPath '.az3166-build-tools.json') -PathType Leaf) 'Partial cleanup removed the backup ownership marker.'
         $manifestBeforeVerify = Get-Content -Raw -LiteralPath (Join-Path $boundaryRoot '.az3166-build-tools.json')
         $verifiedPending = & $installerPath @boundaryArguments -VerifyOnly
         Assert-InstallerTest ($verifiedPending.PendingCleanupPath -ceq $pendingCleanup.PendingCleanupPath) 'VerifyOnly did not report the pending backup.'

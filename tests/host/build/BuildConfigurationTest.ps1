@@ -109,7 +109,10 @@ foreach ($unsafeRootName in @(
 }
 Write-Host 'PASS unsafe Windows toolchain-root name is rejected'
 
-foreach ($unsafeAssetName in @('.', '..', '../outside', '..\outside', 'C:\outside', 'CON', 'NUL.txt', 'asset.', 'asset ')) {
+foreach ($unsafeAssetName in @(
+    '.', '..', '../outside', '..\outside', 'C:\outside', 'CON', 'NUL.txt', 'asset.', 'asset ',
+    'con', 'Con.txt', 'cOm1', 'lpT9.bin', "COM$([char]0x00b9)", "lpt$([char]0x00b2).txt"
+)) {
     Assert-BuildLockRejected {
         param($fixture)
         $fixture.arduino.cli.windowsX64.archiveFileName = $unsafeAssetName

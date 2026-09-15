@@ -84,8 +84,10 @@ manifest records the backup ID before promotion, so a later normal setup can
 retry cleanup without reinstalling. `-VerifyOnly` reports the pending path
 without writing, and another `-Clean` requires cleanup to finish first. Cleanup
 never selects directories by a wildcard; malformed or overlapping records and
-linked backup trees are rejected. The integration test holds a backup file open
-to exercise deferred cleanup and the next-run retry.
+linked backup trees are rejected. Existing backups must have a valid ownership
+manifest, which cleanup preserves until every payload entry is removed. A missing
+backup path only clears the stale journal. The integration test holds a backup
+file open to exercise deferred cleanup and the next-run retry.
 
 The candidate's staging prefix is longer than the final root. Extraction and
 Board Manager installation run there, but the compiler is only queried for its

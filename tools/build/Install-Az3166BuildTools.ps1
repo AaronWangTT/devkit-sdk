@@ -200,22 +200,29 @@ function Get-Az3166ManagedState {
     }
 
     try {
-        $manifest = Get-Content -Raw -LiteralPath $Paths.ManifestPath | ConvertFrom-Json
+        $manifest = Get-Content -Raw -LiteralPath $Paths.ManifestPath | ConvertFrom-Json -NoEnumerate
     }
     catch {
         return [pscustomobject]@{ Name = 'Foreign'; Manifest = $null }
     }
 
-    $properties = @($manifest.PSObject.Properties.Name)
+    if ($manifest -isnot [pscustomobject]) {
+        return [pscustomobject]@{ Name = 'Foreign'; Manifest = $null }
+    }
+    $properties = @($manifest.PSObject.Properties | ForEach-Object { $_.Name })
     if (
         'schemaVersion' -notin $properties -or
         'installer' -notin $properties -or
         'root' -notin $properties -or
         'lockSha256' -notin $properties -or
+        ($manifest.schemaVersion -isnot [int] -and $manifest.schemaVersion -isnot [long]) -or
         $manifest.schemaVersion -ne 1 -or
+        $manifest.installer -isnot [string] -or
         $manifest.installer -cne $installerId -or
         $manifest.root -isnot [string] -or
         -not $manifest.root.Equals($Paths.Root, [StringComparison]::OrdinalIgnoreCase) -or
+        $manifest.lockSha256 -isnot [string] -or
+        $manifest.lockSha256 -cnotmatch '\A[0-9a-f]{64}\z' -or
         ('pendingBackupId' -in $properties -and
             ($manifest.pendingBackupId -isnot [string] -or $manifest.pendingBackupId -cnotmatch '\A[0-9a-f]{32}\z'))
     ) {
@@ -372,7 +379,7 @@ function Remove-Az3166PendingBackup {
         throw "Pending backup is not a directory: $pendingPath"
     }
     $backupManifestPath = Join-Path $pendingPath $manifestName
-    if (Test-Path -LiteralPath $backupManifestPath) {
+    if (Test-Path -LiteralPath $pendingPath -PathType Container) {
         $backupState = Get-Az3166ManagedState -Paths ([pscustomobject]@{ Root = $Paths.Root; ManifestPath = $backupManifestPath })
         if ($backupState.Name -ne 'Managed') {
             throw "Refusing to clean a backup not owned by this installation: $pendingPath"
@@ -383,8 +390,26 @@ function Remove-Az3166PendingBackup {
     $changed = $false
     try {
         if (Test-Path -LiteralPath $pendingPath -PathType Container) {
+            $backupManifestBytes = [IO.File]::ReadAllBytes($backupManifestPath)
             $changed = $true
-            Remove-Item -LiteralPath $pendingPath -Recurse -Force
+            foreach ($entry in @(Get-ChildItem -LiteralPath $pendingPath -Force)) {
+                if ($entry.Name -ine $manifestName) {
+                    Remove-Item -LiteralPath $entry.FullName -Recurse -Force
+                }
+            }
+            try {
+                Remove-Item -LiteralPath $backupManifestPath -Force
+                [IO.Directory]::Delete($pendingPath)
+            }
+            catch {
+                if (Test-Path -LiteralPath $pendingPath -PathType Container) {
+                    Assert-Az3166NoReparsePoint -Path $pendingPath -Recurse
+                    if (-not (Test-Path -LiteralPath $backupManifestPath)) {
+                        [IO.File]::WriteAllBytes($backupManifestPath, $backupManifestBytes)
+                    }
+                }
+                throw
+            }
         }
         $updatedManifest = $Manifest.PSObject.Copy()
         $updatedManifest.PSObject.Properties.Remove('pendingBackupId')
