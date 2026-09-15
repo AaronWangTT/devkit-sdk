@@ -193,7 +193,12 @@ function Get-Az3166InstallationProblems {
         try {
             $unitProperties = ConvertFrom-StringData -StringData (Get-Content -Raw -LiteralPath $unitPropertiesPath)
             $unitVersion = $unitProperties['version']
-            if ($unitVersion -cne $buildLock.arduino.unit.version) {
+            $normalizedUnitVersion = $null
+            $hasUnitVersion = [version]::TryParse([string]$unitVersion, [ref]$normalizedUnitVersion)
+            if ($hasUnitVersion -and $normalizedUnitVersion.Build -lt 0) {
+                $normalizedUnitVersion = [version]::new($normalizedUnitVersion.Major, $normalizedUnitVersion.Minor, 0)
+            }
+            if (-not $hasUnitVersion -or $normalizedUnitVersion -ne [version]$buildLock.arduino.unit.version) {
                 $problems.Add("ArduinoUnit version is '$unitVersion', expected '$($buildLock.arduino.unit.version)'")
             }
         }

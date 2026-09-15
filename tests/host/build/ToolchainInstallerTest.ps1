@@ -168,7 +168,13 @@ try {
 
     $unitPropertiesPath = Join-Path $root 'test-libraries/ArduinoUnit/library.properties'
     New-Item -ItemType Directory -Path (Split-Path -Parent $unitPropertiesPath) -Force | Out-Null
-    foreach ($unitProperties in @("name=ArduinoUnit`nversion=0.0.0", 'name=ArduinoUnit')) {
+    foreach ($unitProperties in @(
+        "name=ArduinoUnit`nversion=0.0.0",
+        "name=ArduinoUnit`nversion=0.0",
+        "name=ArduinoUnit`nversion=$($lock.arduino.unit.version)1",
+        "name=ArduinoUnit`nversion=$($lock.arduino.unit.version).1",
+        'name=ArduinoUnit'
+    )) {
         Set-Content -LiteralPath $unitPropertiesPath -Value $unitProperties -Encoding ascii
         Assert-InstallerRejected `
             -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
@@ -182,11 +188,13 @@ try {
         -ExpectedMessages @('*ArduinoUnit metadata is invalid:*')
     Write-Host 'PASS malformed ArduinoUnit metadata is diagnosed'
 
-    Set-Content -LiteralPath $unitPropertiesPath -Value "name=ArduinoUnit`nversion=$($lock.arduino.unit.version)" -Encoding ascii
-    Assert-InstallerRejected `
-        -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
-        -ExpectedMessages @('*missing file:*arduino-cli.exe*') `
-        -UnexpectedMessages @('*ArduinoUnit version is *', '*ArduinoUnit metadata is invalid:*')
+    foreach ($unitVersion in @($lock.arduino.unit.version, ([version]$lock.arduino.unit.version).ToString(2))) {
+        Set-Content -LiteralPath $unitPropertiesPath -Value "name=ArduinoUnit`nversion=$unitVersion" -Encoding ascii
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+            -ExpectedMessages @('*missing file:*arduino-cli.exe*') `
+            -UnexpectedMessages @('*ArduinoUnit version is *', '*ArduinoUnit metadata is invalid:*')
+    }
     Write-Host 'PASS locked ArduinoUnit version metadata is accepted'
 
     $coreVersionHeaderPath = Join-Path $root "portable/packages/AZ3166/hardware/stm32f4/$($lock.core.version)/cores/arduino/system/SystemVersion.h"
