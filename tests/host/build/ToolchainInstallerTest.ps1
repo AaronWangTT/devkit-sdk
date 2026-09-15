@@ -163,14 +163,20 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSHOME 'pwsh.exe') -Destination $idePath
     Assert-InstallerRejected `
         -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
-        -ExpectedMessages @("*Arduino IDE product version is *, expected '$($lock.arduino.ide.version)'*")
-    Write-Host 'PASS VerifyOnly rejects a different IDE product version'
+        -ExpectedMessages @(
+            "*Arduino IDE product version is *, expected '$($lock.arduino.ide.version)'*",
+            '*missing file:*arduino-cli.exe*'
+        )
+    Write-Host 'PASS partial installations report a different IDE product version'
 
     Set-Content -LiteralPath $idePath -Value 'not an executable' -Encoding ascii
     Assert-InstallerRejected `
         -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
-        -ExpectedMessages @("*Arduino IDE product version is '', expected '$($lock.arduino.ide.version)'*")
-    Write-Host 'PASS VerifyOnly rejects an IDE without version metadata'
+        -ExpectedMessages @(
+            "*Arduino IDE product version is '', expected '$($lock.arduino.ide.version)'*",
+            '*missing file:*arduino-cli.exe*'
+        )
+    Write-Host 'PASS partial installations report missing IDE version metadata'
 
     New-Item -ItemType Directory -Path $cache | Out-Null
     Set-Content -LiteralPath (Join-Path $cache $lock.arduino.cli.windowsX64.archiveFileName) -Value 'corrupt' -Encoding ascii

@@ -110,7 +110,7 @@ jobs:
           path: |
             ${{ runner.temp }}/${{ steps.build-lock.outputs.short_toolchain_root_name }}
             ${{ runner.temp }}/az3166-downloads
-          key: az3166-build-tools-${{ hashFiles('tools/build/az3166-build-lock.json', 'tools/build/Install-Az3166BuildTools.ps1') }}-windows
+          key: az3166-build-tools-${{ hashFiles('tools/build/az3166-build-lock.json', 'tools/build/Install-Az3166BuildTools.ps1', 'tools/build/Az3166Build.Common.ps1') }}-windows
 
       - name: Install pinned AZ3166 test toolchain
         if: runner.os == 'Windows'

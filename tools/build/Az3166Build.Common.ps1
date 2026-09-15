@@ -133,9 +133,15 @@ function Get-Az3166BuildLock {
     }
 
     $windows = $hostPrerequisites.windows
+    $shortToolchainRootName = Get-Az3166BuildLockProperty `
+        $windows 'shortToolchainRootName' 'hostPrerequisites.windows'
     Assert-Az3166BuildLockString `
-        (Get-Az3166BuildLockProperty $windows 'shortToolchainRootName' 'hostPrerequisites.windows') `
+        $shortToolchainRootName `
         'hostPrerequisites.windows.shortToolchainRootName'
+    Assert-Az3166BuildLockCondition `
+        ($shortToolchainRootName -cmatch '\A[A-Za-z0-9._-]*[A-Za-z0-9_-]\z' -and
+            $shortToolchainRootName -notmatch '\A(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|\z)') `
+        'hostPrerequisites.windows.shortToolchainRootName must be a single relative directory name.'
     $maximumToolchainRootLength = Get-Az3166BuildLockProperty `
         $windows 'maximumToolchainRootLength' 'hostPrerequisites.windows'
     $parsedMaximumToolchainRootLength = 0

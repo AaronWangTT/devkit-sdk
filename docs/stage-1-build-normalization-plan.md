@@ -132,10 +132,10 @@ tool versions, data layout, and command identical. For each root, retain:
 - pass/fail status and the first failing diagnostic;
 - whether shortening only the root restores the build.
 
-Record the longest passing and shortest failing roots. Encode a conservative
-preflight limit only after those results exist. Until then, use a short root
-named `a` under a drive or runner temporary directory and keep the constraint
-explicitly marked as unvalidated in the lock.
+Record the longest passing and shortest failing roots when repeating this
+experiment. Keep the current conservative preflight limit and short root named
+`a` under a drive or runner temporary directory unless new measurements justify
+a change.
 
 The experiment is recorded in
 [`windows-toolchain-path-limit.md`](windows-toolchain-path-limit.md). Root length

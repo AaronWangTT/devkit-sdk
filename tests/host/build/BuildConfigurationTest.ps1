@@ -97,6 +97,18 @@ Assert-BuildLockRejected {
 } 'Invalid AZ3166 build lock: hostPrerequisites.windows.maximumToolchainRootLength must be a positive integer.'
 Write-Host 'PASS invalid Windows toolchain-root limit is rejected'
 
+foreach ($unsafeRootName in @(
+    '.', '..', '../outside', '..\outside', 'a/b', 'a\b', '/tools', '\tools',
+    'C:\tools', 'C:tools', '\\server\share', 'a.', 'a ', 'a:b', 'a*b', 'a?b',
+    'NUL', 'con.txt', 'COM1', 'LPT9.exe', "a'b", "a`nextra=value", "a`rextra=value"
+)) {
+    Assert-BuildLockRejected {
+        param($fixture)
+        $fixture.hostPrerequisites.windows.shortToolchainRootName = $unsafeRootName
+    } 'Invalid AZ3166 build lock: hostPrerequisites.windows.shortToolchainRootName must be a single relative directory name.'
+}
+Write-Host 'PASS unsafe Windows toolchain-root name is rejected'
+
 $workflowPath = Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml'
 $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubOutput')) 'Core package CI does not export the shared build lock.'
@@ -108,6 +120,14 @@ Assert-BuildConfigurationTest ($workflow.Contains('-Offline')) 'Core package CI 
 Assert-BuildConfigurationTest (-not $workflow.Contains('Invoke-WebRequest')) 'Core package CI still owns a toolchain download.'
 Assert-BuildConfigurationTest (-not $workflow.Contains('arduino/setup-arduino-cli')) 'Core package CI still uses a separate Arduino CLI installer.'
 Assert-BuildConfigurationTest ($workflow.Contains('steps.build-lock.outputs.short_toolchain_root_name')) 'Core package CI does not use the locked short toolchain-root name.'
+$toolchainCacheKey = [regex]::Match($workflow, '(?m)^\s+key: az3166-build-tools-.*$').Value
+foreach ($cacheInput in @(
+    'tools/build/az3166-build-lock.json',
+    'tools/build/Install-Az3166BuildTools.ps1',
+    'tools/build/Az3166Build.Common.ps1'
+)) {
+    Assert-BuildConfigurationTest ($toolchainCacheKey.Contains("'$cacheInput'")) "The toolchain cache key does not hash its installer input: $cacheInput"
+}
 $workflowLiterals = @(
     $lock.core.version
     $lock.core.canonicalPackage.sha256
@@ -191,4 +211,4 @@ finally {
 }
 Write-Host 'PASS GitHub output matches the build lock'
 
-Write-Host '10 build-configuration tests passed.'
+Write-Host '11 build-configuration tests passed.'
