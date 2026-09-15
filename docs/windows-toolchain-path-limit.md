@@ -89,6 +89,15 @@ manifest, which cleanup preserves until every payload entry is removed. A missin
 backup path only clears the stale journal. The integration test holds a backup
 file open to exercise deferred cleanup and the next-run retry.
 
+If promotion or final verification fails, rollback renames the failed candidate
+to an operation-specific `.az3166-failed-*` sibling without traversing its
+contents, then restores the previous installation. Failed candidates are retained
+for inspection, not recursively deleted. If a lock or another filesystem error
+prevents rollback, the error names the installation, backup, and candidate paths;
+an operation-specific `.az3166-recovery-*.json` record preserves those paths and
+both errors. The known-good backup is left intact for manual recovery. Integration
+tests cover a linked candidate and a locked candidate that blocks the rename.
+
 The candidate's staging prefix is longer than the final root. Extraction and
 Board Manager installation run there, but the compiler is only queried for its
 version before promotion. Sketch compilation and its GCC include-path search

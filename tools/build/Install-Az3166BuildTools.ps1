@@ -565,6 +565,7 @@ New-Item -ItemType Directory -Path $rootParent -Force | Out-Null
 $operationId = [guid]::NewGuid().ToString('N')
 $stagingRoot = Join-Path $rootParent ".az3166-installing-$operationId"
 $backupRoot = Join-Path $rootParent ".az3166-replaced-$operationId"
+$rollbackAttempted = $false
 
 try {
     New-Item -ItemType Directory -Path $stagingRoot | Out-Null
@@ -693,15 +694,6 @@ try {
     }
     try {
         Move-Item -LiteralPath $candidateRoot -Destination $rootPath
-    }
-    catch {
-        if ($hadPreviousRoot -and -not (Test-Path -LiteralPath $rootPath)) {
-            Move-Item -LiteralPath $backupRoot -Destination $rootPath
-        }
-        throw
-    }
-
-    try {
         $installedPaths = Get-Az3166InstallerPaths -InstallationRoot $rootPath
         $installedState = Get-Az3166ManagedState -Paths $installedPaths
         $installedProblems = @(if ($installedState.Name -eq 'Managed') {
@@ -715,12 +707,45 @@ try {
         }
     }
     catch {
-        Assert-Az3166NoReparsePoint -Path $rootPath -Recurse
-        Remove-Item -LiteralPath $rootPath -Recurse -Force -ErrorAction SilentlyContinue
-        if ($hadPreviousRoot -and (Test-Path -LiteralPath $backupRoot -PathType Container)) {
-            Move-Item -LiteralPath $backupRoot -Destination $rootPath
+        $installationError = $_.Exception.Message
+        $rollbackAttempted = $true
+        $failedRoot = Join-Path $rootParent ".az3166-failed-$operationId"
+        $retainedCandidate = $false
+        try {
+            Assert-Az3166NoReparsePoint -Path $rootParent
+            if ($null -ne (Get-Item -LiteralPath $rootPath -Force -ErrorAction SilentlyContinue)) {
+                [IO.Directory]::Move($rootPath, $failedRoot)
+                $retainedCandidate = $true
+            }
+            if ($hadPreviousRoot) {
+                Assert-Az3166NoReparsePoint -Path $backupRoot -Recurse
+                [IO.Directory]::Move($backupRoot, $rootPath)
+            }
         }
-        throw
+        catch {
+            $rollbackError = $_.Exception.Message
+            $recoveryPath = Join-Path $rootParent ".az3166-recovery-$operationId.json"
+            $recovery = [ordered]@{
+                schemaVersion = 1
+                installer = $installerId
+                root = $rootPath
+                backupRoot = if ($hadPreviousRoot) { $backupRoot } else { $null }
+                failedCandidateRoot = if ($retainedCandidate) { $failedRoot } else { $rootPath }
+                installationError = $installationError
+                rollbackError = $rollbackError
+            }
+            try {
+                Assert-Az3166NoReparsePoint -Path $rootParent
+                $recovery | ConvertTo-Json | Set-Content -LiteralPath $recoveryPath -Encoding utf8
+            }
+            catch {
+                $recoveryPath = "could not write recovery record: $($_.Exception.Message)"
+            }
+            throw "AZ3166 rollback requires recovery. Installation: $rootPath; backup: $($recovery.backupRoot); failed candidate: $($recovery.failedCandidateRoot); record: $recoveryPath. Installation error: $installationError. Rollback error: $rollbackError"
+        }
+        $rollbackStatus = if ($hadPreviousRoot) { 'previous installation restored' } else { 'failed installation removed from the requested root' }
+        $candidateStatus = if ($retainedCandidate) { "; failed candidate retained at $failedRoot" } else { '' }
+        throw "AZ3166 installation failed: $installationError; $rollbackStatus$candidateStatus."
     }
 
     if ($hadPreviousRoot) {
@@ -734,6 +759,7 @@ finally {
     }
     finally {
         if (
+            -not $rollbackAttempted -and
             (Test-Path -LiteralPath $backupRoot -PathType Container) -and
             -not (Test-Path -LiteralPath $rootPath)
         ) {

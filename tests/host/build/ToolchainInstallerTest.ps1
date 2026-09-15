@@ -613,6 +613,83 @@ try {
         Assert-InstallerTest (-not $afterCleanup.Changed) 'The invocation after cleanup was not a no-op.'
         $testCount++
         Write-Host 'PASS locked backup cleanup is reported and retried without reinstalling'
+
+        $originalRootMarker = Join-Path $boundaryRoot 'rollback-original.txt'
+        Set-Content -LiteralPath $originalRootMarker -Value 'previous installation' -Encoding ascii
+        $rollbackTarget = Join-Path $fixtureRoot 'rollback-target.txt'
+        Set-Content -LiteralPath $rollbackTarget -Value 'external target' -Encoding ascii
+        $rollbackFault = @{ Injected = $false }
+        & {
+            function Move-Item {
+                [CmdletBinding()]
+                param([string]$LiteralPath, [string]$Destination)
+
+                Microsoft.PowerShell.Management\Move-Item @PSBoundParameters
+                if ($Destination -eq $boundaryRoot -and
+                    (Split-Path -Path $LiteralPath -Leaf) -eq "arduino-$($lock.arduino.ide.version)" -and
+                    -not $rollbackFault.Injected) {
+                    New-Item -ItemType SymbolicLink -Path (Join-Path $Destination 'rollback-link.txt') -Target $rollbackTarget | Out-Null
+                    $rollbackFault.Injected = $true
+                }
+            }
+
+            Assert-InstallerRejected `
+                -Arguments ($boundaryArguments + @{ Clean = $true; Offline = $true }) `
+                -ExpectedMessages @('*previous installation restored*', '*failed candidate retained at*')
+        }
+        Assert-InstallerTest $rollbackFault.Injected 'The final-verification fault was not injected.'
+        Assert-InstallerTest ((Get-Content -Raw -LiteralPath $originalRootMarker).Trim() -ceq 'previous installation') 'Rollback did not restore the original root.'
+        Assert-InstallerTest ((Get-Content -Raw -LiteralPath $rollbackTarget).Trim() -ceq 'external target') 'Rollback modified the link target.'
+        $null = & $installerPath @boundaryArguments -VerifyOnly
+        $failedCandidates = @(Get-ChildItem -LiteralPath $boundaryParent -Directory -Filter '.az3166-failed-*')
+        Assert-InstallerTest ($failedCandidates.Count -eq 1) 'Rollback did not retain exactly one failed candidate.'
+        $retainedLink = Join-Path $failedCandidates[0].FullName 'rollback-link.txt'
+        Assert-InstallerTest ([bool]((Get-Item -LiteralPath $retainedLink -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) 'Rollback followed or removed the retained link.'
+        Remove-Item -LiteralPath $retainedLink -Force
+        Remove-Item -LiteralPath $failedCandidates[0].FullName -Recurse -Force
+        $testCount++
+        Write-Host 'PASS failed linked candidates are quarantined and the previous installation is restored'
+
+        $lockedRollbackFault = @{ Handle = $null }
+        try {
+            & {
+                function Move-Item {
+                    [CmdletBinding()]
+                    param([string]$LiteralPath, [string]$Destination)
+
+                    Microsoft.PowerShell.Management\Move-Item @PSBoundParameters
+                    if ($Destination -eq $boundaryRoot -and
+                        (Split-Path -Path $LiteralPath -Leaf) -eq "arduino-$($lock.arduino.ide.version)" -and
+                        $null -eq $lockedRollbackFault.Handle) {
+                        New-Item -ItemType SymbolicLink -Path (Join-Path $Destination 'rollback-link.txt') -Target $rollbackTarget | Out-Null
+                        $lockedRollbackFault.Handle = [IO.File]::Open((Join-Path $Destination 'rollback-locked.txt'), [IO.FileMode]::Create, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+                    }
+                }
+
+                Assert-InstallerRejected `
+                    -Arguments ($boundaryArguments + @{ Clean = $true; Offline = $true }) `
+                    -ExpectedMessages @('*rollback requires recovery*', '*record: *.az3166-recovery-*.json*')
+            }
+        }
+        finally {
+            if ($null -ne $lockedRollbackFault.Handle) {
+                $lockedRollbackFault.Handle.Dispose()
+            }
+        }
+        $recoveryFiles = @(Get-ChildItem -LiteralPath $boundaryParent -File -Filter '.az3166-recovery-*.json')
+        Assert-InstallerTest ($recoveryFiles.Count -eq 1) 'Failed rollback did not preserve exactly one recovery record.'
+        $recoveryRecord = Get-Content -Raw -LiteralPath $recoveryFiles[0].FullName | ConvertFrom-Json
+        Assert-InstallerTest ($recoveryRecord.root -ceq $boundaryRoot) 'Recovery record identifies the wrong installation.'
+        Assert-InstallerTest ((Split-Path -Path $recoveryRecord.backupRoot -Parent) -ceq $boundaryParent) 'Recovery record identifies the wrong backup parent.'
+        Assert-InstallerTest ((Get-Content -Raw -LiteralPath (Join-Path $recoveryRecord.backupRoot 'rollback-original.txt')).Trim() -ceq 'previous installation') 'Failed rollback damaged the known-good backup.'
+        Assert-InstallerTest ((Get-Content -Raw -LiteralPath $rollbackTarget).Trim() -ceq 'external target') 'Failed rollback modified the link target.'
+        Remove-Item -LiteralPath (Join-Path $boundaryRoot 'rollback-link.txt') -Force
+        Remove-Item -LiteralPath $boundaryRoot -Recurse -Force
+        [IO.Directory]::Move($recoveryRecord.backupRoot, $boundaryRoot)
+        $null = & $installerPath @boundaryArguments -VerifyOnly
+        Remove-Item -LiteralPath $recoveryFiles[0].FullName -Force
+        $testCount++
+        Write-Host 'PASS blocked rollback preserves the known-good backup and explicit recovery paths'
     }
 }
 finally {
