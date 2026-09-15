@@ -184,6 +184,7 @@ jobs:
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
           Get-Az3166EvidenceSummary `
             -OutputDirectory (Join-Path $env:RUNNER_TEMP 'az3166-build-evidence/failure-fixtures') `
+            -ArtifactRootDirectory (Join-Path $env:RUNNER_TEMP 'az3166-build-evidence') `
             -ArtifactUrl $env:BUILD_EVIDENCE_URL |
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
 

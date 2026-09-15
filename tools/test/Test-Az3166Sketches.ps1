@@ -84,10 +84,13 @@ if ((Test-Path -LiteralPath $outputRoot) -and
     throw "Output directory must be empty; choose a fresh -OutputDirectory: $outputRoot"
 }
 $sketchNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($reservedName in @('compiler-versions.txt', 'az3166-build-lock.json', 'summary.md')) {
+    $null = $sketchNames.Add($reservedName)
+}
 foreach ($sketchDirectory in $sketchDirectories) {
     $sketchName = Split-Path -Leaf $sketchDirectory
     if (-not (Test-Az3166WindowsBasename $sketchName) -or -not $sketchNames.Add($sketchName)) {
-        throw "Sketch names must be unique safe directory names: $sketchName"
+        throw "Sketch names must be unique safe directory names and not reserved for evidence: $sketchName"
     }
     $destination = Join-Path $outputRoot $sketchName
     if (Test-Path -LiteralPath $destination) {

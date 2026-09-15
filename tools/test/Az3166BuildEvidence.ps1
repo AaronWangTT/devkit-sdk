@@ -156,7 +156,11 @@ function ConvertFrom-Az3166SizeReport {
 }
 
 function Get-Az3166EvidenceSummary {
-    param([string]$OutputDirectory, [string]$ArtifactUrl)
+    param(
+        [string]$OutputDirectory,
+        [string]$ArtifactUrl,
+        [string]$ArtifactRootDirectory = $OutputDirectory
+    )
 
     '### AZ3166 build evidence (compile only)'
     ''
@@ -178,6 +182,9 @@ function Get-Az3166EvidenceSummary {
         foreach ($name in @('build.log', 'size.txt', 'size.json') + @($context.artifacts | ForEach-Object { $_.name })) {
             if (-not (Test-Path -LiteralPath (Join-Path $directory.FullName $name) -PathType Leaf)) { continue }
             $relative = "$($directory.Name)/$name"
+            if ($ArtifactUrl) {
+                $relative = [IO.Path]::GetRelativePath($ArtifactRootDirectory, (Join-Path $directory.FullName $name)).Replace('\', '/')
+            }
             $target = if ($ArtifactUrl) { $ArtifactUrl } else { ($relative.Split('/') | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/' }
             $links[$name] = "[$relative]($target)"
         }

@@ -112,6 +112,8 @@ Total                 492
     Assert-EvidenceTest ($summary.Contains('[Failed/build.log](Failed/build.log)') -and $summary.Contains('| failed |')) 'An early failure was omitted from the evidence summary.'
     $summary = (Get-Az3166EvidenceSummary -OutputDirectory $summaryRoot -ArtifactUrl 'https://example.test/artifact') -join "`n"
     Assert-EvidenceTest ($summary.Contains('[Failed/build.log](https://example.test/artifact)')) 'CI summary did not link the retained artifact.'
+    $summary = (Get-Az3166EvidenceSummary -OutputDirectory $summaryRoot -ArtifactUrl 'https://example.test/artifact' -ArtifactRootDirectory $fixtureRoot) -join "`n"
+    Assert-EvidenceTest ($summary.Contains('[summary/Failed/build.log](https://example.test/artifact)')) 'Nested evidence labels are not relative to the uploaded archive root.'
     $summary = (Get-Az3166EvidenceSummary -OutputDirectory (Join-Path $fixtureRoot 'not-created')) -join "`n"
     Assert-EvidenceTest ($summary.Contains('No sketch evidence was produced.')) 'An interrupted setup could not be summarized.'
     Write-Host 'PASS failed builds without firmware retain working summary links'
@@ -145,6 +147,22 @@ Total                 492
     Assert-EvidenceTest ($before -ceq (Get-FileHash -LiteralPath $sentinel).Hash) 'Output-root preflight modified earlier evidence.'
     Assert-EvidenceTest (@(Get-ChildItem -LiteralPath $preflightOutput -Force).Count -eq 1) 'Output-root preflight created new evidence.'
     Write-Host 'PASS nonempty output roots are rejected without appending or overwriting prior evidence'
+
+    foreach ($reservedName in @('compiler-versions.txt', 'az3166-build-lock.json', 'summary.md', 'SUMMARY.MD')) {
+        $reservedSketch = Join-Path $fixtureRoot $reservedName
+        New-Item -ItemType Directory -Path $reservedSketch -Force | Out-Null
+        $unusedOutput = Join-Path $fixtureRoot 'reserved-name-output'
+        $failure = $null
+        try {
+            & $driver -ArduinoCli (Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })) `
+                -ArduinoDataDirectory $fixtureRoot -ArduinoUnitDirectory $preflightUnit `
+                -OutputDirectory $unusedOutput -Sketch $reservedSketch
+        }
+        catch { $failure = $_.Exception.Message }
+        Assert-EvidenceTest ($failure -like 'Sketch names must be unique safe directory names and not reserved for evidence:*') "Reserved evidence name was accepted: $reservedName"
+        Assert-EvidenceTest (-not (Test-Path -LiteralPath $unusedOutput)) 'Reserved-name rejection created output.'
+    }
+    Write-Host 'PASS root evidence filenames cannot collide with sketch names'
 
     if ($ArduinoCli) {
         Assert-EvidenceTest (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) 'Target evidence tests require -OutputDirectory.'

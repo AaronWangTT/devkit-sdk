@@ -38,6 +38,8 @@ are temporary; the retained build tree is not.
 The output root must be nonexistent or empty; nonempty roots are rejected before
 any writes, so root metadata and unrelated sketch results cannot mix between runs.
 Duplicate sketch-folder names are also rejected. Use a fresh output directory for another run.
+Root evidence names (`compiler-versions.txt`, `az3166-build-lock.json`, and
+`summary.md`) are reserved and cannot be used as sketch-directory names.
 The driver never deletes prior evidence. `-VerboseBuild` is retained for caller
 compatibility, but every build now uses `--verbose --warnings all` and streams
 both CLI output channels to the console and `build.log` as they arrive.
