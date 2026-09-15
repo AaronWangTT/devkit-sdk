@@ -145,6 +145,11 @@ $withoutOption.message = 'historical interface warning'
 Assert-WarningPolicyTest (Get-Az3166WarningResult -Diagnostics @($withoutOption) -Policy $policy -CheckStale).passed 'Narrow GCC 5 diagnostic without option was rejected.'
 $withoutOption.option = '-Wnew-option'
 Assert-WarningPolicyTest (-not (Get-Az3166WarningResult -Diagnostics @($withoutOption) -Policy $policy -CheckStale).passed) 'Message fallback must not exempt warnings with an emitted option.'
+$withoutOption.option = $null
+$withoutOption.message = 'unrelated option-less warning'
+$duplicate | Add-Member -NotePropertyName option -NotePropertyValue $null
+Assert-WarningPolicyTest (-not (Get-Az3166WarningResult -Diagnostics @($withoutOption) -Policy $policy -CheckStale).passed) 'A present null option bypassed the narrow message matcher.'
+$duplicate.PSObject.Properties.Remove('option')
 Write-Host 'PASS message fallback is anchored and applies only when GCC emits no option'
 
 foreach ($mutation in @(
@@ -156,6 +161,11 @@ foreach ($mutation in @(
     { param($fixture) $fixture.allowances[0].rationale = '' }
     { param($fixture) $fixture.allowances[0].messageRegex = '^.*$' }
     { param($fixture) $fixture.allowances[0].messageRegex = 'historical' }
+    { param($fixture) $fixture.allowances[0].messageRegex = $null }
+    { param($fixture) $fixture.allowances[0] | Add-Member -NotePropertyName option -NotePropertyValue $null }
+    { param($fixture) $fixture.allowances[0] | Add-Member -NotePropertyName option -NotePropertyValue '' }
+    { param($fixture) $fixture.allowances[0] | Add-Member -NotePropertyName option -NotePropertyValue ' ' }
+    { param($fixture) $fixture.allowances[0] | Add-Member -NotePropertyName option -NotePropertyValue 42 }
     { param($fixture) $fixture.allowances += $fixture.allowances[0] }
 )) {
     $fixture = $policy | ConvertTo-Json -Depth 8 | ConvertFrom-Json
@@ -172,6 +182,17 @@ try {
     $directory = Join-Path $fixtureRoot 'BoardInit'
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     $policy.allowances = @()
+    $inputFiles = [ordered]@{
+        lockSha256 = 'az3166-build-lock.json'
+        warningPolicySha256 = 'az3166-warning-policy.json'
+        packageLayoutSha256 = 'package-layout.json'
+    }
+    $lock | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $fixtureRoot 'az3166-build-lock.json') -Encoding utf8
+    $policy | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $fixtureRoot 'az3166-warning-policy.json') -Encoding utf8
+    $layout | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $fixtureRoot 'package-layout.json') -Encoding utf8
+    foreach ($entry in $inputFiles.GetEnumerator()) {
+        $context.environment | Add-Member -Force -NotePropertyName $entry.Key -NotePropertyValue (Get-FileHash -LiteralPath (Join-Path $fixtureRoot $entry.Value)).Hash.ToLowerInvariant()
+    }
     $context | Add-Member -NotePropertyName compile -NotePropertyValue @{ arguments = @('compile', '--warnings', 'all'); exitCode = 0 }
     $context | Add-Member -NotePropertyName status -NotePropertyValue 'passed'
     $context | Add-Member -NotePropertyName errors -NotePropertyValue @()
@@ -204,6 +225,26 @@ try {
     $report = Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $policy -Layout $layout
     Assert-WarningPolicyTest (-not $report.passed -and $report.evidenceIssues[0] -like '*did not select the all warning profile*') 'Retained evidence with suppressed warnings was accepted.'
     Write-Host 'PASS retained streams, per-sketch and aggregate failures, missing evidence, and complete-inventory gate'
+
+    $context.compile.arguments = @('compile', '--warnings', 'all')
+    foreach ($entry in $inputFiles.GetEnumerator()) {
+        $context | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $contextPath -Encoding utf8
+        $inputPath = Join-Path $fixtureRoot $entry.Value
+        $original = [IO.File]::ReadAllBytes($inputPath)
+        Add-Content -LiteralPath $inputPath -Value ' ' -Encoding utf8
+        $report = Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $policy -Layout $layout
+        Assert-WarningPolicyTest (-not $report.passed -and $report.evidenceIssues[0] -like "*Retained input hash mismatch* $($entry.Value)*") "Changed retained input was accepted: $($entry.Value)"
+        $sketchReport = Get-Content -Raw -LiteralPath (Join-Path $directory 'warnings.json') | ConvertFrom-Json
+        Assert-WarningPolicyTest (-not $sketchReport.passed -and $sketchReport.evidenceIssues[0] -like '*Retained input hash mismatch*') 'Per-sketch report ignored changed retained input.'
+        [IO.File]::WriteAllBytes($inputPath, $original)
+    }
+    $context | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $contextPath -Encoding utf8
+    Assert-WarningPolicyTest (Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $policy -Layout $layout).passed 'Restored retained input hashes were rejected.'
+    $context.environment.PSObject.Properties.Remove('packageLayoutSha256')
+    $context | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $contextPath -Encoding utf8
+    $report = Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $policy -Layout $layout
+    Assert-WarningPolicyTest (-not $report.passed -and $report.evidenceIssues[0] -like '*missing provenance*package-layout.json*') 'Missing context provenance was accepted.'
+    Write-Host 'PASS retained lock, policy, and layout hashes must match every build context; missing provenance fails'
 }
 finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue

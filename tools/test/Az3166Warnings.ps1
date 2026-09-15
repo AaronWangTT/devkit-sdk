@@ -175,8 +175,12 @@ function Assert-Az3166WarningPolicy {
         if ($pinnedSnapshot -and ($rule.component -cne $snapshots[$rule.sourceGlob].component -or $rule.version -cne $snapshots[$rule.sourceGlob].version)) {
             throw "Library-local vendor allowance must match its content-pinned snapshot: $($rule.id)"
         }
-        $hasOption = $null -ne $rule.PSObject.Properties['option'] -and -not [string]::IsNullOrWhiteSpace($rule.option)
-        $hasMessage = $null -ne $rule.PSObject.Properties['messageRegex'] -and -not [string]::IsNullOrWhiteSpace($rule.messageRegex)
+        $hasOption = $null -ne $rule.PSObject.Properties['option'] -and $rule.option -is [string] -and -not [string]::IsNullOrWhiteSpace($rule.option)
+        $hasMessage = $null -ne $rule.PSObject.Properties['messageRegex'] -and $rule.messageRegex -is [string] -and -not [string]::IsNullOrWhiteSpace($rule.messageRegex)
+        if (($rule.PSObject.Properties['option'] -and -not $hasOption) -or
+            ($rule.PSObject.Properties['messageRegex'] -and -not $hasMessage)) {
+            throw "Allowance matchers must be nonempty strings when present: $($rule.id)"
+        }
         if ($hasOption -eq $hasMessage) { throw "Allowance must specify exactly one option or messageRegex: $($rule.id)" }
         if ($hasOption -and $rule.option -cnotmatch '^-W[a-z][a-z0-9=-]*$') { throw "Invalid warning option: $($rule.id)" }
         if ($hasMessage) {
@@ -234,7 +238,8 @@ function Get-Az3166WarningResult {
                         if ($diagnostic.ownership -cne $rule.ownership) { continue }
                         $glob = '^' + [regex]::Escape($rule.sourceGlob).Replace('\*\*', '\S*').Replace('\*', '[^/]*') + '$'
                         if (-not [regex]::IsMatch($diagnostic.source, $glob, [Text.RegularExpressions.RegexOptions]::CultureInvariant)) { continue }
-                        if ($rule.PSObject.Properties['option'] -and $rule.option -ceq $diagnostic.option) { $rule }
+                        if ($rule.PSObject.Properties['option'] -and $rule.option -is [string] -and
+                            -not [string]::IsNullOrWhiteSpace($rule.option) -and $rule.option -ceq $diagnostic.option) { $rule }
                         elseif (-not $diagnostic.option -and $rule.PSObject.Properties['messageRegex'] -and
                             [regex]::IsMatch($diagnostic.message, $rule.messageRegex, [Text.RegularExpressions.RegexOptions]::CultureInvariant, [TimeSpan]::FromSeconds(1))) { $rule }
                     }
@@ -274,6 +279,18 @@ function Export-Az3166WarningEvidence {
     $evidenceIssues = [Collections.Generic.List[string]]::new()
     $failedSketches = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $sketches = [Collections.Generic.List[string]]::new()
+    $inputFiles = [ordered]@{
+        lockSha256 = 'az3166-build-lock.json'
+        warningPolicySha256 = 'az3166-warning-policy.json'
+        packageLayoutSha256 = 'package-layout.json'
+    }
+    $inputHashes = @{}
+    foreach ($entry in $inputFiles.GetEnumerator()) {
+        try {
+            $inputHashes[$entry.Key] = (Get-FileHash -LiteralPath (Join-Path $OutputDirectory $entry.Value) -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+        }
+        catch { $evidenceIssues.Add("Could not hash retained warning input $($entry.Value): $($_.Exception.Message)") }
+    }
     foreach ($directory in @(Get-ChildItem -LiteralPath $OutputDirectory -Directory -Force | Sort-Object Name -CaseSensitive)) {
         $contextPath = Join-Path $directory.FullName 'build-context.json'
         if (-not (Test-Path -LiteralPath $contextPath -PathType Leaf)) { continue }
@@ -282,6 +299,13 @@ function Export-Az3166WarningEvidence {
         $sketches.Add($sketch)
         $sketchDiagnostics = [Collections.Generic.List[object]]::new()
         $issues = [Collections.Generic.List[string]]::new()
+        foreach ($entry in $inputFiles.GetEnumerator()) {
+            if (-not $inputHashes.ContainsKey($entry.Key) -or
+                -not $context.environment.PSObject.Properties[$entry.Key] -or
+                $context.environment.($entry.Key) -cne $inputHashes[$entry.Key]) {
+                $issues.Add("Retained input hash mismatch or missing provenance: $($entry.Value) ($($entry.Key)).")
+            }
+        }
         $warningArguments = @($context.compile.arguments)
         $warningIndex = [Array]::IndexOf($warningArguments, '--warnings')
         if ($warningIndex -lt 0 -or $warningIndex -ge $warningArguments.Count - 1 -or

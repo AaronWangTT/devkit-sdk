@@ -99,7 +99,10 @@ Re-evaluate retained evidence without a compiler or network connection:
     -OutputDirectory C:/az3166-warning-evidence -RequireCompleteInventory
 ```
 
-This uses the retained lock, policy, and package manifest. A deliberately selected
+This uses the retained lock, policy, and package manifest.
+Each retained input's SHA-256 must match every sketch's recorded context;
+modified inputs or missing provenance fail both per-sketch and aggregate reports.
+A deliberately selected
 single sketch still rejects all first-party/unknown/ambiguous warnings, but
 cannot establish that rules for absent components are stale. Stale checks run
 only for the exact complete inventory, and the default driver/CI run requires
@@ -149,9 +152,22 @@ directory in `baseline`, `inventory`, `candidate`, and `failure-fixtures`.
 10. Executed all 19 native regression cases and the runtime-version test on Linux
     with the existing sanitizer-enabled host runner. No failures occurred.
 
+Review regressions additionally reject present-but-empty/non-string diagnostic
+matchers and verify the retained lock/policy/manifest hashes against every build
+context. Tests reproduce a null-option message-rule bypass, each independently
+modified retained input, and missing provenance; none can produce a passing report.
+
 These are compile and host-test results, not physical-board acceptance. PR 5
 requires firmware and full size-report equality; it does not claim complete
 ELF/map byte equality after source annotations.
+
+Hosted validation of implementation commit `f9ad477` passed in
+[Core package CI run 34982191804](https://github.com/AaronWangTT/devkit-sdk/actions/runs/34982191804).
+Both host jobs and cross-host package comparison passed. The fresh Windows
+inventory again reported zero first-party and 46 allowed warnings; the canonical
+package remained 5,497,641 bytes with its locked SHA-256. Both current packages
+were 5,498,366 bytes with SHA-256
+`07bce10485ed83c5da9c4c032b3ce6d15b6d74fd81ebb88679acca117a68b22d`.
 
 ## Findings For Later Review
 
@@ -174,3 +190,6 @@ ELF/map byte equality after source annotations.
 5. Removing unused names or moving source lines can change debug sizes or
    embedded diagnostic strings. The targeted annotations deliberately preserve
    them for Stage 1; broader dead-code/interface cleanup is deferred.
+6. Hosted CI reports Node.js 20 deprecation notices for the existing v4 Actions
+   and runs them on Node.js 24. All jobs pass. Reviewing/updating Action versions
+   is separate workflow maintenance, not part of this compiler-warning policy.
