@@ -43,7 +43,12 @@ if ($rootPath.Length -gt $maximumRootLength) {
 if (-not $DownloadCache) {
     $DownloadCache = "$rootPath-downloads"
 }
-$downloadCachePath = [IO.Path]::GetFullPath($DownloadCache).TrimEnd([IO.Path]::DirectorySeparatorChar)
+$downloadCachePath = [IO.Path]::GetFullPath($DownloadCache)
+$cacheVolumeRoot = [IO.Path]::GetPathRoot($downloadCachePath)
+if ($downloadCachePath.TrimEnd([IO.Path]::DirectorySeparatorChar) -ceq $cacheVolumeRoot.TrimEnd([IO.Path]::DirectorySeparatorChar)) {
+    throw "Refusing to use a volume root as the download cache: $downloadCachePath"
+}
+$downloadCachePath = $downloadCachePath.TrimEnd([IO.Path]::DirectorySeparatorChar)
 
 function Test-Az3166PathContains {
     param(
@@ -56,7 +61,10 @@ function Test-Az3166PathContains {
 }
 
 function Assert-Az3166NoReparsePoint {
-    param([string]$Path)
+    param(
+        [string]$Path,
+        [switch]$Recurse
+    )
 
     $currentPath = $Path
     while ($currentPath) {
@@ -71,10 +79,18 @@ function Assert-Az3166NoReparsePoint {
         }
         $currentPath = Split-Path -Path $currentPath -Parent
     }
+
+    if ($Recurse -and (Test-Path -LiteralPath $Path -PathType Container)) {
+        $linkedItem = Get-ChildItem -LiteralPath $Path -Force -Recurse -Attributes ReparsePoint -ErrorAction Stop |
+            Select-Object -First 1
+        if ($linkedItem) {
+            throw "Refusing to use a reparse point in an installer tree: $($linkedItem.FullName)"
+        }
+    }
 }
 
 Assert-Az3166NoReparsePoint -Path $rootPath
-Assert-Az3166NoReparsePoint -Path $downloadCachePath
+Assert-Az3166NoReparsePoint -Path $downloadCachePath -Recurse
 
 if (
     $rootPath.Equals($downloadCachePath, [StringComparison]::OrdinalIgnoreCase) -or
@@ -91,6 +107,7 @@ $installerId = 'devkit-sdk.az3166-build-tools'
 function Get-Az3166InstallerPaths {
     param([string]$InstallationRoot)
 
+    Assert-Az3166NoReparsePoint -Path $InstallationRoot -Recurse
     $dataDirectory = Join-Path $InstallationRoot 'portable'
     $compilerRoot = Join-Path $dataDirectory "packages/AZ3166/tools/arm-none-eabi-gcc/$($buildLock.tools.armNoneEabiGcc.version)"
     $openOcdRoot = Join-Path $dataDirectory "packages/AZ3166/tools/openocd/$($buildLock.tools.openocd.version)"
@@ -324,6 +341,7 @@ function Get-Az3166AssetProblem {
         [string]$Path
     )
 
+    Assert-Az3166NoReparsePoint -Path $Path -Recurse
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return 'missing'
     }
@@ -371,6 +389,7 @@ else {
                 throw "Downloaded $($asset.Name) is invalid: $problem"
             }
             if (Test-Path -LiteralPath $cachePath) {
+                Assert-Az3166NoReparsePoint -Path $cachePath -Recurse
                 Remove-Item -LiteralPath $cachePath -Recurse -Force
             }
             Move-Item -LiteralPath $temporaryPath -Destination $cachePath
@@ -394,6 +413,7 @@ try {
     Expand-Archive `
         -LiteralPath (Join-Path $downloadCachePath $buildLock.arduino.ide.windows.archiveFileName) `
         -DestinationPath $ideExtractionRoot
+    Assert-Az3166NoReparsePoint -Path $ideExtractionRoot -Recurse
     $candidateRoot = Join-Path $ideExtractionRoot "arduino-$($buildLock.arduino.ide.version)"
     if (-not (Test-Path -LiteralPath (Join-Path $candidateRoot 'arduino_debug.exe') -PathType Leaf)) {
         throw 'Arduino IDE archive does not contain the expected root directory.'
@@ -403,6 +423,7 @@ try {
     Expand-Archive `
         -LiteralPath (Join-Path $downloadCachePath $buildLock.arduino.cli.windowsX64.archiveFileName) `
         -DestinationPath $cliExtractionRoot
+    Assert-Az3166NoReparsePoint -Path $cliExtractionRoot -Recurse
     $cliExecutables = @(Get-ChildItem -LiteralPath $cliExtractionRoot -Filter 'arduino-cli.exe' -File -Recurse)
     if ($cliExecutables.Count -ne 1) {
         throw 'Arduino CLI archive does not contain exactly one arduino-cli.exe.'
@@ -413,6 +434,7 @@ try {
     Expand-Archive `
         -LiteralPath (Join-Path $downloadCachePath $buildLock.arduino.unit.archive.archiveFileName) `
         -DestinationPath $unitExtractionRoot
+    Assert-Az3166NoReparsePoint -Path $unitExtractionRoot -Recurse
     $unitProperties = @(Get-ChildItem -LiteralPath $unitExtractionRoot -Filter 'library.properties' -File -Recurse)
     if ($unitProperties.Count -ne 1) {
         throw 'ArduinoUnit archive does not contain exactly one library.properties file.'
@@ -498,6 +520,7 @@ try {
         throw "Installed AZ3166 build tools are invalid:`n - $($candidateProblems -join "`n - ")"
     }
 
+    Assert-Az3166NoReparsePoint -Path $rootPath -Recurse
     $hadPreviousRoot = Test-Path -LiteralPath $rootPath -PathType Container
     if ($hadPreviousRoot) {
         if (-not (Get-ChildItem -LiteralPath $rootPath -Force | Select-Object -First 1)) {
@@ -532,6 +555,7 @@ try {
         }
     }
     catch {
+        Assert-Az3166NoReparsePoint -Path $rootPath -Recurse
         Remove-Item -LiteralPath $rootPath -Recurse -Force -ErrorAction SilentlyContinue
         if ($hadPreviousRoot -and (Test-Path -LiteralPath $backupRoot -PathType Container)) {
             Move-Item -LiteralPath $backupRoot -Destination $rootPath
@@ -540,16 +564,22 @@ try {
     }
 
     if ($hadPreviousRoot -and (Test-Path -LiteralPath $backupRoot -PathType Container)) {
+        Assert-Az3166NoReparsePoint -Path $backupRoot -Recurse
         Remove-Item -LiteralPath $backupRoot -Recurse -Force
     }
 }
 finally {
-    Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
-    if (
-        (Test-Path -LiteralPath $backupRoot -PathType Container) -and
-        -not (Test-Path -LiteralPath $rootPath)
-    ) {
-        Move-Item -LiteralPath $backupRoot -Destination $rootPath
+    try {
+        Assert-Az3166NoReparsePoint -Path $stagingRoot -Recurse
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    finally {
+        if (
+            (Test-Path -LiteralPath $backupRoot -PathType Container) -and
+            -not (Test-Path -LiteralPath $rootPath)
+        ) {
+            Move-Item -LiteralPath $backupRoot -Destination $rootPath
+        }
     }
 }
 

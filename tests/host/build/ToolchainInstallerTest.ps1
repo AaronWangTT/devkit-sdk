@@ -18,7 +18,7 @@ $installerPath = Join-Path $repositoryRoot 'tools/build/Install-Az3166BuildTools
 $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
 $volumeRoot = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
 $fixtureRoot = Join-Path $volumeRoot "ati-$([guid]::NewGuid().ToString('N'))"
-$testCount = 22
+$testCount = 24
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 
 function Assert-InstallerTest {
@@ -83,8 +83,11 @@ try {
         Assert-InstallerRejected `
             -Arguments @{ Root = $volumeRootPath; DownloadCache = $cache; VerifyOnly = $true } `
             -ExpectedMessages @('*Refusing to manage a volume root:*')
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $root; DownloadCache = $volumeRootPath; VerifyOnly = $true } `
+            -ExpectedMessages @('*Refusing to use a volume root as the download cache:*')
     }
-    Write-Host 'PASS volume roots are rejected before installation access'
+    Write-Host 'PASS installation and cache volume roots are rejected before access'
 
     Assert-InstallerRejected `
         -Arguments @{ Root = $root; DownloadCache = (Join-Path $root 'downloads') } `
@@ -197,6 +200,57 @@ try {
             '*expected exactly one openocd.exe*'
         )
     Write-Host 'PASS partial managed installations are diagnosed'
+
+    $linkedTarget = Join-Path $fixtureRoot 'linked-target'
+    New-Item -ItemType Directory -Path $linkedTarget | Out-Null
+    $linkedSentinel = Join-Path $linkedTarget 'keep.txt'
+    Set-Content -LiteralPath $linkedSentinel -Value 'preserved' -Encoding ascii
+    foreach ($relativeLinkPath in @(
+        'arduino-cli.exe',
+        "portable/packages/AZ3166/tools/arm-none-eabi-gcc/$($lock.tools.armNoneEabiGcc.version)/bin/arm-none-eabi-g++.exe",
+        "portable/$($lock.boardManager.indexPath)",
+        'nested/dangling.txt',
+        'nested/junction'
+    )) {
+        $linkedPath = Join-Path $root $relativeLinkPath
+        New-Item -ItemType Directory -Path (Split-Path -Parent $linkedPath) -Force | Out-Null
+        if ($relativeLinkPath -eq 'nested/junction') {
+            New-Item -ItemType Junction -Path $linkedPath -Target $linkedTarget | Out-Null
+        }
+        else {
+            $linkTarget = if ($relativeLinkPath -eq 'nested/dangling.txt') { Join-Path $linkedTarget 'missing.txt' } else { $linkedSentinel }
+            New-Item -ItemType SymbolicLink -Path $linkedPath -Target $linkTarget | Out-Null
+        }
+        foreach ($arguments in @(
+            @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true },
+            @{ Root = $root; DownloadCache = $cache; Offline = $true },
+            @{ Root = $root; DownloadCache = $cache; Clean = $true; Offline = $true }
+        )) {
+            Assert-InstallerRejected -Arguments $arguments -ExpectedMessages @('*Refusing to use a reparse point*')
+        }
+        Assert-InstallerTest ((Get-Content -Raw -LiteralPath $linkedSentinel).Trim() -ceq 'preserved') 'Managed-tree validation modified the link target.'
+        Remove-Item -LiteralPath $linkedPath -Force
+    }
+    Write-Host 'PASS managed file links and nested junctions are rejected before use or cleanup'
+
+    New-Item -ItemType Directory -Path $cache | Out-Null
+    $linkedCacheEntry = Join-Path $cache $lock.arduino.cli.windowsX64.archiveFileName
+    New-Item -ItemType SymbolicLink -Path $linkedCacheEntry -Target $linkedSentinel | Out-Null
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $root; DownloadCache = $cache } `
+        -ExpectedMessages @('*Refusing to use a reparse point*')
+    Remove-Item -LiteralPath $linkedCacheEntry -Force
+    New-Item -ItemType Directory -Path $linkedCacheEntry | Out-Null
+    $nestedCacheLink = Join-Path $linkedCacheEntry 'junction'
+    New-Item -ItemType Junction -Path $nestedCacheLink -Target $linkedTarget | Out-Null
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $root; DownloadCache = $cache } `
+        -ExpectedMessages @('*Refusing to use a reparse point*')
+    Assert-InstallerTest ((Get-Content -Raw -LiteralPath $linkedSentinel).Trim() -ceq 'preserved') 'Cache validation modified the link target.'
+    Remove-Item -LiteralPath $nestedCacheLink -Force
+    Remove-Item -LiteralPath $cache -Recurse -Force
+    Remove-Item -LiteralPath $linkedTarget -Recurse -Force
+    Write-Host 'PASS linked cache entries are rejected before repair'
 
     $unitPropertiesPath = Join-Path $root 'test-libraries/ArduinoUnit/library.properties'
     New-Item -ItemType Directory -Path (Split-Path -Parent $unitPropertiesPath) -Force | Out-Null
@@ -336,8 +390,29 @@ try {
         $secondBoundary = & $installerPath @boundaryArguments -Offline
         Assert-InstallerTest (-not $secondBoundary.Changed) 'The second boundary setup changed the installation.'
         $null = & $installerPath @boundaryArguments -VerifyOnly
+        $cleanBoundary = & $installerPath @boundaryArguments -Clean -Offline
+        Assert-InstallerTest $cleanBoundary.Changed 'The clean boundary replacement did not report a change.'
+        Assert-InstallerTest (@(Get-ChildItem -LiteralPath $boundaryParent -Filter '.az3166-*' -Force).Count -eq 0) 'Boundary replacement left staging or backup directories.'
         $testCount++
-        Write-Host 'PASS full offline installation at a 70-character root with a long parent'
+        Write-Host 'PASS full offline installation and replacement at a 70-character root with a long parent'
+
+        $externalCli = Join-Path $fixtureRoot 'boundary-cli.exe'
+        Move-Item -LiteralPath $boundaryTools.ArduinoCliPath -Destination $externalCli
+        try {
+            New-Item -ItemType SymbolicLink -Path $boundaryTools.ArduinoCliPath -Target $externalCli | Out-Null
+            foreach ($mode in @(@{ VerifyOnly = $true }, @{ Clean = $true; Offline = $true })) {
+                Assert-InstallerRejected `
+                    -Arguments ($boundaryArguments + $mode) `
+                    -ExpectedMessages @('*Refusing to use a reparse point*')
+            }
+            Assert-InstallerTest (Test-Path -LiteralPath $externalCli -PathType Leaf) 'Verification removed the external CLI target.'
+        }
+        finally {
+            Remove-Item -LiteralPath $boundaryTools.ArduinoCliPath -Force -ErrorAction SilentlyContinue
+            Move-Item -LiteralPath $externalCli -Destination $boundaryTools.ArduinoCliPath
+        }
+        $testCount++
+        Write-Host 'PASS linked executables in a complete installation are rejected before verification or clean setup'
     }
 }
 finally {

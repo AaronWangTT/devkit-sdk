@@ -58,7 +58,10 @@ Windows path-length limit.
 The Windows CI job also runs `ToolchainInstallerTest.ps1 -DownloadCache` against
 the verified downloads. It performs a full offline installation at a 70-character
 root with a long parent directory and a one-character leaf, then checks an
-unchanged second setup and `-VerifyOnly`.
+unchanged second setup, `-VerifyOnly`, and clean offline replacement without
+staging or backup leftovers. It also replaces the installed CLI with a symbolic
+link and verifies that verification and clean setup reject the linked tree
+without removing the external executable.
 
 The candidate's staging prefix is longer than the final root. Extraction and
 Board Manager installation run there, but the compiler is only queried for its
