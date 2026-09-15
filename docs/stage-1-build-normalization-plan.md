@@ -54,7 +54,7 @@ contract. This changes where values are read, not the values or build process.
     Windows archive metadata published by the pinned index;
   - ArduinoUnit version and archive metadata;
   - FQBN, supported CI hosts, PowerShell minimum, required Git capability, and
-    the unresolved short-path constraint.
+    the measured Windows short-path constraint with a 70-character root limit.
 - `tools/build/Az3166Build.Common.ps1` loads and validates the schema and exports
   selected values to GitHub Actions without duplicating them in YAML.
 - `tests/host/build/BuildConfigurationTest.ps1` rejects malformed hashes,
@@ -120,6 +120,11 @@ The installer must:
 
 CI calls this script directly. Documentation uses the same command and consumes
 the returned paths when invoking `Test-Az3166Sketches.ps1`.
+
+CI caches verified downloads only, not managed installation roots. Ownership
+manifests remain bound to the absolute installation root, so each runner creates
+or verifies its own installation from those portable downloads. The cache key
+includes the lock and direct installer script dependencies.
 
 ### Windows Path Experiment
 

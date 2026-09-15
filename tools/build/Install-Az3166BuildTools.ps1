@@ -30,10 +30,12 @@ if ($Clean -and $VerifyOnly) {
 . (Join-Path $PSScriptRoot '../package/Az3166PackageLayout.ps1')
 
 $buildLock = Get-Az3166BuildLock -Path $LockPath
-$rootPath = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar)
-if ($rootPath -ceq [IO.Path]::GetPathRoot($rootPath)) {
+$rootPath = [IO.Path]::GetFullPath($Root)
+$volumeRoot = [IO.Path]::GetPathRoot($rootPath)
+if ($rootPath.TrimEnd([IO.Path]::DirectorySeparatorChar) -ceq $volumeRoot.TrimEnd([IO.Path]::DirectorySeparatorChar)) {
     throw "Refusing to manage a volume root: $rootPath"
 }
+$rootPath = $rootPath.TrimEnd([IO.Path]::DirectorySeparatorChar)
 $maximumRootLength = [int]$buildLock.hostPrerequisites.windows.maximumToolchainRootLength
 if ($rootPath.Length -gt $maximumRootLength) {
     throw "AZ3166 toolchain root length $($rootPath.Length) exceeds the supported maximum of $maximumRootLength`: $rootPath"

@@ -76,6 +76,13 @@ try {
         -ExpectedMessages @('*-Clean and -VerifyOnly cannot be used together.*')
     Write-Host 'PASS incompatible modes are rejected'
 
+    foreach ($volumeRootPath in @($volumeRoot, $volumeRoot.Replace('\', '/'))) {
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $volumeRootPath; DownloadCache = $cache; VerifyOnly = $true } `
+            -ExpectedMessages @('*Refusing to manage a volume root:*')
+    }
+    Write-Host 'PASS volume roots are rejected before installation access'
+
     Assert-InstallerRejected `
         -Arguments @{ Root = $root; DownloadCache = (Join-Path $root 'downloads') } `
         -ExpectedMessages @('*-Root and -DownloadCache must be separate directories.*')
@@ -298,4 +305,4 @@ finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host '20 toolchain-installer tests passed.'
+Write-Host '21 toolchain-installer tests passed.'

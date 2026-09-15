@@ -120,7 +120,10 @@ Assert-BuildConfigurationTest ($workflow.Contains('-Offline')) 'Core package CI 
 Assert-BuildConfigurationTest (-not $workflow.Contains('Invoke-WebRequest')) 'Core package CI still owns a toolchain download.'
 Assert-BuildConfigurationTest (-not $workflow.Contains('arduino/setup-arduino-cli')) 'Core package CI still uses a separate Arduino CLI installer.'
 Assert-BuildConfigurationTest ($workflow.Contains('steps.build-lock.outputs.short_toolchain_root_name')) 'Core package CI does not use the locked short toolchain-root name.'
-$toolchainCacheKey = [regex]::Match($workflow, '(?m)^\s+key: az3166-build-tools-.*$').Value
+$toolchainCacheStep = [regex]::Match($workflow, '(?ms)^      - name: Cache AZ3166 [^\r\n]+\r?\n.*?(?=^      - name:)').Value
+Assert-BuildConfigurationTest ($toolchainCacheStep.Contains('path: ${{ runner.temp }}/az3166-downloads')) 'The toolchain cache must contain portable downloads only.'
+Assert-BuildConfigurationTest (-not $toolchainCacheStep.Contains('short_toolchain_root_name')) 'CI must not restore an installation owned by another absolute root.'
+$toolchainCacheKey = [regex]::Match($workflow, '(?m)^\s+key: az3166-build-downloads-.*$').Value
 foreach ($cacheInput in @(
     'tools/build/az3166-build-lock.json',
     'tools/build/Install-Az3166BuildTools.ps1',
