@@ -142,10 +142,10 @@ function Assert-Az3166WarningPolicy {
     if ($sketches.Count -ne 13) { throw 'Warning policy must cover the existing 13-sketch inventory.' }
     $snapshots = @{}
     foreach ($snapshot in $Policy.vendorSnapshots) {
-        if ($snapshot.source -cnotmatch '^libraries/[A-Za-z0-9_-]+/src/[A-Za-z0-9_-]+\.c$' -or
+        if ($snapshot.source -cnotmatch '^(?:libraries/[A-Za-z0-9_-]+/src|src/extensions/[A-Za-z0-9_-]+)(?:/[A-Za-z0-9_-]+)*/[A-Za-z0-9_-]+\.(?:c|h)$' -or
             $snapshot.version -cnotmatch '^snapshot@[0-9a-f]{40}$' -or $snapshot.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
             [string]::IsNullOrWhiteSpace($snapshot.component) -or $snapshots.ContainsKey($snapshot.source)) {
-            throw 'Library-local vendor snapshots require unique exact source paths, components, immutable versions, and SHA-256 pins.'
+            throw 'Component-local vendor snapshots require unique exact source paths, components, immutable versions, and SHA-256 pins.'
         }
         $snapshots[$snapshot.source] = $snapshot
     }
@@ -173,7 +173,7 @@ function Assert-Az3166WarningPolicy {
             throw "Allowance source glob must name source files within $scope : $($rule.id)"
         }
         if ($pinnedSnapshot -and ($rule.component -cne $snapshots[$rule.sourceGlob].component -or $rule.version -cne $snapshots[$rule.sourceGlob].version)) {
-            throw "Library-local vendor allowance must match its content-pinned snapshot: $($rule.id)"
+            throw "Component-local vendor allowance must match its content-pinned snapshot: $($rule.id)"
         }
         $hasOption = $null -ne $rule.PSObject.Properties['option'] -and $rule.option -is [string] -and -not [string]::IsNullOrWhiteSpace($rule.option)
         $hasMessage = $null -ne $rule.PSObject.Properties['messageRegex'] -and $rule.messageRegex -is [string] -and -not [string]::IsNullOrWhiteSpace($rule.messageRegex)

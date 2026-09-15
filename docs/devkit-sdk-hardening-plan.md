@@ -16,6 +16,12 @@ changes remain future work.
 
 ## Current Checkpoint
 
+The counts and package hashes below record the original PR #10 reorganization
+baseline. The later ownership adjustments move SerialLog into AzureIoT, expose
+OTA as a library, and colocate the unchanged third-party parser with the HTTP
+client. See the [current layout and compatibility notes](../README.md#repository-layout)
+for those changes; the historical release artifacts are not rewritten.
+
 - The remaining 728 platform files were classified as 24 Core files, 30 BSP and
   integration files, 54 extension files, 616 vendor files, and 4 metadata files.
   Every move preserves the original Git blob. The 210 library files, ten library
@@ -339,8 +345,8 @@ compilation behavior during the structural migration.
 
 ## Concrete Inventory Findings
 
-- There are 10 library packages with `library.properties` and 15 library example
-  sketches. These examples were outside the original `AZ3166/tests` scan and
+- There are now 11 library packages with `library.properties`, including OTA,
+  and 15 library example sketches. These examples were outside the original `AZ3166/tests` scan and
   remain outside the new `examples` and `tests/hardware` scan; they are not
   covered by the 13-sketch result.
 - Keep library examples under `libraries/<LibraryName>/examples` so ownership,
@@ -361,16 +367,16 @@ compilation behavior during the structural migration.
 
 ## Ownership Map
 
-The final classification is implemented by the package map. These ownership
-directories are not installed paths; filenames and package destinations remain
-the same as before the move.
+The package map implements the ownership split summarized below. Ownership
+directories are not installed paths. SerialLog and OTA now have library-owned
+installed paths; the colocated HTTP parser retains its original installed path.
 
 | Current content | Proposed home | Initial treatment |
 | --- | --- | --- |
 | Generic Arduino API implementations | `src/core/arduino` | Preserve API names and packaged Core paths. |
 | AZ3166 startup, pin/serial adapters, variants, linker scripts, boot support | `src/bsp/az3166` | Classify board dependencies per file; preserve addresses and ABI. |
 | Core-hosted CLI, HTTP, NTP, telemetry, display services | `src/extensions/<service>` | Keep existing header exposure and compilation through staging. |
-| Ten Arduino library packages | `libraries/<existing-name>` | Keep metadata, public includes, and library examples together. |
+| Arduino library packages, including OTA | `libraries/<name>` | Keep metadata, public includes, and library examples together. |
 | Mbed/Azure/MXCHIP snapshots and vendor binaries | `vendor/<component>` and `vendor/prebuilt/az3166` | Preserve licenses and provenance; do not imply all binaries have source. |
 | AzureIotHubExample and VoiceToTwitter example project | `examples/cloud` | Move complete sketch projects; preserve sketch/folder naming. |
 | HttpTest manual stress diagnostic | `tests/hardware/manual/HttpTest` | Retain its compile-only coverage; device execution is manual. |
@@ -413,23 +419,21 @@ devkit-sdk/
     bsp/az3166/
     extensions/
       configuration/
-      diagnostics/
       display/
       http-client/
+        http_parser/
       http-server/
       network/
-      ota/
       telemetry/
       time/
   libraries/
-    Audio/ AudioV2/ AzureIoT/ FileSystem/ MQTT/
+    Audio/ AudioV2/ AzureIoT/ FileSystem/ MQTT/ OTA/
     Sensors/ SPI/ WebSocket/ WiFi/ Wire/
   vendor/
     mbed-os/
     azure-iot-sdk-c/
     mxchip/
     prebuilt/az3166/
-    http-parser/
     mbed-memory-status/
   platform/az3166/
     boards.txt
