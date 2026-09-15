@@ -35,8 +35,9 @@ sketches. The extra `build` directory retains generated source, objects, archive
 and other intermediate output. Private platform/library staging and downloads
 are temporary; the retained build tree is not.
 
-An existing per-sketch output directory is rejected before compilation, as are
-duplicate sketch-folder names. Use a fresh output directory for another run.
+The output root must be nonexistent or empty; nonempty roots are rejected before
+any writes, so root metadata and unrelated sketch results cannot mix between runs.
+Duplicate sketch-folder names are also rejected. Use a fresh output directory for another run.
 The driver never deletes prior evidence. `-VerboseBuild` is retained for caller
 compatibility, but every build now uses `--verbose --warnings all` and streams
 both CLI output channels to the console and `build.log` as they arrive.
@@ -96,7 +97,11 @@ an undefined-symbol link error, and a later successful sketch:
 The expected failures make the driver fail; the harness succeeds only after
 checking both diagnostics, native exit codes, retained generated source and
 partial map/objects, the later successful build's complete evidence, artifact
-hashes, and rejection of output reuse without modifying prior evidence.
+hashes, both compilation databases, selection by an `.ino` file path, and
+rejection of output reuse without modifying prior evidence. File selections
+retain the original driver behavior: they select their parent sketch directory.
+The pinned CLI still requires a main `.ino` or `.pde` matching that directory's
+name; a differently named file without that main file is not a valid sketch.
 
 ## Validation Record
 

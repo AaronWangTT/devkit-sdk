@@ -112,8 +112,8 @@ single project. The toolchain root must not exceed 70 characters.
 
 `-OutputDirectory` is required. Each sketch gets its own retained verbose log,
 build context, tool identities, compilation database, sketch-named firmware,
-raw and structured sizes, and intermediate build files. Existing sketch output
-directories are rejected; choose a fresh output directory for another run.
+raw and structured sizes, and intermediate build files. Nonempty output roots
+are rejected; choose a fresh output directory for another run.
 All requested sketches are attempted, and any build or evidence failure makes
 the command fail. `-VerboseBuild` remains accepted but output is always verbose.
 See [build evidence and validation findings](docs/persistent-build-evidence.md)

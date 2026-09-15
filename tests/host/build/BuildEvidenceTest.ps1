@@ -123,9 +123,31 @@ Total                 492
     Assert-EvidenceTest ($workflow.Contains('Validate failed-build evidence') -and $workflow.Contains('Get-Az3166EvidenceSummary')) 'CI is missing failed-build validation or the evidence summary.'
     Write-Host 'PASS CI retains complete build evidence on failure and publishes a linked summary'
 
+    $driver = Join-Path $repositoryRoot 'tools/test/Test-Az3166Sketches.ps1'
+    $preflightSketch = Join-Path $fixtureRoot 'Preflight'
+    $preflightUnit = Join-Path $fixtureRoot 'ArduinoUnit'
+    New-Item -ItemType Directory -Path $preflightSketch, $preflightUnit | Out-Null
+    Set-Content -LiteralPath (Join-Path $preflightSketch 'Preflight.ino') -Value 'void setup() {} void loop() {}' -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $preflightUnit 'library.properties') -Value 'name=ArduinoUnit' -Encoding utf8
+    $preflightOutput = Join-Path $fixtureRoot 'prior evidence'
+    New-Item -ItemType Directory -Path $preflightOutput | Out-Null
+    $sentinel = Join-Path $preflightOutput 'compiler-versions.txt'
+    Set-Content -LiteralPath $sentinel -Value 'prior-run' -Encoding utf8
+    $before = (Get-FileHash -LiteralPath $sentinel).Hash
+    $failure = $null
+    try {
+        & $driver -ArduinoCli (Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })) `
+            -ArduinoDataDirectory $fixtureRoot -ArduinoUnitDirectory $preflightUnit `
+            -OutputDirectory $preflightOutput -Sketch (Join-Path $preflightSketch 'Preflight.ino')
+    }
+    catch { $failure = $_.Exception.Message }
+    Assert-EvidenceTest ($failure -like 'Output directory must be empty;*') 'A mixed-run output root was accepted.'
+    Assert-EvidenceTest ($before -ceq (Get-FileHash -LiteralPath $sentinel).Hash) 'Output-root preflight modified earlier evidence.'
+    Assert-EvidenceTest (@(Get-ChildItem -LiteralPath $preflightOutput -Force).Count -eq 1) 'Output-root preflight created new evidence.'
+    Write-Host 'PASS nonempty output roots are rejected without appending or overwriting prior evidence'
+
     if ($ArduinoCli) {
         Assert-EvidenceTest (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) 'Target evidence tests require -OutputDirectory.'
-        $driver = Join-Path $repositoryRoot 'tools/test/Test-Az3166Sketches.ps1'
         $sources = [ordered]@{
             ACompileFailure = "#error AZ3166_EXPECTED_COMPILE_FAILURE`nvoid setup() {}`nvoid loop() {}`n"
             BLinkFailure = "extern void AZ3166_EXPECTED_LINK_FAILURE();`nvoid setup() { AZ3166_EXPECTED_LINK_FAILURE(); }`nvoid loop() {}`n"
@@ -136,7 +158,8 @@ Total                 492
                 $directory = Join-Path $fixtureRoot $source.Key
                 New-Item -ItemType Directory -Path $directory | Out-Null
                 Set-Content -LiteralPath (Join-Path $directory "$($source.Key).ino") -Value $source.Value -Encoding utf8
-                $directory
+                if ($source.Key -eq 'ZValidEvidence') { Join-Path $directory "$($source.Key).ino" }
+                else { $directory }
             }
         )
         $arguments = @{
@@ -170,9 +193,12 @@ Total                 492
                 continue
             }
             Assert-EvidenceTest ($context.status -eq 'passed' -and $context.compile.exitCode -eq 0 -and $context.compilationDatabase.exitCode -eq 0) 'Valid sketch after failures was not compiled successfully.'
-            foreach ($file in @('compile_commands.json', 'size.txt', 'size.json', "$name.ino.elf", "$name.ino.map", "$name.ino.bin")) {
+            foreach ($file in @('compile_commands.json', 'compile_commands.build.json', 'size.txt', 'size.json', "$name.ino.elf", "$name.ino.map", "$name.ino.bin")) {
                 Assert-EvidenceTest ((Get-Item -LiteralPath (Join-Path $directory $file)).Length -gt 0) "Missing retained $name/$file"
             }
+            $originalEntries = Assert-Az3166CompilationDatabase -Path (Join-Path $directory 'compile_commands.build.json') `
+                -SketchSource (Join-Path $directory "build/sketch/$name.ino.cpp")
+            Assert-EvidenceTest ($originalEntries -gt 0) 'The ordinary-build database does not describe the selected sketch file.'
             foreach ($artifact in $context.artifacts) {
                 $retainedHash = (Get-FileHash -LiteralPath (Join-Path $directory $artifact.name) -Algorithm SHA256).Hash.ToLowerInvariant()
                 $originalHash = (Get-FileHash -LiteralPath (Join-Path $directory "build/$($artifact.name)") -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -190,8 +216,16 @@ Total                 492
         $failure = $null
         try { & $driver @arguments }
         catch { $failure = $_.Exception.Message }
-        Assert-EvidenceTest ($failure -like 'Sketch output already exists;*') 'A repeated run accepted stale evidence.'
+        Assert-EvidenceTest ($failure -like 'Output directory must be empty;*') 'A repeated run accepted stale evidence.'
         Assert-EvidenceTest ($before -ceq (Get-FileHash -LiteralPath (Join-Path $OutputDirectory 'ZValidEvidence/ZValidEvidence.ino.bin')).Hash) 'Rejected reuse modified prior evidence.'
+        $invalidLayout = Join-Path $fixtureRoot 'MismatchedName'
+        New-Item -ItemType Directory -Path $invalidLayout | Out-Null
+        Set-Content -LiteralPath (Join-Path $invalidLayout 'Other.ino') -Value 'void setup() {} void loop() {}' -Encoding utf8
+        $fqbn = (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json') | ConvertFrom-Json).arduino.fqbn
+        $invalidResult = Invoke-Az3166EvidenceProcess -FilePath $ArduinoCli `
+            -Arguments @('compile', '--fqbn', $fqbn, '--only-compilation-database', $invalidLayout) `
+            -LogPath (Join-Path $OutputDirectory 'invalid-sketch-layout.log') -CaptureOutput
+        Assert-EvidenceTest ($invalidResult.ExitCode -ne 0 -and $invalidResult.Output.Contains('main file missing from sketch')) 'Pinned CLI unexpectedly accepted a sketch without its matching main file.'
         Write-Host 'PASS real compiler/linker failures, complete diagnostics, partial artifacts, continued builds, native statuses, identities, space-containing paths, and stale-evidence rejection'
     }
 }

@@ -78,6 +78,11 @@ if ($sketchDirectories.Count -eq 0) {
 }
 
 $outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
+if ((Test-Path -LiteralPath $outputRoot) -and
+    (-not (Test-Path -LiteralPath $outputRoot -PathType Container) -or
+        @(Get-ChildItem -LiteralPath $outputRoot -Force).Count -gt 0)) {
+    throw "Output directory must be empty; choose a fresh -OutputDirectory: $outputRoot"
+}
 $sketchNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($sketchDirectory in $sketchDirectories) {
     $sketchName = Split-Path -Leaf $sketchDirectory
