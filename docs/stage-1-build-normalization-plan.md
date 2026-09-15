@@ -255,6 +255,10 @@ Canonicalize only paths and formatting introduced by Arduino CLI, then compare:
 Any unexplained token or binary difference blocks this PR. Expected warning-text
 differences belong in PR 5, not this mechanical normalization.
 
+The implementation, same-root harness, validation record, and deferred findings
+are documented in
+[Compiler Parameter Normalization](compiler-parameter-normalization.md).
+
 ## PR 5: First-Party Warning Policy
 
 ### Purpose

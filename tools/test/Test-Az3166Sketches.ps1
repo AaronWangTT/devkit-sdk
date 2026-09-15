@@ -226,7 +226,8 @@ try {
             continue
         }
         try {
-            $result = Invoke-Az3166EvidenceProcess -FilePath $arduinoCliCommand.Source -Arguments $arguments -LogPath $logPath
+            $result = Invoke-Az3166EvidenceProcess -FilePath $arduinoCliCommand.Source -Arguments $arguments -LogPath $logPath `
+                -StreamLogPrefix (Join-Path $evidencePath 'build')
             $context.compile.exitCode = $result.ExitCode
             if ($result.ExitCode -ne 0) { $issues.Add("Arduino CLI compile failed with exit code $($result.ExitCode).") }
         }

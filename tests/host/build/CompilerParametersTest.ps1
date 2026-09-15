@@ -1,0 +1,138 @@
+#requires -Version 7.0
+
+[CmdletBinding()]
+param()
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$repositoryRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+. (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
+. (Join-Path $repositoryRoot 'tools/test/Az3166CompilerParameters.ps1')
+$lock = Get-Az3166BuildLock
+$baseline = Get-Az3166CompilerBaseline -RepositoryRoot $repositoryRoot
+$board = $lock.arduino.fqbn.Split(':')[2]
+$before = Get-Az3166RecipeProperties -Platform $baseline.Platform -Boards $baseline.Boards -Board $board
+$after = Get-Az3166RecipeProperties `
+    -Platform (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'platform/az3166/platform.txt')) `
+    -Boards (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'platform/az3166/boards.txt')) -Board $board
+
+function Assert-CompilerParameters {
+    param([bool]$Condition, [string]$Message)
+
+    if (-not $Condition) { throw $Message }
+}
+
+foreach ($group in @(
+    'compiler.cpu.flags', 'build.instruction_set.flags', 'build.float_abi.flags', 'build.fpu.flags',
+    'compiler.optimization.flags', 'compiler.debug.flags', 'compiler.language.c.flags', 'compiler.language.cpp.flags',
+    'compiler.codegen.sections.flags', 'compiler.codegen.dependencies.flags', 'compiler.defines.target',
+    'compiler.defines.assembly', 'compiler.defines.arduino', 'compiler.includes.system', 'compiler.includes.mbed',
+    'compiler.includes.bsp', 'compiler.includes.azure', 'compiler.includes.core', 'compiler.warnings.first_party',
+    'compiler.warnings.historical', 'compiler.link.diagnostics.flags', 'compiler.link.script.flags',
+    'compiler.link.map.flags', 'compiler.link.sections.flags', 'compiler.link.search.flags', 'compiler.link.wrap.flags',
+    'compiler.link.libraries.flags', 'compiler.link.specs.flags', 'compiler.link.symbols.flags'
+)) {
+    Assert-CompilerParameters ($after.ContainsKey($group) -and -not [string]::IsNullOrWhiteSpace($after[$group])) "Missing named compiler-parameter group: $group"
+}
+
+$properties = @(
+    'compiler.c.flags', 'compiler.cpp.flags', 'compiler.S.flags', 'compiler.c.elf.flags',
+    'compiler.ar.flags', 'compiler.objcopy.eep.flags', 'compiler.elf2hex.flags',
+    'compiler.libstm.c.flags', 'build.extra_flags',
+    'recipe.c.o.pattern', 'recipe.cpp.o.pattern', 'recipe.S.o.pattern',
+    'recipe.ar.pattern', 'recipe.c.combine.pattern', 'recipe.objcopy.bin.pattern', 'recipe.size.pattern'
+)
+foreach ($profile in @('none', 'default', 'more', 'all')) {
+    $before['compiler.warning_flags'] = $before["compiler.warning_flags.$profile"]
+    $after['compiler.warning_flags'] = $after["compiler.warning_flags.$profile"]
+    foreach ($name in $properties) {
+        $expected = Expand-Az3166RecipeProperty -Properties $before -Name $name
+        $actual = Expand-Az3166RecipeProperty -Properties $after -Name $name
+        Assert-CompilerParameters ($expected -ceq $actual) "Expanded property changed for ${profile}/${name}.`nExpected: $expected`nActual: $actual"
+    }
+}
+Write-Host 'PASS all compiler/assembler/archive/link/objcopy/size recipes and flags expand identically for all warning profiles'
+
+$fixture = @{ root = 'before {group} {unknown} after'; group = '-O2 {debug}'; debug = '-g' }
+Assert-CompilerParameters ((Expand-Az3166RecipeProperty $fixture 'root') -ceq 'before -O2 -g {unknown} after') 'Recursive expansion lost argument order or unresolved runtime properties.'
+$fixture['debug'] = '{group}'
+$rejected = $false
+try { $null = Expand-Az3166RecipeProperty $fixture 'root' }
+catch { $rejected = $true }
+Assert-CompilerParameters $rejected 'A recursive property cycle was accepted.'
+Write-Host 'PASS recursive property expansion preserves order and detects cycles'
+
+$changed = $after.Clone()
+$changed['compiler.c.flags'] = '-DUNEXPECTED ' + $changed['compiler.c.flags']
+Assert-CompilerParameters ((Expand-Az3166RecipeProperty $changed 'recipe.c.o.pattern') -cne
+    (Expand-Az3166RecipeProperty $after 'recipe.c.o.pattern')) 'The contract failed to detect an added compiler argument.'
+Write-Host 'PASS an injected compiler flag changes the expanded command'
+
+$arguments = ConvertFrom-Az3166VerboseCommand '"C:\\tool path\\arm-none-eabi-g++.exe" -c "-IC:\\source path" "-DVALUE=\"quoted\"" "C:\\build path\\Sketch.ino.cpp"'
+Assert-CompilerParameters ($arguments.Count -eq 5 -and $arguments[0] -ceq 'C:\tool path\arm-none-eabi-g++.exe' -and
+    $arguments[2] -ceq '-IC:\source path' -and $arguments[3] -ceq '-DVALUE="quoted"' -and
+    $arguments[4] -ceq 'C:\build path\Sketch.ino.cpp') 'Verbose command parsing changed quoted argument boundaries.'
+Write-Host 'PASS CLI-rendered tokens preserve spaces, defines, and escaped paths/quotes'
+
+$fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) "az3166-parameters-$([guid]::NewGuid().ToString('N'))"
+try {
+    New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
+    $logPath = Join-Path $fixtureRoot 'commands.log'
+    $compiler = Join-Path $fixtureRoot 'arm-none-eabi-gcc'
+    $lines = @(
+        "$compiler -c input.c -o output.o"
+        "$fixtureRoot/arm-none-eabi-ar rcs core.a first.o second.o"
+        "$compiler first.o core.a -o firmware.elf"
+        "$fixtureRoot/arm-none-eabi-objcopy -O binary firmware.elf firmware.bin"
+        "$fixtureRoot/arm-none-eabi-size -A firmware.elf"
+        "$compiler -E source.cpp -o $(ConvertTo-Json -InputObject (Join-Path ([IO.Path]::GetTempPath()) '123456/sketch_merged.cpp') -Compress)"
+    )
+    $lines | Set-Content -LiteralPath $logPath -Encoding utf8
+    $captured = Get-Az3166BuildCommands -LogPath $logPath
+    Assert-CompilerParameters (@($captured | Where-Object { $_.kind -ceq 'preprocessor' })[0].arguments[-1] -ceq
+        '<arduino-preprocess>/sketch_merged.cpp') 'The CLI-only preprocessing path was not canonicalized.'
+    $archiver = @($captured | Where-Object { $_.kind -ceq 'archiver' })[0]
+    Assert-CompilerParameters (($archiver.arguments[-2..-1] -join ',') -ceq 'first.o,second.o') 'Archiver object order was changed.'
+    ($lines | Where-Object { $_ -notmatch 'arm-none-eabi-objcopy' }) | Set-Content -LiteralPath $logPath -Encoding utf8
+    $rejected = $false
+    try { $null = Get-Az3166BuildCommands -LogPath $logPath }
+    catch { $rejected = $true }
+    Assert-CompilerParameters $rejected 'Missing required command coverage was accepted.'
+    Write-Host 'PASS narrow CLI temporary-path canonicalization, object ordering, and required command coverage'
+
+    $beforePath = Join-Path $fixtureRoot 'before'
+    $afterPath = Join-Path $fixtureRoot 'after'
+    $context = @{
+        status = 'passed'
+        buildDirectory = 'fixed-build'
+        environment = @{
+            revision = 'same-revision'; lockSha256 = 'same-lock'; fqbn = 'same-board'
+            stagedPlatformDirectory = 'fixed-staging'; repository = 'fixed-checkout'
+            arduinoDataDirectory = 'fixed-data'; arduinoUnitDirectory = 'fixed-unit'; tools = @{ gcc = 'same-compiler' }
+        }
+        artifacts = @(@{ name = 'sketch.bin' }, @{ name = 'sketch.elf' }, @{ name = 'sketch.map' })
+    }
+    $artifactNames = @('commands.json', 'database-commands.json', 'size.txt', 'size.json', 'elf-sections-program-headers.txt', 'sketch.bin', 'sketch.elf', 'sketch.map')
+    foreach ($directory in @($beforePath, $afterPath)) {
+        New-Item -ItemType Directory -Path $directory | Out-Null
+        $context | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $directory 'build-context.json') -Encoding utf8
+        foreach ($name in $artifactNames) { Set-Content -LiteralPath (Join-Path $directory $name) -Value "unchanged $name" -Encoding utf8 }
+    }
+    Assert-CompilerParameters (Compare-Az3166CompilerEvidence -Before $beforePath -After $afterPath).passed 'Identical fixture evidence was rejected.'
+    foreach ($name in $artifactNames) {
+        Set-Content -LiteralPath (Join-Path $afterPath $name) -Value 'unexpected change' -Encoding utf8
+        $comparison = Compare-Az3166CompilerEvidence -Before $beforePath -After $afterPath
+        Assert-CompilerParameters (-not $comparison.passed -and @($comparison.files | Where-Object { -not $_.equal }).Count -eq 1) "Changed evidence was not isolated: $name"
+        Set-Content -LiteralPath (Join-Path $afterPath $name) -Value "unchanged $name" -Encoding utf8
+    }
+    $context.environment.lockSha256 = 'different-lock'
+    $context | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $afterPath 'build-context.json') -Encoding utf8
+    $rejected = $false
+    try { $null = Compare-Az3166CompilerEvidence -Before $beforePath -After $afterPath }
+    catch { $rejected = $true }
+    Assert-CompilerParameters $rejected 'Different comparison toolchain inputs were accepted.'
+    Write-Host 'PASS injected command, binary, ELF, map, size, and toolchain-input differences fail equivalence'
+}
+finally {
+    Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
