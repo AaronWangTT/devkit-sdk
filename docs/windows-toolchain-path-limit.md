@@ -3,7 +3,11 @@
 The AZ3166 GCC 5.4.1 toolchain has a reproducible installation-root path
 limit. The shared installer therefore rejects roots longer than 70 characters.
 
-Use ordinary Windows paths for the installation and download cache. Components
+Use direct local-volume paths for the installation and download cache. UNC,
+network-mapped, and `subst` paths are not supported. Overlap checks compare native
+volume identities, not just drive letters. An existing installation root must
+have a valid ownership manifest; even empty unowned directories are refused.
+Components
 ending in dots or spaces, DOS short names containing `~`, alternate data streams,
 device namespaces, drive-relative paths, and reserved device names are rejected
 before normalization. Directory junctions and symbolic links are also rejected,
@@ -68,6 +72,10 @@ unchanged second setup, `-VerifyOnly`, and clean offline replacement without
 staging or backup leftovers. It also replaces the installed CLI with a symbolic
 link and verifies that verification and clean setup reject the linked tree
 without removing the external executable.
+
+The integration test also corrupts CLI, GCC, and OpenOCD executables in the
+managed installation, checks that launch failures become verification
+diagnostics, and requires normal offline setup to repair all three.
 
 The candidate's staging prefix is longer than the final root. Extraction and
 Board Manager installation run there, but the compiler is only queried for its

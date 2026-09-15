@@ -60,12 +60,13 @@ contract. This changes where values are read, not the values or build process.
 - `tests/host/build/BuildConfigurationTest.ps1` rejects malformed hashes,
   mutable index references, mismatched tool dependencies, and duplicated
   consumer literals.
-- The sketch driver reads its FQBN and ArduinoUnit values from the lock.
+- The sketch driver reads its FQBN from the lock and accepts the ArduinoUnit
+  directory returned by the shared installer.
 - Core package CI reads canonical-package and Windows-bootstrap values from the
-  lock, and keys the toolchain cache with GitHub Actions `hashFiles()` over the
-  complete lock file. It verifies the IDE archive size and hash, preflights the
-  immutable Board Manager index hash, and verifies the exact index cached by
-  Arduino IDE before compilation proceeds.
+  lock, and keys the download cache with GitHub Actions `hashFiles()` over the
+  lock and direct installer dependencies. The installer verifies archives and
+  the immutable Board Manager index before installation, then verifies installed
+  identities before compilation proceeds.
 
 ### Validation
 
@@ -78,12 +79,10 @@ contract. This changes where values are read, not the values or build process.
    FQBN, and flags.
 5. Confirm Windows and Ubuntu still produce byte-identical current packages.
 
-Network availability is not required for the contract test. Downloaded content
-continues to be verified at the point where it is consumed. The existing Arduino
-CLI action still consumes only the locked CLI version, while Board Manager uses
-the verified immutable index and its package checksums for Core, GCC, and
-OpenOCD. PR 2 will move every download behind the shared installer and verify
-the installed tool identities directly.
+Network availability is not required for the contract test. The shared installer
+now owns every toolchain download and verifies the locked archives and index.
+It checks installed CLI, IDE, Core, GCC, OpenOCD, and ArduinoUnit identities;
+the sketch driver consumes the returned paths without downloading dependencies.
 
 ## PR 2: Shared And Idempotent Toolchain Setup
 
@@ -96,7 +95,7 @@ point while retaining the known working installation mechanism and short path.
 
 Add `tools/build/Install-Az3166BuildTools.ps1` with these parameters:
 
-- `-Root` selects the installation root;
+- `-Root` selects a nonexistent or installer-owned installation root;
 - `-DownloadCache` permits verified archive reuse;
 - `-Clean` removes only directories owned by this installer;
 - `-Offline` forbids network access and reports every missing cached archive;

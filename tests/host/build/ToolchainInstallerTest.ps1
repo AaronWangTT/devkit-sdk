@@ -18,7 +18,7 @@ $installerPath = Join-Path $repositoryRoot 'tools/build/Install-Az3166BuildTools
 $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
 $volumeRoot = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
 $fixtureRoot = Join-Path $volumeRoot "ati-$([guid]::NewGuid().ToString('N'))"
-$testCount = 25
+$testCount = 27
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 
 function Assert-InstallerTest {
@@ -109,6 +109,31 @@ try {
     Assert-InstallerTest (-not (Test-Path -LiteralPath $cache)) 'Ambiguous-path validation created the cache.'
     Write-Host 'PASS ambiguous Windows root and cache path forms are rejected before writes'
 
+    $usedDriveNames = @([IO.DriveInfo]::GetDrives().Name)
+    $mappedDrive = @('Z:', 'Y:', 'X:', 'W:') | Where-Object { "$_\" -notin $usedDriveNames } | Select-Object -First 1
+    Assert-InstallerTest (-not [string]::IsNullOrEmpty($mappedDrive)) 'No unused drive letter is available for the subst fixture.'
+    $substCommand = Join-Path $env:SystemRoot 'System32/subst.exe'
+    & $substCommand $mappedDrive $fixtureRoot
+    Assert-InstallerTest ($LASTEXITCODE -eq 0) 'Could not create the subst fixture.'
+    try {
+        $uncAlias = '\\localhost\' + $volumeRoot.Substring(0, 1) + '$\' + $root.Substring($volumeRoot.Length)
+        foreach ($arguments in @(
+            @{ Root = "$mappedDrive\root"; DownloadCache = $cache; VerifyOnly = $true },
+            @{ Root = $root; DownloadCache = "$mappedDrive\root\downloads"; Offline = $true },
+            @{ Root = $uncAlias; DownloadCache = $cache; VerifyOnly = $true },
+            @{ Root = $root; DownloadCache = "$uncAlias\downloads"; Offline = $true }
+        )) {
+            Assert-InstallerRejected -Arguments $arguments -ExpectedMessages @('*Only direct local volume paths are supported:*')
+        }
+        Assert-InstallerTest (-not (Test-Path -LiteralPath $root)) 'Mapped-path validation created the installation root.'
+        Assert-InstallerTest (-not (Test-Path -LiteralPath $cache)) 'Mapped-path validation created the download cache.'
+    }
+    finally {
+        & $substCommand $mappedDrive /D
+        Assert-InstallerTest ($LASTEXITCODE -eq 0) 'Could not remove the subst fixture.'
+    }
+    Write-Host 'PASS subst and UNC aliases are rejected before installer access'
+
     $aliasTarget = Join-Path $fixtureRoot 'alias-target'
     $aliasPath = Join-Path $fixtureRoot 'alias'
     New-Item -ItemType Directory -Path $aliasTarget | Out-Null
@@ -155,6 +180,19 @@ try {
     Write-Host 'PASS missing VerifyOnly is read-only'
 
     New-Item -ItemType Directory -Path $root | Out-Null
+    $emptyRootAcl = (Get-Acl -LiteralPath $root).Sddl
+    $emptyRootCreated = (Get-Item -LiteralPath $root).CreationTimeUtc
+    foreach ($arguments in @(
+        @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true },
+        @{ Root = $root; DownloadCache = $cache; Offline = $true },
+        @{ Root = $root; DownloadCache = $cache; Clean = $true; Offline = $true }
+    )) {
+        Assert-InstallerRejected -Arguments $arguments -ExpectedMessages @('*not owned by this installer*')
+    }
+    Assert-InstallerTest ((Get-Acl -LiteralPath $root).Sddl -ceq $emptyRootAcl) 'Empty-root validation changed its ACL.'
+    Assert-InstallerTest ((Get-Item -LiteralPath $root).CreationTimeUtc -eq $emptyRootCreated) 'Empty-root validation recreated the directory.'
+    Write-Host 'PASS empty unowned roots retain their identity and permissions'
+
     $foreignFile = Join-Path $root 'keep.txt'
     Set-Content -LiteralPath $foreignFile -Value 'foreign' -Encoding ascii
     foreach ($arguments in @(
@@ -428,6 +466,22 @@ try {
         }
         $testCount++
         Write-Host 'PASS linked executables in a complete installation are rejected before verification or clean setup'
+
+        foreach ($nativeTool in @(
+            @{ Name = 'Arduino CLI'; Path = $boundaryTools.ArduinoCliPath; Version = $lock.arduino.cli.version },
+            @{ Name = 'GCC'; Path = $boundaryTools.CompilerPath; Version = $lock.tools.armNoneEabiGcc.compilerVersion },
+            @{ Name = 'OpenOCD'; Path = $boundaryTools.OpenOcdPath; Version = $lock.tools.openocd.version }
+        )) {
+            Set-Content -LiteralPath $nativeTool.Path -Value 'not an executable' -Encoding ascii
+            Assert-InstallerRejected `
+                -Arguments ($boundaryArguments + @{ VerifyOnly = $true }) `
+                -ExpectedMessages @('*AZ3166 build tools are invalid:*', "*$($nativeTool.Name) did not report version $($nativeTool.Version)*")
+        }
+        $repairedBoundary = & $installerPath @boundaryArguments -Offline
+        Assert-InstallerTest $repairedBoundary.Changed 'Offline setup did not repair the corrupt executables.'
+        $null = & $installerPath @boundaryArguments -VerifyOnly
+        $testCount++
+        Write-Host 'PASS corrupt native executables are diagnosed and repaired offline'
     }
 }
 finally {

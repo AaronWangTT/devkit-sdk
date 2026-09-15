@@ -51,6 +51,37 @@ function Get-Az3166UnambiguousPath {
     return [IO.Path]::GetFullPath($Path)
 }
 
+function Get-Az3166LocalPathIdentity {
+    param([string]$Path)
+
+    if ($Path -notmatch '\A[A-Za-z]:\\') {
+        throw "Only direct local volume paths are supported: $Path"
+    }
+    if (-not ('Az3166.NativeVolume' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace Az3166 {
+    public static class NativeVolume {
+        [DllImport("kernel32.dll", EntryPoint = "QueryDosDeviceW", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern uint QueryDosDevice(string deviceName, StringBuilder targetPath, int maximumLength);
+    }
+}
+'@
+    }
+    $deviceBuffer = [Text.StringBuilder]::new(32768)
+    if ([Az3166.NativeVolume]::QueryDosDevice($Path.Substring(0, 2), $deviceBuffer, $deviceBuffer.Capacity) -eq 0) {
+        $nativeError = [ComponentModel.Win32Exception]::new([Runtime.InteropServices.Marshal]::GetLastWin32Error())
+        throw "Cannot resolve the local volume for ${Path}: $($nativeError.Message)"
+    }
+    $deviceName = $deviceBuffer.ToString().Split([char]0)[0]
+    if ($deviceName -notmatch '\A\\Device\\HarddiskVolume[0-9]+\z') {
+        throw "Only direct local volume paths are supported: $Path"
+    }
+    return $deviceName + $Path.Substring(2)
+}
+
 $buildLock = Get-Az3166BuildLock -Path $LockPath
 $rootPath = Get-Az3166UnambiguousPath -Path $Root
 $volumeRoot = [IO.Path]::GetPathRoot($rootPath)
@@ -71,6 +102,8 @@ if ($downloadCachePath.TrimEnd([IO.Path]::DirectorySeparatorChar) -ceq $cacheVol
     throw "Refusing to use a volume root as the download cache: $downloadCachePath"
 }
 $downloadCachePath = $downloadCachePath.TrimEnd([IO.Path]::DirectorySeparatorChar)
+$rootIdentity = Get-Az3166LocalPathIdentity -Path $rootPath
+$downloadCacheIdentity = Get-Az3166LocalPathIdentity -Path $downloadCachePath
 
 function Test-Az3166PathContains {
     param(
@@ -115,9 +148,9 @@ Assert-Az3166NoReparsePoint -Path $rootPath
 Assert-Az3166NoReparsePoint -Path $downloadCachePath -Recurse
 
 if (
-    $rootPath.Equals($downloadCachePath, [StringComparison]::OrdinalIgnoreCase) -or
-    (Test-Az3166PathContains -Parent $rootPath -Child $downloadCachePath) -or
-    (Test-Az3166PathContains -Parent $downloadCachePath -Child $rootPath)
+    $rootIdentity.Equals($downloadCacheIdentity, [StringComparison]::OrdinalIgnoreCase) -or
+    (Test-Az3166PathContains -Parent $rootIdentity -Child $downloadCacheIdentity) -or
+    (Test-Az3166PathContains -Parent $downloadCacheIdentity -Child $rootIdentity)
 ) {
     throw '-Root and -DownloadCache must be separate directories.'
 }
@@ -161,9 +194,6 @@ function Get-Az3166ManagedState {
     }
     if (-not (Test-Path -LiteralPath $Paths.Root -PathType Container)) {
         return [pscustomobject]@{ Name = 'Foreign'; Manifest = $null }
-    }
-    if (-not (Get-ChildItem -LiteralPath $Paths.Root -Force | Select-Object -First 1)) {
-        return [pscustomobject]@{ Name = 'Empty'; Manifest = $null }
     }
     if (-not (Test-Path -LiteralPath $Paths.ManifestPath -PathType Leaf)) {
         return [pscustomobject]@{ Name = 'Foreign'; Manifest = $null }
@@ -286,19 +316,20 @@ function Get-Az3166InstallationProblems {
     }
 
     if ($problems.Count -eq 0) {
-        $cliOutput = (& $Paths.ArduinoCliPath version 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Az3166ToolVersion -Output $cliOutput -Version $buildLock.arduino.cli.version)) {
-            $problems.Add("Arduino CLI did not report version $($buildLock.arduino.cli.version)")
-        }
-
-        $compilerOutput = (& $Paths.CompilerPath --version 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Az3166ToolVersion -Output $compilerOutput -Version $buildLock.tools.armNoneEabiGcc.compilerVersion)) {
-            $problems.Add("GCC did not report version $($buildLock.tools.armNoneEabiGcc.compilerVersion)")
-        }
-
-        $openOcdOutput = (& $Paths.OpenOcdPath --version 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Az3166ToolVersion -Output $openOcdOutput -Version $buildLock.tools.openocd.version)) {
-            $problems.Add("OpenOCD did not report version $($buildLock.tools.openocd.version)")
+        foreach ($nativeTool in @(
+            @{ Name = 'Arduino CLI'; Path = $Paths.ArduinoCliPath; Argument = 'version'; Version = $buildLock.arduino.cli.version },
+            @{ Name = 'GCC'; Path = $Paths.CompilerPath; Argument = '--version'; Version = $buildLock.tools.armNoneEabiGcc.compilerVersion },
+            @{ Name = 'OpenOCD'; Path = $Paths.OpenOcdPath; Argument = '--version'; Version = $buildLock.tools.openocd.version }
+        )) {
+            try {
+                $toolOutput = (& $nativeTool.Path $nativeTool.Argument 2>&1 | Out-String)
+                if ($LASTEXITCODE -ne 0 -or -not (Test-Az3166ToolVersion -Output $toolOutput -Version $nativeTool.Version)) {
+                    $problems.Add("$($nativeTool.Name) did not report version $($nativeTool.Version)")
+                }
+            }
+            catch {
+                $problems.Add("$($nativeTool.Name) did not report version $($nativeTool.Version): $($_.Exception.Message)")
+            }
         }
     }
 
@@ -545,13 +576,11 @@ try {
     Assert-Az3166NoReparsePoint -Path $rootPath -Recurse
     $hadPreviousRoot = Test-Path -LiteralPath $rootPath -PathType Container
     if ($hadPreviousRoot) {
-        if (-not (Get-ChildItem -LiteralPath $rootPath -Force | Select-Object -First 1)) {
-            Remove-Item -LiteralPath $rootPath -Force
-            $hadPreviousRoot = $false
+        $currentState = Get-Az3166ManagedState -Paths $paths
+        if ($currentState.Name -ne 'Managed') {
+            throw "Refusing to replace an installation root not owned by this installer: $rootPath"
         }
-        else {
-            Move-Item -LiteralPath $rootPath -Destination $backupRoot
-        }
+        Move-Item -LiteralPath $rootPath -Destination $backupRoot
     }
     try {
         Move-Item -LiteralPath $candidateRoot -Destination $rootPath
