@@ -55,6 +55,27 @@ function Test-Az3166PathContains {
     return $Child.StartsWith($parentPrefix, [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Assert-Az3166NoReparsePoint {
+    param([string]$Path)
+
+    $currentPath = $Path
+    while ($currentPath) {
+        $item = $null
+        try {
+            $item = Get-Item -LiteralPath $currentPath -Force -ErrorAction Stop
+        }
+        catch [System.Management.Automation.ItemNotFoundException] {
+        }
+        if ($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "Refusing to use a reparse point in an installer path: $currentPath"
+        }
+        $currentPath = Split-Path -Path $currentPath -Parent
+    }
+}
+
+Assert-Az3166NoReparsePoint -Path $rootPath
+Assert-Az3166NoReparsePoint -Path $downloadCachePath
+
 if (
     $rootPath.Equals($downloadCachePath, [StringComparison]::OrdinalIgnoreCase) -or
     (Test-Az3166PathContains -Parent $rootPath -Child $downloadCachePath) -or
@@ -317,7 +338,7 @@ function Get-Az3166AssetProblem {
 }
 
 foreach ($asset in $assets) {
-    if ([IO.Path]::GetFileName($asset.FileName) -cne $asset.FileName) {
+    if (-not (Test-Az3166WindowsBasename -Value $asset.FileName)) {
         throw "Invalid cached asset filename: $($asset.FileName)"
     }
 }

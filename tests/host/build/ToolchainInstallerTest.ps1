@@ -1,7 +1,9 @@
 #requires -Version 7.0
 
 [CmdletBinding()]
-param()
+param(
+    [string]$DownloadCache
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -16,6 +18,7 @@ $installerPath = Join-Path $repositoryRoot 'tools/build/Install-Az3166BuildTools
 $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
 $volumeRoot = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
 $fixtureRoot = Join-Path $volumeRoot "ati-$([guid]::NewGuid().ToString('N'))"
+$testCount = 22
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 
 function Assert-InstallerTest {
@@ -65,7 +68,7 @@ try {
         foreach ($output in @("Version: $version", "Version: $version (release)", "Version: $version-rc1")) {
             Assert-InstallerTest (Test-Az3166ToolVersion -Output $output -Version $version) "Exact version token was rejected: $output"
         }
-        foreach ($output in @("Version: ${version}0", "Version: ${version}1", "Version: ${version}.0", "Version: 1$version", "Version: 9.$version", 'no version')) {
+        foreach ($output in @("Version: ${version}0", "Version: ${version}1", "Version: ${version}.0", "Version: 1$version", "Version: 9.$version", "Version: ${version}beta", "Version: ${version}_debug", "Version: other$version", 'no version')) {
             Assert-InstallerTest (-not (Test-Az3166ToolVersion -Output $output -Version $version)) "Different version token was accepted: $output"
         }
     }
@@ -87,6 +90,28 @@ try {
         -Arguments @{ Root = $root; DownloadCache = (Join-Path $root 'downloads') } `
         -ExpectedMessages @('*-Root and -DownloadCache must be separate directories.*')
     Write-Host 'PASS overlapping managed and cache roots are rejected'
+
+    $aliasTarget = Join-Path $fixtureRoot 'alias-target'
+    $aliasPath = Join-Path $fixtureRoot 'alias'
+    New-Item -ItemType Directory -Path $aliasTarget | Out-Null
+    $aliasSentinel = Join-Path $aliasTarget 'keep.txt'
+    Set-Content -LiteralPath $aliasSentinel -Value 'preserved' -Encoding ascii
+    New-Item -ItemType Junction -Path $aliasPath -Target $aliasTarget | Out-Null
+    foreach ($arguments in @(
+        @{ Root = $aliasPath; DownloadCache = $cache; VerifyOnly = $true },
+        @{ Root = (Join-Path $aliasPath 'root'); DownloadCache = $cache; VerifyOnly = $true },
+        @{ Root = $root; DownloadCache = $aliasPath; Offline = $true },
+        @{ Root = $root; DownloadCache = (Join-Path $aliasPath 'cache'); Offline = $true }
+    )) {
+        Assert-InstallerRejected `
+            -Arguments $arguments `
+            -ExpectedMessages @('*Refusing to use a reparse point*')
+    }
+    Assert-InstallerTest ((Get-Content -Raw -LiteralPath $aliasSentinel).Trim() -ceq 'preserved') 'Junction validation modified the target.'
+    Assert-InstallerTest (-not (Test-Path -LiteralPath $root)) 'Junction validation created the installation root.'
+    Remove-Item -LiteralPath $aliasPath -Force
+    Remove-Item -LiteralPath $aliasTarget -Recurse -Force
+    Write-Host 'PASS junction roots and cache ancestors are rejected without writes'
 
     $maximumRoot = Join-Path $volumeRoot ('p' * (70 - $volumeRoot.Length))
     Assert-InstallerTest ($maximumRoot.Length -eq 70) 'The maximum-length fixture root is not 70 characters long.'
@@ -300,9 +325,23 @@ try {
     Assert-InstallerTest ((Get-Content -Raw -LiteralPath $siblingPath).Trim() -ceq 'keep') 'Repair modified a sibling cache entry.'
     Assert-InstallerTest (-not (Test-Path -LiteralPath $root)) 'The download fixture unexpectedly reached extraction.'
     Write-Host 'PASS online repair replaces only the invalid cache directory with a verified file'
+
+    if ($DownloadCache) {
+        $boundaryParent = Join-Path $fixtureRoot ('p' * (70 - $fixtureRoot.Length - 3))
+        $boundaryRoot = Join-Path $boundaryParent 'a'
+        Assert-InstallerTest ($boundaryRoot.Length -eq 70) 'The boundary installation root must be 70 characters long.'
+        $boundaryArguments = @{ Root = $boundaryRoot; DownloadCache = $DownloadCache }
+        $boundaryTools = & $installerPath @boundaryArguments -Offline
+        Assert-InstallerTest $boundaryTools.Changed 'The fresh boundary installation did not report a change.'
+        $secondBoundary = & $installerPath @boundaryArguments -Offline
+        Assert-InstallerTest (-not $secondBoundary.Changed) 'The second boundary setup changed the installation.'
+        $null = & $installerPath @boundaryArguments -VerifyOnly
+        $testCount++
+        Write-Host 'PASS full offline installation at a 70-character root with a long parent'
+    }
 }
 finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host '21 toolchain-installer tests passed.'
+Write-Host "$testCount toolchain-installer tests passed."

@@ -109,11 +109,24 @@ foreach ($unsafeRootName in @(
 }
 Write-Host 'PASS unsafe Windows toolchain-root name is rejected'
 
+foreach ($unsafeAssetName in @('.', '..', '../outside', '..\outside', 'C:\outside', 'CON', 'NUL.txt', 'asset.', 'asset ')) {
+    Assert-BuildLockRejected {
+        param($fixture)
+        $fixture.arduino.cli.windowsX64.archiveFileName = $unsafeAssetName
+    } 'Invalid AZ3166 build lock: arduino.cli.windowsX64.archiveFileName must be a safe Windows basename.'
+    Assert-BuildLockRejected {
+        param($fixture)
+        $fixture.boardManager.indexPath = $unsafeAssetName
+    } 'Invalid AZ3166 build lock: boardManager.indexPath must be a safe Windows basename.'
+}
+Write-Host 'PASS unsafe archive and index basenames are rejected'
+
 $workflowPath = Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml'
 $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubOutput')) 'Core package CI does not export the shared build lock.'
 Assert-BuildConfigurationTest ($workflow.Contains('./tests/host/build/BuildConfigurationTest.ps1')) 'Core package CI does not run the build-configuration tests.'
 Assert-BuildConfigurationTest ($workflow.Contains('./tests/host/build/ToolchainInstallerTest.ps1')) 'Core package CI does not run the toolchain-installer tests.'
+Assert-BuildConfigurationTest ($workflow.Contains('Verify maximum supported toolchain root')) 'Core package CI does not exercise a full boundary installation.'
 Assert-BuildConfigurationTest ($workflow.Contains('./tools/build/Install-Az3166BuildTools.ps1')) 'Core package CI does not invoke the shared toolchain installer.'
 Assert-BuildConfigurationTest ($workflow.Contains('-VerifyOnly')) 'Core package CI does not verify the installed toolchain.'
 Assert-BuildConfigurationTest ($workflow.Contains('-Offline')) 'Core package CI does not exercise an offline second setup.'
@@ -215,4 +228,4 @@ finally {
 }
 Write-Host 'PASS GitHub output matches the build lock'
 
-Write-Host '11 build-configuration tests passed.'
+Write-Host '12 build-configuration tests passed.'

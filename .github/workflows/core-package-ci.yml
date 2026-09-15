@@ -129,6 +129,13 @@ jobs:
           "arduino_data=$($tools.ArduinoDataDirectory)" >> $env:GITHUB_OUTPUT
           "arduino_unit=$($tools.ArduinoUnitDirectory)" >> $env:GITHUB_OUTPUT
 
+      - name: Verify maximum supported toolchain root
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./tests/host/build/ToolchainInstallerTest.ps1 `
+            -DownloadCache (Join-Path $env:RUNNER_TEMP "az3166-downloads")
+
       - name: Compile Arduino test sketches
         if: runner.os == 'Windows'
         shell: pwsh

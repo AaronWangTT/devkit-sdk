@@ -52,3 +52,16 @@ fatal error: bits/cpu_defines.h: No such file or directory
 The supported maximum is 70 characters, leaving one character of margin below
 the observed boundary. This is an installation-root constraint, not a general
 Windows path-length limit.
+
+## Installer Boundary Coverage
+
+The Windows CI job also runs `ToolchainInstallerTest.ps1 -DownloadCache` against
+the verified downloads. It performs a full offline installation at a 70-character
+root with a long parent directory and a one-character leaf, then checks an
+unchanged second setup and `-VerifyOnly`.
+
+The candidate's staging prefix is longer than the final root. Extraction and
+Board Manager installation run there, but the compiler is only queried for its
+version before promotion. Sketch compilation and its GCC include-path search
+run from the final installation root. The full boundary test covers installation
+with the longer staging prefix separately from the compilation measurements.

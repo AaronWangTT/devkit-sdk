@@ -8,7 +8,15 @@ function Test-Az3166ToolVersion {
         [string]$Version
     )
 
-    return $Output -match ('(?<![0-9.])' + [regex]::Escape($Version) + '(?![0-9.])')
+    return $Output -match ('(?<![0-9A-Za-z_.])' + [regex]::Escape($Version) + '(?![0-9A-Za-z_.])')
+}
+
+function Test-Az3166WindowsBasename {
+    param([object]$Value)
+
+    return ($Value -is [string] -and
+        $Value -cmatch '\A[A-Za-z0-9._-]*[A-Za-z0-9_-]\z' -and
+        $Value -notmatch '\A(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|\z)')
 }
 
 function Assert-Az3166BuildLockCondition {
@@ -59,6 +67,9 @@ function Assert-Az3166BuildLockAsset {
     $size = Get-Az3166BuildLockProperty $Asset 'size' $Context
     Assert-Az3166BuildLockString $url "$Context.url"
     Assert-Az3166BuildLockString $archiveFileName "$Context.archiveFileName"
+    Assert-Az3166BuildLockCondition `
+        (Test-Az3166WindowsBasename -Value $archiveFileName) `
+        "$Context.archiveFileName must be a safe Windows basename."
 
     $uri = $null
     Assert-Az3166BuildLockCondition `
@@ -139,8 +150,7 @@ function Get-Az3166BuildLock {
         $shortToolchainRootName `
         'hostPrerequisites.windows.shortToolchainRootName'
     Assert-Az3166BuildLockCondition `
-        ($shortToolchainRootName -cmatch '\A[A-Za-z0-9._-]*[A-Za-z0-9_-]\z' -and
-            $shortToolchainRootName -notmatch '\A(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|\z)') `
+        (Test-Az3166WindowsBasename -Value $shortToolchainRootName) `
         'hostPrerequisites.windows.shortToolchainRootName must be a single relative directory name.'
     $maximumToolchainRootLength = Get-Az3166BuildLockProperty `
         $windows 'maximumToolchainRootLength' 'hostPrerequisites.windows'
@@ -177,6 +187,9 @@ function Get-Az3166BuildLock {
             (Get-Az3166BuildLockProperty $boardManager $propertyName 'boardManager') `
             "boardManager.$propertyName"
     }
+    Assert-Az3166BuildLockCondition `
+        (Test-Az3166WindowsBasename -Value $boardManager.indexPath) `
+        'boardManager.indexPath must be a safe Windows basename.'
     Assert-Az3166BuildLockCondition `
         ($boardManager.revision -cmatch '^[0-9a-f]{40}$') `
         'boardManager.revision must be a full lowercase Git commit ID.'
