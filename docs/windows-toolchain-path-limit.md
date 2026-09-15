@@ -69,13 +69,16 @@ Windows path-length limit.
 
 ## Installer Boundary Coverage
 
-The Windows CI job also runs `ToolchainInstallerTest.ps1 -DownloadCache` against
-the verified downloads. It performs a full offline installation at a 70-character
-root with a long parent directory and a one-character leaf, then checks an
-unchanged second setup, `-VerifyOnly`, and clean offline replacement without
-staging or backup leftovers. It also replaces the installed CLI with a symbolic
-link and verifies that verification and clean setup reject the linked tree
-without removing the external executable.
+Run `ToolchainInstallerTest.ps1 -DownloadCache <verified-cache>` for deliberate
+installer, path-limit, and release validation. Routine CI retains the fast
+installer contracts plus fresh short-root setup, an unchanged offline second
+setup, and `-VerifyOnly`; it does not run this repeated full-installation mode on
+every commit. The boundary mode performs a full offline installation at a
+70-character root with a long parent directory and a one-character leaf, then
+checks an unchanged second setup, `-VerifyOnly`, and clean offline replacement
+without staging or backup leftovers. It also replaces the installed CLI with a
+symbolic link and verifies that verification and clean setup reject the linked
+tree without removing the external executable.
 
 The integration test also corrupts CLI, GCC, and OpenOCD executables in the
 managed installation, checks that launch failures become verification

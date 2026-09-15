@@ -132,11 +132,12 @@ it has no selected assembly translation units. Assembly recipe equivalence is
 checked statically under all warning profiles; the capture/comparison supports
 assembler commands if any appear, but this PR does not claim they were executed.
 
-CI runs the contract test on Windows and Ubuntu and the two-pass target harness
-on Windows, in addition to the existing gates. The `compiler-equivalence-windows`
-artifact uploads both complete evidence trees, the harness log, and comparison
-report with `if: always()` and 30-day retention. The job summary links that
-archive and reports each sketch's result. The isolated clone is not uploaded.
+Routine CI runs the contract test on Windows and Ubuntu and compiles the current
+properties once through the normal 13-sketch gate. The two-pass target harness
+is retained for deliberate compiler-property changes, where its complete
+evidence trees, harness log, and comparison report should be retained with the
+change record. It is not a per-commit gate because it repeats all target builds
+and compares against a completed migration baseline.
 
 ## Findings For Later Review
 

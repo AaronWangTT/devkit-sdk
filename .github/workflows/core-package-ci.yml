@@ -137,13 +137,6 @@ jobs:
           "arduino_data=$($tools.ArduinoDataDirectory)" >> $env:GITHUB_OUTPUT
           "arduino_unit=$($tools.ArduinoUnitDirectory)" >> $env:GITHUB_OUTPUT
 
-      - name: Verify maximum supported toolchain root
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          ./tests/host/build/ToolchainInstallerTest.ps1 `
-            -DownloadCache (Join-Path $env:RUNNER_TEMP "az3166-downloads")
-
       - name: Compile Arduino test sketches
         if: runner.os == 'Windows'
         shell: pwsh
@@ -174,52 +167,6 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Verify compiler parameter equivalence
-        if: always() && runner.os == 'Windows' && steps.build-tools.outcome == 'success'
-        shell: pwsh
-        run: |
-          ./tools/test/Test-Az3166CompilerParameters.ps1 `
-            -ArduinoCli '${{ steps.build-tools.outputs.arduino_cli }}' `
-            -ArduinoDataDirectory '${{ steps.build-tools.outputs.arduino_data }}' `
-            -ArduinoUnitDirectory '${{ steps.build-tools.outputs.arduino_unit }}' `
-            -OutputDirectory (Join-Path $env:RUNNER_TEMP 'az3166-equivalence')
-
-      - name: Upload compiler equivalence evidence
-        if: always() && runner.os == 'Windows'
-        id: compiler-evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: compiler-equivalence-windows
-          path: |
-            ${{ runner.temp }}/az3166-equivalence/before
-            ${{ runner.temp }}/az3166-equivalence/after
-            ${{ runner.temp }}/az3166-equivalence/comparison.json
-            ${{ runner.temp }}/az3166-equivalence/harness.log
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: Summarize compiler equivalence
-        if: always() && runner.os == 'Windows' && steps.compiler-evidence.outputs.artifact-url != ''
-        shell: pwsh
-        env:
-          COMPILER_EVIDENCE_URL: ${{ steps.compiler-evidence.outputs.artifact-url }}
-        run: |
-          $reportPath = Join-Path $env:RUNNER_TEMP 'az3166-equivalence/comparison.json'
-          "### Compiler parameter equivalence" >> $env:GITHUB_STEP_SUMMARY
-          "[Download before/after evidence]($env:COMPILER_EVIDENCE_URL)" >> $env:GITHUB_STEP_SUMMARY
-          if (Test-Path -LiteralPath $reportPath) {
-            $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json
-            "| Sketch | All evidence equal |" >> $env:GITHUB_STEP_SUMMARY
-            "| --- | --- |" >> $env:GITHUB_STEP_SUMMARY
-            foreach ($comparison in $report.comparisons) {
-              "| $($comparison.sketch) | $($comparison.passed) |" >> $env:GITHUB_STEP_SUMMARY
-            }
-          }
-          else {
-            "Comparison did not finish; inspect the retained logs." >> $env:GITHUB_STEP_SUMMARY
-          }
 
       - name: Summarize sketch build evidence
         if: always() && runner.os == 'Windows' && steps.build-evidence.outputs.artifact-url != ''
