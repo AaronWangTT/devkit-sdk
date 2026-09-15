@@ -74,22 +74,28 @@ Assert-CompilerParameters ($arguments.Count -eq 5 -and $arguments[0] -ceq 'C:\to
     $arguments[4] -ceq 'C:\build path\Sketch.ino.cpp') 'Verbose command parsing changed quoted argument boundaries.'
 Write-Host 'PASS CLI-rendered tokens preserve spaces, defines, and escaped paths/quotes'
 
-$fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) "az3166-parameters-$([guid]::NewGuid().ToString('N'))"
+$fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) "az3166 parameters $([guid]::NewGuid().ToString('N'))"
 try {
     New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
     $logPath = Join-Path $fixtureRoot 'commands.log'
-    $compiler = Join-Path $fixtureRoot 'arm-none-eabi-gcc'
+    $compilerPath = Join-Path $fixtureRoot 'arm-none-eabi-gcc'
+    $compiler = ConvertTo-Json -InputObject $compilerPath -Compress
+    $archiverCommand = ConvertTo-Json -InputObject (Join-Path $fixtureRoot 'arm-none-eabi-ar') -Compress
+    $objcopyCommand = ConvertTo-Json -InputObject (Join-Path $fixtureRoot 'arm-none-eabi-objcopy') -Compress
+    $sizeCommand = ConvertTo-Json -InputObject (Join-Path $fixtureRoot 'arm-none-eabi-size') -Compress
     $lines = @(
         "$compiler -c input.c -o output.o"
         "$compiler -c other.c -o other.o"
-        "$fixtureRoot/arm-none-eabi-ar rcs core.a first.o second.o"
+        "$archiverCommand rcs core.a first.o second.o"
         "$compiler first.o core.a -o firmware.elf"
-        "$fixtureRoot/arm-none-eabi-objcopy -O binary firmware.elf firmware.bin"
-        "$fixtureRoot/arm-none-eabi-size -A firmware.elf"
+        "$objcopyCommand -O binary firmware.elf firmware.bin"
+        "$sizeCommand -A firmware.elf"
         "$compiler -E source.cpp -o $(ConvertTo-Json -InputObject (Join-Path ([IO.Path]::GetTempPath()) '123456/sketch_merged.cpp') -Compress)"
     )
     $lines | Set-Content -LiteralPath $logPath -Encoding utf8
     $captured = Get-Az3166BuildCommands -LogPath $logPath
+    Assert-CompilerParameters (@($captured | Where-Object { $_.kind -ceq 'compiler' })[0].arguments[0] -ceq
+        $compilerPath) 'The space-containing compiler path was not preserved as one argument.'
     Assert-CompilerParameters (@($captured | Where-Object { $_.kind -ceq 'preprocessor' })[0].arguments[-1] -ceq
         '<arduino-preprocess>/sketch_merged.cpp') 'The CLI-only preprocessing path was not canonicalized.'
     $archiver = @($captured | Where-Object { $_.kind -ceq 'archiver' })[0]
