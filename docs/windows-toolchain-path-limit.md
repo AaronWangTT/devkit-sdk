@@ -3,6 +3,12 @@
 The AZ3166 GCC 5.4.1 toolchain has a reproducible installation-root path
 limit. The shared installer therefore rejects roots longer than 70 characters.
 
+Use ordinary Windows paths for the installation and download cache. Components
+ending in dots or spaces, DOS short names containing `~`, alternate data streams,
+device namespaces, drive-relative paths, and reserved device names are rejected
+before normalization. Directory junctions and symbolic links are also rejected,
+including ancestors and entries inside either tree.
+
 ## Environment
 
 - Windows 11 Enterprise 10.0.26200;

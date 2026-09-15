@@ -18,7 +18,7 @@ $installerPath = Join-Path $repositoryRoot 'tools/build/Install-Az3166BuildTools
 $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
 $volumeRoot = [IO.Path]::GetPathRoot([IO.Path]::GetTempPath())
 $fixtureRoot = Join-Path $volumeRoot "ati-$([guid]::NewGuid().ToString('N'))"
-$testCount = 24
+$testCount = 25
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 
 function Assert-InstallerTest {
@@ -93,6 +93,21 @@ try {
         -Arguments @{ Root = $root; DownloadCache = (Join-Path $root 'downloads') } `
         -ExpectedMessages @('*-Root and -DownloadCache must be separate directories.*')
     Write-Host 'PASS overlapping managed and cache roots are rejected'
+
+    foreach ($ambiguousPath in @(
+        "$root.", "$root ", (Join-Path "$root." 'child'), (Join-Path "$root " 'child'),
+        "${root}:stream", (Join-Path $fixtureRoot 'ROOT~1'), "\\?\$root", "\\.\$root"
+    )) {
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $ambiguousPath; DownloadCache = $cache; VerifyOnly = $true } `
+            -ExpectedMessages @('*Ambiguous Windows path is not supported:*')
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $root; DownloadCache = $ambiguousPath; Offline = $true } `
+            -ExpectedMessages @('*Ambiguous Windows path is not supported:*')
+    }
+    Assert-InstallerTest (-not (Test-Path -LiteralPath $root)) 'Ambiguous-path validation created the installation root.'
+    Assert-InstallerTest (-not (Test-Path -LiteralPath $cache)) 'Ambiguous-path validation created the cache.'
+    Write-Host 'PASS ambiguous Windows root and cache path forms are rejected before writes'
 
     $aliasTarget = Join-Path $fixtureRoot 'alias-target'
     $aliasPath = Join-Path $fixtureRoot 'alias'

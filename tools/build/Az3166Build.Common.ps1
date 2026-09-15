@@ -55,6 +55,18 @@ function Assert-Az3166BuildLockString {
         "$Context must be a nonempty string."
 }
 
+function Assert-Az3166BuildLockBasename {
+    param(
+        [object]$Value,
+        [string]$Context
+    )
+
+    Assert-Az3166BuildLockString $Value $Context
+    Assert-Az3166BuildLockCondition `
+        (Test-Az3166WindowsBasename -Value $Value) `
+        "$Context must be a safe Windows basename."
+}
+
 function Assert-Az3166BuildLockAsset {
     param(
         [object]$Asset,
@@ -66,10 +78,7 @@ function Assert-Az3166BuildLockAsset {
     $sha256 = Get-Az3166BuildLockProperty $Asset 'sha256' $Context
     $size = Get-Az3166BuildLockProperty $Asset 'size' $Context
     Assert-Az3166BuildLockString $url "$Context.url"
-    Assert-Az3166BuildLockString $archiveFileName "$Context.archiveFileName"
-    Assert-Az3166BuildLockCondition `
-        (Test-Az3166WindowsBasename -Value $archiveFileName) `
-        "$Context.archiveFileName must be a safe Windows basename."
+    Assert-Az3166BuildLockBasename $archiveFileName "$Context.archiveFileName"
 
     $uri = $null
     Assert-Az3166BuildLockCondition `
@@ -170,15 +179,15 @@ function Get-Az3166BuildLock {
         'arduino.fqbn must contain vendor, architecture, and board identifiers.'
 
     $cli = Get-Az3166BuildLockProperty $arduino 'cli' 'arduino'
-    Assert-Az3166BuildLockString (Get-Az3166BuildLockProperty $cli 'version' 'arduino.cli') 'arduino.cli.version'
+    Assert-Az3166BuildLockBasename (Get-Az3166BuildLockProperty $cli 'version' 'arduino.cli') 'arduino.cli.version'
     Assert-Az3166BuildLockAsset (Get-Az3166BuildLockProperty $cli 'windowsX64' 'arduino.cli') 'arduino.cli.windowsX64'
 
     $ide = Get-Az3166BuildLockProperty $arduino 'ide' 'arduino'
-    Assert-Az3166BuildLockString (Get-Az3166BuildLockProperty $ide 'version' 'arduino.ide') 'arduino.ide.version'
+    Assert-Az3166BuildLockBasename (Get-Az3166BuildLockProperty $ide 'version' 'arduino.ide') 'arduino.ide.version'
     Assert-Az3166BuildLockAsset (Get-Az3166BuildLockProperty $ide 'windows' 'arduino.ide') 'arduino.ide.windows'
 
     $unit = Get-Az3166BuildLockProperty $arduino 'unit' 'arduino'
-    Assert-Az3166BuildLockString (Get-Az3166BuildLockProperty $unit 'version' 'arduino.unit') 'arduino.unit.version'
+    Assert-Az3166BuildLockBasename (Get-Az3166BuildLockProperty $unit 'version' 'arduino.unit') 'arduino.unit.version'
     Assert-Az3166BuildLockAsset (Get-Az3166BuildLockProperty $unit 'archive' 'arduino.unit') 'arduino.unit.archive'
 
     $boardManager = Get-Az3166BuildLockProperty $lock 'boardManager' 'root'
@@ -187,9 +196,7 @@ function Get-Az3166BuildLock {
             (Get-Az3166BuildLockProperty $boardManager $propertyName 'boardManager') `
             "boardManager.$propertyName"
     }
-    Assert-Az3166BuildLockCondition `
-        (Test-Az3166WindowsBasename -Value $boardManager.indexPath) `
-        'boardManager.indexPath must be a safe Windows basename.'
+    Assert-Az3166BuildLockBasename $boardManager.indexPath 'boardManager.indexPath'
     Assert-Az3166BuildLockCondition `
         ($boardManager.revision -cmatch '^[0-9a-f]{40}$') `
         'boardManager.revision must be a full lowercase Git commit ID.'
@@ -202,7 +209,7 @@ function Get-Az3166BuildLock {
         'boardManager.indexUrl must use the exact repository, revision, and index path.'
 
     $core = Get-Az3166BuildLockProperty $lock 'core' 'root'
-    Assert-Az3166BuildLockString (Get-Az3166BuildLockProperty $core 'version' 'core') 'core.version'
+    Assert-Az3166BuildLockBasename (Get-Az3166BuildLockProperty $core 'version' 'core') 'core.version'
     Assert-Az3166BuildLockAsset (Get-Az3166BuildLockProperty $core 'canonicalPackage' 'core') 'core.canonicalPackage'
     $dependencies = @(Get-Az3166BuildLockProperty $core 'toolDependencies' 'core')
 
@@ -211,8 +218,8 @@ function Get-Az3166BuildLock {
         $tool = Get-Az3166BuildLockProperty $tools $toolProperty 'tools'
         $packageName = Get-Az3166BuildLockProperty $tool 'packageName' "tools.$toolProperty"
         $version = Get-Az3166BuildLockProperty $tool 'version' "tools.$toolProperty"
-        Assert-Az3166BuildLockString $packageName "tools.$toolProperty.packageName"
-        Assert-Az3166BuildLockString $version "tools.$toolProperty.version"
+        Assert-Az3166BuildLockBasename $packageName "tools.$toolProperty.packageName"
+        Assert-Az3166BuildLockBasename $version "tools.$toolProperty.version"
         Assert-Az3166BuildLockAsset `
             (Get-Az3166BuildLockProperty $tool 'windows' "tools.$toolProperty") `
             "tools.$toolProperty.windows"
@@ -224,7 +231,7 @@ function Get-Az3166BuildLock {
             "core.toolDependencies must contain $packageName $version exactly once."
     }
 
-    Assert-Az3166BuildLockString `
+    Assert-Az3166BuildLockBasename `
         (Get-Az3166BuildLockProperty $tools.armNoneEabiGcc 'compilerVersion' 'tools.armNoneEabiGcc') `
         'tools.armNoneEabiGcc.compilerVersion'
 

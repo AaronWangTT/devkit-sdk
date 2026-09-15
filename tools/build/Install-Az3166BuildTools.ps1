@@ -29,8 +29,30 @@ if ($Clean -and $VerifyOnly) {
 . (Join-Path $PSScriptRoot 'Az3166Build.Common.ps1')
 . (Join-Path $PSScriptRoot '../package/Az3166PackageLayout.ps1')
 
+function Get-Az3166UnambiguousPath {
+    param([string]$Path)
+
+    $pathText = $Path.Replace('/', '\')
+    if ($pathText.StartsWith('\\?\') -or $pathText.StartsWith('\\.\') -or
+        $pathText.StartsWith('\??\') -or $pathText -match '\A[A-Za-z]:(?!\\)') {
+        throw "Ambiguous Windows path is not supported: $Path"
+    }
+    $components = ($pathText -replace '\A[A-Za-z]:', '') -split '\\'
+    foreach ($component in $components) {
+        if ($component -in @('', '.', '..')) {
+            continue
+        }
+        if ($component -match '[. ]\z|~' -or
+            $component.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0 -or
+            $component -match '\A(CON|PRN|AUX|NUL|COM[1-9\u00b9\u00b2\u00b3]|LPT[1-9\u00b9\u00b2\u00b3])(\.|\z)') {
+            throw "Ambiguous Windows path is not supported: $Path"
+        }
+    }
+    return [IO.Path]::GetFullPath($Path)
+}
+
 $buildLock = Get-Az3166BuildLock -Path $LockPath
-$rootPath = [IO.Path]::GetFullPath($Root)
+$rootPath = Get-Az3166UnambiguousPath -Path $Root
 $volumeRoot = [IO.Path]::GetPathRoot($rootPath)
 if ($rootPath.TrimEnd([IO.Path]::DirectorySeparatorChar) -ceq $volumeRoot.TrimEnd([IO.Path]::DirectorySeparatorChar)) {
     throw "Refusing to manage a volume root: $rootPath"
@@ -43,7 +65,7 @@ if ($rootPath.Length -gt $maximumRootLength) {
 if (-not $DownloadCache) {
     $DownloadCache = "$rootPath-downloads"
 }
-$downloadCachePath = [IO.Path]::GetFullPath($DownloadCache)
+$downloadCachePath = Get-Az3166UnambiguousPath -Path $DownloadCache
 $cacheVolumeRoot = [IO.Path]::GetPathRoot($downloadCachePath)
 if ($downloadCachePath.TrimEnd([IO.Path]::DirectorySeparatorChar) -ceq $cacheVolumeRoot.TrimEnd([IO.Path]::DirectorySeparatorChar)) {
     throw "Refusing to use a volume root as the download cache: $downloadCachePath"

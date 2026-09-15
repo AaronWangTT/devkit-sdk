@@ -121,6 +121,30 @@ foreach ($unsafeAssetName in @('.', '..', '../outside', '..\outside', 'C:\outsid
 }
 Write-Host 'PASS unsafe archive and index basenames are rejected'
 
+foreach ($propertyPath in @(
+    'arduino.cli.version', 'arduino.ide.version', 'arduino.unit.version', 'core.version',
+    'tools.armNoneEabiGcc.packageName', 'tools.armNoneEabiGcc.version',
+    'tools.armNoneEabiGcc.compilerVersion', 'tools.openocd.packageName', 'tools.openocd.version'
+)) {
+    foreach ($unsafeComponent in @('..', '../outside', '..\outside', 'C:\outside', 'CON', '2.2.', '2.2 ')) {
+        Assert-BuildLockRejected {
+            param($fixture)
+            $propertyNames = $propertyPath.Split('.')
+            $parent = $fixture
+            foreach ($propertyName in $propertyNames[0..($propertyNames.Length - 2)]) {
+                $parent = $parent.$propertyName
+            }
+            $parent.($propertyNames[-1]) = $unsafeComponent
+            if ($propertyPath -match '^tools\.(armNoneEabiGcc|openocd)\.(packageName|version)$') {
+                $dependencyIndex = if ($Matches[1] -eq 'armNoneEabiGcc') { 0 } else { 1 }
+                $dependencyProperty = if ($Matches[2] -eq 'packageName') { 'name' } else { 'version' }
+                $fixture.core.toolDependencies[$dependencyIndex].$dependencyProperty = $unsafeComponent
+            }
+        } "Invalid AZ3166 build lock: $propertyPath must be a safe Windows basename."
+    }
+}
+Write-Host 'PASS unsafe tool identity path components are rejected'
+
 $workflowPath = Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml'
 $workflow = Get-Content -Raw -LiteralPath $workflowPath
 Assert-BuildConfigurationTest ($workflow.Contains('Export-Az3166BuildLockGitHubOutput')) 'Core package CI does not export the shared build lock.'
@@ -228,4 +252,4 @@ finally {
 }
 Write-Host 'PASS GitHub output matches the build lock'
 
-Write-Host '12 build-configuration tests passed.'
+Write-Host '13 build-configuration tests passed.'
