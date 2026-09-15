@@ -52,7 +52,7 @@ exit 23
     $console = @(& {
         $script:result = Invoke-Az3166EvidenceProcess -FilePath (Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })) `
             -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $fixture, '-Value', $value, '-LogPath', $log) `
-            -LogPath $log -CaptureOutput
+            -LogPath $log -StreamLogPrefix (Join-Path $fixtureRoot 'streams') -CaptureOutput
     } 6>&1 | ForEach-Object { $_.ToString() }) -join ''
     $retained = Get-Content -Raw -LiteralPath $log
     Assert-EvidenceTest ($result.ExitCode -eq 23) "Native exit code was lost, or output was buffered: $($result.ExitCode)"
@@ -65,6 +65,10 @@ exit 23
     }
     $command = ($retained -split '\r?\n')[0].Substring('Command: '.Length) | ConvertFrom-Json
     Assert-EvidenceTest ($command.arguments[-3] -ceq $value) 'Structured command arguments were corrupted.'
+    $stdout = Get-Content -Raw -LiteralPath (Join-Path $fixtureRoot 'streams.stdout.log')
+    $stderr = Get-Content -Raw -LiteralPath (Join-Path $fixtureRoot 'streams.stderr.log')
+    Assert-EvidenceTest ($stdout -ceq "stream-start$([Environment]::NewLine)$value$([Environment]::NewLine)$('o' * (32 * 4096))stdout-final") 'Raw stdout sidecar was truncated or interleaved.'
+    Assert-EvidenceTest ($stderr -ceq "stderr-diagnostic$([Environment]::NewLine)$('e' * (32 * 4096))stderr-final") 'Raw stderr sidecar was truncated or interleaved.'
     Write-Host 'PASS live stdout/stderr, large output, trailing diagnostics, literal arguments, and native failure exit code'
 
     $launchLog = Join-Path $fixtureRoot 'launch-failure.log'

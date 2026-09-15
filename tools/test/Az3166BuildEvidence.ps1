@@ -12,6 +12,8 @@ function Invoke-Az3166EvidenceProcess {
 
         [string]$LogPath,
 
+        [string]$StreamLogPrefix,
+
         [switch]$CaptureOutput
     )
 
@@ -34,16 +36,27 @@ function Invoke-Az3166EvidenceProcess {
     }
     $captured = [Text.StringBuilder]::new()
     $started = $false
+    $streamWriters = @([IO.TextWriter]::Null, [IO.TextWriter]::Null)
     try {
+        if ($StreamLogPrefix) {
+            foreach ($streamIndex in 0..1) {
+                $suffix = @('stdout', 'stderr')[$streamIndex]
+                $streamWriters[$streamIndex] = [IO.StreamWriter]::new("$StreamLogPrefix.$suffix.log", $true, [Text.UTF8Encoding]::new($false))
+                $streamWriters[$streamIndex].AutoFlush = $true
+            }
+        }
         $command = @{ executable = $FilePath; arguments = @($Arguments) } | ConvertTo-Json -Compress
         $writer.WriteLine("Command: $command")
         Write-Host "Command: $command"
         $started = $process.Start()
         $streams = [Collections.Generic.List[object]]::new()
-        foreach ($reader in @($process.StandardOutput, $process.StandardError)) {
+        $readers = @($process.StandardOutput, $process.StandardError)
+        foreach ($streamIndex in 0..1) {
+            $reader = $readers[$streamIndex]
             $buffer = [char[]]::new(4096)
             $streams.Add(@{
                 Reader = $reader
+                Writer = $streamWriters[$streamIndex]
                 Buffer = $buffer
                 Pending = $reader.ReadAsync($buffer, 0, $buffer.Length)
             })
@@ -58,6 +71,7 @@ function Invoke-Az3166EvidenceProcess {
             }
             $text = [string]::new($stream.Buffer, 0, $count)
             $writer.Write($text)
+            $stream.Writer.Write($text)
             Write-Host -NoNewline $text
             if ($CaptureOutput) {
                 $null = $captured.Append($text)
@@ -79,7 +93,13 @@ function Invoke-Az3166EvidenceProcess {
         }
         finally {
             try { $writer.Dispose() }
-            finally { $process.Dispose() }
+            finally {
+                try { $streamWriters[0].Dispose() }
+                finally {
+                    try { $streamWriters[1].Dispose() }
+                    finally { $process.Dispose() }
+                }
+            }
         }
     }
 }

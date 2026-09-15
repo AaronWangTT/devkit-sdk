@@ -17,7 +17,12 @@ MXCHIP_AZ3166.build.board=MXCHIP_AZ3166
 MXCHIP_AZ3166.build.core=arduino
 MXCHIP_AZ3166.build.ldscript=linker_scripts/gcc/AZ3166.ld
 MXCHIP_AZ3166.build.variant=MXChip_AZ3166
-MXCHIP_AZ3166.build.extra_flags=-mthumb -mfloat-abi=softfp -mfpu=fpv4-sp-d16
+MXCHIP_AZ3166.build.instruction_set.flags=-mthumb
+MXCHIP_AZ3166.build.float_abi=softfp
+MXCHIP_AZ3166.build.fpu=fpv4-sp-d16
+MXCHIP_AZ3166.build.float_abi.flags=-mfloat-abi={build.float_abi}
+MXCHIP_AZ3166.build.fpu.flags=-mfpu={build.fpu}
+MXCHIP_AZ3166.build.extra_flags={build.instruction_set.flags} {build.float_abi.flags} {build.fpu.flags}
 
 #---------------------------- UPLOAD METHODS ---------------------------
 
