@@ -301,7 +301,7 @@ done:
 
 /* Parse the individual components of the HTTP header and reflect it in
 * httpd_request_t structure. */
-static int __httpd_parse_hdr_tags(char *data_p, int len,
+static int __httpd_parse_hdr_tags(char *data_p, int len __attribute__((unused)),
 				  httpd_request_t *req_p, uint8_t *done)
 {
   //	ASSERT((data_p != NULL) && (req_p != NULL));

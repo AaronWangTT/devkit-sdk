@@ -15,7 +15,7 @@ static const int recordedDuration = 3;
 static const int AUDIO_SIZE = ((32000 * recordedDuration) + 44);
 static char *waveFile = NULL;
 static int wavFileSize;
-static int timeout = 0;
+static int timeout __attribute__((unused)) = 0;
 static int step2Result = -1;
 static RGB_LED rgbLed;
 const char *_json_object_get_string(JSON_Object *obj, const char *name);

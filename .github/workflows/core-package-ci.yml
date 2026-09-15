@@ -54,6 +54,10 @@ jobs:
         shell: pwsh
         run: ./tests/host/build/CompilerParametersTest.ps1
 
+      - name: Validate warning policy contracts
+        shell: pwsh
+        run: ./tests/host/build/WarningPolicyTest.ps1
+
       - name: Validate toolchain installer contracts
         if: runner.os == 'Windows'
         shell: pwsh
@@ -184,6 +188,11 @@ jobs:
             -ArtifactRootDirectory (Join-Path $env:RUNNER_TEMP 'az3166-build-evidence') `
             -ArtifactUrl $env:BUILD_EVIDENCE_URL |
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          $warningSummary = Join-Path $env:RUNNER_TEMP 'az3166-build-evidence/warning-summary.md'
+          if (Test-Path -LiteralPath $warningSummary) {
+            Get-Content -LiteralPath $warningSummary |
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          }
 
       - name: Upload verified package
         uses: actions/upload-artifact@v4

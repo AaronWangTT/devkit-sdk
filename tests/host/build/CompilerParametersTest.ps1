@@ -9,7 +9,7 @@ $repositoryRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PS
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 . (Join-Path $repositoryRoot 'tools/test/Az3166CompilerParameters.ps1')
 $lock = Get-Az3166BuildLock
-$baseline = Get-Az3166CompilerBaseline -RepositoryRoot $repositoryRoot
+$baseline = Get-Az3166CompilerBaseline -RepositoryRoot $repositoryRoot -Revision '53524f91e9325534a5c8fb27eafc7622a43f5276'
 $board = $lock.arduino.fqbn.Split(':')[2]
 $before = Get-Az3166RecipeProperties -Platform $baseline.Platform -Boards $baseline.Boards -Board $board
 $after = Get-Az3166RecipeProperties `
@@ -28,7 +28,7 @@ foreach ($group in @(
     'compiler.codegen.sections.flags', 'compiler.codegen.dependencies.flags', 'compiler.defines.target',
     'compiler.defines.assembly', 'compiler.defines.arduino', 'compiler.includes.system', 'compiler.includes.mbed',
     'compiler.includes.bsp', 'compiler.includes.azure', 'compiler.includes.core', 'compiler.warnings.first_party',
-    'compiler.warnings.historical', 'compiler.link.diagnostics.flags', 'compiler.link.script.flags',
+    'compiler.link.diagnostics.flags', 'compiler.link.script.flags',
     'compiler.link.map.flags', 'compiler.link.sections.flags', 'compiler.link.search.flags', 'compiler.link.wrap.flags',
     'compiler.link.libraries.flags', 'compiler.link.specs.flags', 'compiler.link.symbols.flags'
 )) {
@@ -44,14 +44,17 @@ $properties = @(
 )
 foreach ($profile in @('none', 'default', 'more', 'all')) {
     $before['compiler.warning_flags'] = $before["compiler.warning_flags.$profile"]
+    if ($profile -eq 'default') { $before['compiler.warning_flags'] = $before['compiler.warning_flags.all'] }
     $after['compiler.warning_flags'] = $after["compiler.warning_flags.$profile"]
     foreach ($name in $properties) {
         $expected = Expand-Az3166RecipeProperty -Properties $before -Name $name
+        $expected = $expected.Replace(' -Wno-unused-parameter -Wno-missing-field-initializers', '')
         $actual = Expand-Az3166RecipeProperty -Properties $after -Name $name
         Assert-CompilerParameters ($expected -ceq $actual) "Expanded property changed for ${profile}/${name}.`nExpected: $expected`nActual: $actual"
     }
 }
-Write-Host 'PASS all compiler/assembler/archive/link/objcopy/size recipes and flags expand identically for all warning profiles'
+Assert-CompilerParameters ((Expand-Az3166RecipeProperty -Properties $after -Name 'compiler.warning_flags.default') -ceq '-Wall -Wextra') 'Default warnings must remain visible.'
+Write-Host 'PASS all recipes differ from PR 4 only by the reviewed default warning selection and removed historical suppressions'
 
 $fixture = @{ root = 'before {group} {unknown} after'; group = '-O2 {debug}'; debug = '-g' }
 Assert-CompilerParameters ((Expand-Az3166RecipeProperty $fixture 'root') -ceq 'before -O2 -g {unknown} after') 'Recursive expansion lost argument order or unresolved runtime properties.'

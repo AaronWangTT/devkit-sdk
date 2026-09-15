@@ -91,7 +91,7 @@ bool httpd_is_https_active( )
     return https_active;
 }
 
-static int net_get_sock_error( int sock )
+static int net_get_sock_error( int sock __attribute__((unused)) )
 {
     return -kInProgressErr;
 }
@@ -613,7 +613,7 @@ int httpd_init( )
     return kNoErr;
 }
 
-int httpd_use_tls_certificates( const httpd_tls_certs_t *tls_certs )
+int httpd_use_tls_certificates( const httpd_tls_certs_t *tls_certs __attribute__((unused)) )
 {
 
     httpd_d("HTTPS is not enabled in server. ");

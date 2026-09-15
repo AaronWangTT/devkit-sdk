@@ -72,7 +72,7 @@ static void CheckConnection()
     }
 }
 
-static void AZIoTLog(LOG_CATEGORY log_category, const char *file, const char *func, const int line, unsigned int options, const char *format, ...)
+static void AZIoTLog(LOG_CATEGORY log_category, const char *file, const char *func __attribute__((unused)), const int line, unsigned int options, const char *format, ...)
 {
     va_list arg;
     char temp[64];
@@ -182,7 +182,7 @@ static void FreeEventInstance(EVENT_INSTANCE *event)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Event handlers
-static void ConnectionStatusCallback(IOTHUB_CLIENT_CONNECTION_STATUS result, IOTHUB_CLIENT_CONNECTION_STATUS_REASON reason, void *userContextCallback)
+static void ConnectionStatusCallback(IOTHUB_CLIENT_CONNECTION_STATUS result, IOTHUB_CLIENT_CONNECTION_STATUS_REASON reason, void *userContextCallback __attribute__((unused)))
 {
     clientConnected = false;
 
@@ -214,7 +214,7 @@ static void ConnectionStatusCallback(IOTHUB_CLIENT_CONNECTION_STATUS result, IOT
             LogInfo(">>>Connection status: disconnected");
         }
         break;
-    case IOTHUB_CLIENT_CONNECTION_COMMUNICATION_ERROR:
+    case IOTHUB_CLIENT_CONNECTION_COMMUNICATION_ERROR: case IOTHUB_CLIENT_CONNECTION_NO_PING_RESPONSE:
         break;
     case IOTHUB_CLIENT_CONNECTION_OK:
         if (result == IOTHUB_CLIENT_CONNECTION_AUTHENTICATED)
@@ -297,7 +297,7 @@ static IOTHUBMESSAGE_DISPOSITION_RESULT ReceiveMessageCallback(IOTHUB_MESSAGE_HA
     return IOTHUBMESSAGE_ACCEPTED;
 }
 
-static void DeviceTwinCallback(DEVICE_TWIN_UPDATE_STATE updateState, const unsigned char *payLoad, size_t size, void *userContextCallback)
+static void DeviceTwinCallback(DEVICE_TWIN_UPDATE_STATE updateState, const unsigned char *payLoad, size_t size, void *userContextCallback __attribute__((unused)))
 {
     ota_callback(payLoad, size);
     if (_device_twin_callback)
@@ -306,7 +306,7 @@ static void DeviceTwinCallback(DEVICE_TWIN_UPDATE_STATE updateState, const unsig
     }
 }
 
-static int DeviceMethodCallback(const char *methodName, const unsigned char *payload, size_t size, unsigned char **response, size_t *response_size, void *userContextCallback)
+static int DeviceMethodCallback(const char *methodName, const unsigned char *payload, size_t size, unsigned char **response, size_t *response_size, void *userContextCallback __attribute__((unused)))
 {
     if (_device_method_callback)
     {

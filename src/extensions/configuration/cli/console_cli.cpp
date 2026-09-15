@@ -75,12 +75,12 @@ static void print_help()
     }
 }
 
-static void help_command(int argc, char **argv)
+static void help_command(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
     print_help();
 }
 
-static void get_version_command(int argc, char **argv)
+static void get_version_command(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
     char ver[128];
     int ret;
@@ -102,7 +102,7 @@ static void get_version_command(int argc, char **argv)
     }
 }
 
-static void wifi_scan(int argc, char **argv)
+static void wifi_scan(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
     WiFiAccessPoint aps[10];
     memset(aps, 0, sizeof(aps));
@@ -121,7 +121,7 @@ static void wifi_scan(int argc, char **argv)
     }
 }
 
-static void reboot_and_exit_command(int argc, char **argv)
+static void reboot_and_exit_command(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
     Serial.printf("Reboot\r\n");
     mico_system_reboot();

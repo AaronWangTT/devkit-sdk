@@ -25,7 +25,13 @@ $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 . (Join-Path $repositoryRoot 'tools/package/Az3166PackageLayout.ps1')
 . (Join-Path $PSScriptRoot 'Az3166BuildEvidence.ps1')
+. (Join-Path $PSScriptRoot 'Az3166Warnings.ps1')
 $buildLock = Get-Az3166BuildLock
+$warningPolicyPath = Join-Path $repositoryRoot 'tools/build/az3166-warning-policy.json'
+$warningPolicy = Get-Az3166WarningPolicy -Path $warningPolicyPath -BuildLock $buildLock
+Assert-Az3166WarningSnapshots -Policy $warningPolicy -RepositoryRoot $repositoryRoot
+$layoutPath = Join-Path $repositoryRoot 'platform/az3166/package-layout.json'
+$warningLayout = Get-Content -Raw -LiteralPath $layoutPath | ConvertFrom-Json
 $fqbn = $buildLock.arduino.fqbn
 $sketchRoots = @(
     (Join-Path $repositoryRoot "examples")
@@ -84,7 +90,7 @@ if ((Test-Path -LiteralPath $outputRoot) -and
     throw "Output directory must be empty; choose a fresh -OutputDirectory: $outputRoot"
 }
 $sketchNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-foreach ($reservedName in @('compiler-versions.txt', 'az3166-build-lock.json', 'summary.md')) {
+foreach ($reservedName in @('compiler-versions.txt', 'az3166-build-lock.json', 'summary.md', 'az3166-warning-policy.json', 'package-layout.json', 'warning-summary.json', 'warning-summary.md')) {
     $null = $sketchNames.Add($reservedName)
 }
 foreach ($sketchDirectory in $sketchDirectories) {
@@ -136,6 +142,8 @@ try {
     }
     $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
     Copy-Item -LiteralPath $lockPath -Destination (Join-Path $outputRoot 'az3166-build-lock.json')
+    Copy-Item -LiteralPath $warningPolicyPath -Destination (Join-Path $outputRoot 'az3166-warning-policy.json')
+    Copy-Item -LiteralPath $layoutPath -Destination (Join-Path $outputRoot 'package-layout.json')
     $versionHeader = Join-Path $repositoryRoot 'src/core/arduino/SystemVersion.h'
     $environment = [ordered]@{
         os = [Runtime.InteropServices.RuntimeInformation]::OSDescription
@@ -154,6 +162,10 @@ try {
         arduinoDataDirectory = $arduinoDataDirectory
         arduinoUnitDirectory = $arduinoUnitDirectory
         stagedPlatformDirectory = $platformDirectory
+        stagedArduinoUnitDirectory = Join-Path $librariesDirectory 'ArduinoUnit'
+        compilerRoot = Split-Path -Parent $compilerDirectory
+        warningPolicySha256 = (Get-FileHash -LiteralPath $warningPolicyPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        packageLayoutSha256 = (Get-FileHash -LiteralPath $layoutPath -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     New-Item -ItemType Directory -Path $librariesDirectory -Force | Out-Null
     New-Item -ItemType Directory -Path $downloadsDirectory -Force | Out-Null
@@ -188,7 +200,7 @@ try {
             'compile',
             '--fqbn', $fqbn,
             '--build-path', $buildPath,
-            '--warnings', 'all',
+            '--warnings', $warningPolicy.warningProfile,
             '--verbose',
             $sketchDirectory
         )
@@ -299,11 +311,16 @@ try {
         if ($issues.Count -gt 0) { $failures.Add($relativePath) }
     }
 
+    $warningResult = Export-Az3166WarningEvidence -OutputDirectory $outputRoot -Policy $warningPolicy -Layout $warningLayout -RequireCompleteInventory:(-not $Sketch)
+    foreach ($failedSketch in $warningResult.failedSketches) {
+        if (-not $failures.Contains($failedSketch)) { $failures.Add($failedSketch) }
+    }
     Get-Az3166EvidenceSummary -OutputDirectory $outputRoot |
         Set-Content -LiteralPath (Join-Path $outputRoot 'summary.md') -Encoding utf8
     if ($failures.Count -gt 0) {
         throw "$($failures.Count) Arduino test sketch build(s) failed: $($failures -join ', ')"
     }
+    if (-not $warningResult.passed) { throw "Warning policy failed; inspect $outputRoot/warning-summary.json" }
 
     Write-Host "$($sketchDirectories.Count) Arduino test sketch build(s) passed."
 }

@@ -308,6 +308,10 @@ in this PR so PR 4 can demonstrate command equivalence first.
 - all diagnostics remain visible in retained logs;
 - firmware binaries and size reports remain equal to the PR 4 baseline.
 
+The policy, classified inventory, fixed-root validation record, and deferred
+findings are documented in
+[First-Party Warning Policy](first-party-warning-policy.md).
+
 ## Stage 1 Exit Gate
 
 Stage 1 is complete only when all of the following are true:
