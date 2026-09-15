@@ -9,6 +9,10 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ArduinoUnitDirectory,
 
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$OutputDirectory,
+
     [switch]$VerboseBuild,
 
     [string[]]$Sketch
@@ -20,6 +24,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 . (Join-Path $repositoryRoot 'tools/package/Az3166PackageLayout.ps1')
+. (Join-Path $PSScriptRoot 'Az3166BuildEvidence.ps1')
 $buildLock = Get-Az3166BuildLock
 $fqbn = $buildLock.arduino.fqbn
 $sketchRoots = @(
@@ -56,7 +61,7 @@ if ($Sketch) {
         else {
             Split-Path -Parent $resolved.Path
         }
-    } | Sort-Object -Unique)
+    } | Sort-Object -Unique -CaseSensitive)
 }
 else {
     $sketchDirectories = @(Get-ChildItem -LiteralPath $sketchRoots -Recurse -File |
@@ -65,11 +70,45 @@ else {
             $_.BaseName -eq $_.Directory.Name
         } |
         ForEach-Object { $_.Directory.FullName } |
-        Sort-Object -Unique)
+        Sort-Object -Unique -CaseSensitive)
 }
 
 if ($sketchDirectories.Count -eq 0) {
     throw "No Arduino test sketches were found under $($sketchRoots -join ', ')."
+}
+
+$outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
+if ((Test-Path -LiteralPath $outputRoot) -and
+    (-not (Test-Path -LiteralPath $outputRoot -PathType Container) -or
+        @(Get-ChildItem -LiteralPath $outputRoot -Force).Count -gt 0)) {
+    throw "Output directory must be empty; choose a fresh -OutputDirectory: $outputRoot"
+}
+$sketchNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($reservedName in @('compiler-versions.txt', 'az3166-build-lock.json', 'summary.md')) {
+    $null = $sketchNames.Add($reservedName)
+}
+foreach ($sketchDirectory in $sketchDirectories) {
+    $sketchName = Split-Path -Leaf $sketchDirectory
+    if (-not (Test-Az3166WindowsBasename $sketchName) -or -not $sketchNames.Add($sketchName)) {
+        throw "Sketch names must be unique safe directory names and not reserved for evidence: $sketchName"
+    }
+    $destination = Join-Path $outputRoot $sketchName
+    $retainedBuildPath = Join-Path $destination 'build'
+    if ($IsWindows -and $retainedBuildPath.Length -gt 140) {
+        throw "Windows build path length $($retainedBuildPath.Length) exceeds the supported maximum of 140; choose a shorter -OutputDirectory: $retainedBuildPath"
+    }
+    if (Test-Path -LiteralPath $destination) {
+        throw "Sketch output already exists; choose a fresh -OutputDirectory: $destination"
+    }
+}
+
+$gitCommand = @(Get-Command git -CommandType Application -ErrorAction Stop)[0].Source
+$gitRevision = Invoke-Az3166EvidenceProcess -FilePath $gitCommand `
+    -Arguments @('-C', $repositoryRoot, 'rev-parse', 'HEAD') -CaptureOutput
+$gitStatus = Invoke-Az3166EvidenceProcess -FilePath $gitCommand `
+    -Arguments @('-C', $repositoryRoot, 'status', '--porcelain=v1', '--untracked-files=normal') -CaptureOutput
+if ($gitRevision.ExitCode -ne 0 -or $gitStatus.ExitCode -ne 0) {
+    throw 'Could not record repository revision and dirty-worktree status.'
 }
 
 $sketchbook = Join-Path $temporaryRoot "sketchbook"
@@ -79,6 +118,43 @@ $downloadsDirectory = Join-Path $temporaryRoot "downloads"
 $configurationPath = Join-Path $temporaryRoot "arduino-cli.yaml"
 
 try {
+    New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
+    $versionsPath = Join-Path $outputRoot 'compiler-versions.txt'
+    $compilerDirectory = Join-Path $arduinoDataDirectory "packages/AZ3166/tools/$($buildLock.tools.armNoneEabiGcc.packageName)/$($buildLock.tools.armNoneEabiGcc.version)/bin"
+    $identities = [ordered]@{}
+    $probes = @(
+        @{ Name = 'git'; Path = $gitCommand; Arguments = @('--version') }
+        @{ Name = 'arduinoCli'; Path = $arduinoCliCommand.Source; Arguments = @('version') }
+        foreach ($tool in @('gcc', 'g++', 'as', 'ar', 'ld', 'objcopy', 'size')) {
+            @{ Name = $tool; Path = Join-Path $compilerDirectory "arm-none-eabi-$tool$(if ($IsWindows) { '.exe' })"; Arguments = @('--version') }
+        }
+    )
+    foreach ($probe in $probes) {
+        $result = Invoke-Az3166EvidenceProcess -FilePath $probe.Path -Arguments $probe.Arguments -LogPath $versionsPath -CaptureOutput
+        $identities[$probe.Name] = [ordered]@{ path = $probe.Path; version = $result.Output.Trim(); exitCode = $result.ExitCode }
+        if ($result.ExitCode -ne 0) { throw "Could not identify $($probe.Name): exit $($result.ExitCode)" }
+    }
+    $lockPath = Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json'
+    Copy-Item -LiteralPath $lockPath -Destination (Join-Path $outputRoot 'az3166-build-lock.json')
+    $versionHeader = Join-Path $repositoryRoot 'src/core/arduino/SystemVersion.h'
+    $environment = [ordered]@{
+        os = [Runtime.InteropServices.RuntimeInformation]::OSDescription
+        architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+        powershell = $PSVersionTable.PSVersion.ToString()
+        tools = $identities
+        gccPackageVersion = $buildLock.tools.armNoneEabiGcc.version
+        coreVersion = Get-Az3166CoreVersion -HeaderContent (Get-Content -Raw -LiteralPath $versionHeader) -Source $versionHeader
+        lockedCoreVersion = $buildLock.core.version
+        fqbn = $fqbn
+        lockSha256 = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        repository = $repositoryRoot
+        revision = $gitRevision.Output.Trim()
+        dirtyWorktree = -not [string]::IsNullOrWhiteSpace($gitStatus.Output)
+        gitStatus = $gitStatus.Output
+        arduinoDataDirectory = $arduinoDataDirectory
+        arduinoUnitDirectory = $arduinoUnitDirectory
+        stagedPlatformDirectory = $platformDirectory
+    }
     New-Item -ItemType Directory -Path $librariesDirectory -Force | Out-Null
     New-Item -ItemType Directory -Path $downloadsDirectory -Force | Out-Null
     Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination $platformDirectory
@@ -98,40 +174,132 @@ try {
     $failures = [System.Collections.Generic.List[string]]::new()
     foreach ($sketchDirectory in $sketchDirectories) {
         $relativePath = [System.IO.Path]::GetRelativePath($repositoryRoot, $sketchDirectory)
-        $buildName = $relativePath -replace '[^A-Za-z0-9_.-]', '-'
-        $buildPath = Join-Path $temporaryRoot "build-$buildName"
+        $sketchName = Split-Path -Leaf $sketchDirectory
+        $evidencePath = Join-Path $outputRoot $sketchName
+        $buildPath = Join-Path $evidencePath 'build'
+        $logPath = Join-Path $evidencePath 'build.log'
+        $contextPath = Join-Path $evidencePath 'build-context.json'
+        $issues = [Collections.Generic.List[string]]::new()
 
         Write-Host "Compiling $relativePath"
         $arguments = @(
             '--config-file', $configurationPath,
+            '--no-color',
             'compile',
             '--fqbn', $fqbn,
             '--build-path', $buildPath,
-            '--warnings', 'all'
+            '--warnings', 'all',
+            '--verbose',
+            $sketchDirectory
         )
-        if ($VerboseBuild) {
-            $arguments += '--verbose'
+        $context = [ordered]@{
+            schemaVersion = 1
+            sketch = $relativePath
+            sketchDirectory = $sketchDirectory
+            buildDirectory = $buildPath
+            environment = $environment
+            startedAt = [DateTime]::UtcNow.ToString('o')
+            finishedAt = $null
+            status = 'running'
+            compile = [ordered]@{ executable = $arduinoCliCommand.Source; arguments = $arguments; exitCode = $null }
+            compilationDatabase = [ordered]@{ arguments = @($arguments) + '--only-compilation-database'; exitCode = $null; entries = 0 }
+            sizeExitCode = $null
+            artifacts = @()
+            errors = @()
         }
-        $arguments += $sketchDirectory
-        $output = (& $arduinoCliCommand.Source @arguments 2>&1 | Out-String)
-        $exitCode = $LASTEXITCODE
-
-        if ($exitCode -ne 0) {
-            Write-Host $output
+        try {
+            New-Item -ItemType Directory -Path $buildPath -Force | Out-Null
+            Copy-Item -LiteralPath $versionsPath -Destination (Join-Path $evidencePath 'compiler-versions.txt')
+            $context | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $contextPath -Encoding utf8
+        }
+        catch {
+            $issues.Add("Could not prepare evidence for ${relativePath}: $($_.Exception.Message)")
+            Write-Host $issues[-1]
+            try {
+                New-Item -ItemType Directory -Path $evidencePath -Force | Out-Null
+                Complete-Az3166BuildEvidence -Context $context -Issues $issues -ContextPath $contextPath -LogPath $logPath
+            }
+            catch {
+                Write-Host "Could not retain preparation failure at ${evidencePath}: $($_.Exception.Message)"
+            }
             $failures.Add($relativePath)
             continue
         }
-
-        if ($VerboseBuild) {
-            Write-Host $output
-            continue
+        try {
+            $result = Invoke-Az3166EvidenceProcess -FilePath $arduinoCliCommand.Source -Arguments $arguments -LogPath $logPath
+            $context.compile.exitCode = $result.ExitCode
+            if ($result.ExitCode -ne 0) { $issues.Add("Arduino CLI compile failed with exit code $($result.ExitCode).") }
+        }
+        catch {
+            $issues.Add("Compilation: $($_.Exception.Message)")
         }
 
-        $output -split "`r?`n" |
-            Where-Object { $_ -match "^(Sketch uses|Global variables use)" } |
-            ForEach-Object { Write-Host "  $_" }
+        try {
+            $artifacts = @(Get-ChildItem -LiteralPath $buildPath -File | Where-Object { $_.Extension -in '.elf', '.map', '.bin' })
+            $context.artifacts = @(
+                foreach ($artifact in $artifacts) {
+                    Copy-Item -LiteralPath $artifact.FullName -Destination (Join-Path $evidencePath $artifact.Name)
+                    [ordered]@{
+                        name = $artifact.Name
+                        bytes = $artifact.Length
+                        sha256 = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                    }
+                }
+            )
+            foreach ($extension in @('.elf', '.map', '.bin')) {
+                if (@($artifacts | Where-Object { $_.Extension -eq $extension -and $_.Length -gt 0 }).Count -eq 0) {
+                    $issues.Add("Missing nonempty $extension artifact.")
+                }
+            }
+            $elf = @($artifacts | Where-Object { $_.Extension -eq '.elf' -and $_.Length -gt 0 })
+            if ($elf.Count -eq 1) {
+                $result = Invoke-Az3166EvidenceProcess -FilePath $identities['size'].path `
+                    -Arguments @('-A', $elf[0].FullName) -LogPath $logPath -CaptureOutput
+                $context.sizeExitCode = $result.ExitCode
+                $result.Output | Set-Content -LiteralPath (Join-Path $evidencePath 'size.txt') -Encoding utf8 -NoNewline
+                if ($result.ExitCode -ne 0) { throw "GNU size failed with exit code $($result.ExitCode)." }
+                ConvertFrom-Az3166SizeReport -Output $result.Output -ElfName $elf[0].Name |
+                    ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $evidencePath 'size.json') -Encoding utf8
+            }
+            else {
+                $issues.Add('Expected exactly one nonempty ELF for size reporting.')
+            }
+        }
+        catch {
+            $issues.Add("Artifacts and sizes: $($_.Exception.Message)")
+        }
+
+        try {
+            $databasePath = Join-Path $buildPath 'compile_commands.json'
+            if (Test-Path -LiteralPath $databasePath -PathType Leaf) {
+                Copy-Item -LiteralPath $databasePath -Destination (Join-Path $evidencePath 'compile_commands.build.json')
+            }
+            $result = Invoke-Az3166EvidenceProcess -FilePath $arduinoCliCommand.Source `
+                -Arguments $context.compilationDatabase.arguments -LogPath $logPath
+            $context.compilationDatabase.exitCode = $result.ExitCode
+            if (Test-Path -LiteralPath $databasePath -PathType Leaf) {
+                Copy-Item -LiteralPath $databasePath -Destination (Join-Path $evidencePath 'compile_commands.json')
+            }
+            if ($result.ExitCode -ne 0) { throw "Arduino CLI database generation failed with exit code $($result.ExitCode)." }
+            $sketchFile = @(@('ino', 'pde') | ForEach-Object { Join-Path $sketchDirectory "$sketchName.$_" } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })[0]
+            $context.compilationDatabase.entries = Assert-Az3166CompilationDatabase -Path $databasePath `
+                -SketchSource (Join-Path $buildPath "sketch/$([IO.Path]::GetFileName($sketchFile)).cpp")
+        }
+        catch {
+            $issues.Add("Compilation database: $($_.Exception.Message)")
+        }
+        try {
+            Complete-Az3166BuildEvidence -Context $context -Issues $issues -ContextPath $contextPath -LogPath $logPath
+        }
+        catch {
+            $issues.Add("Could not finish evidence for ${relativePath}: $($_.Exception.Message)")
+            Write-Host $issues[-1]
+        }
+        if ($issues.Count -gt 0) { $failures.Add($relativePath) }
     }
 
+    Get-Az3166EvidenceSummary -OutputDirectory $outputRoot |
+        Set-Content -LiteralPath (Join-Path $outputRoot 'summary.md') -Encoding utf8
     if ($failures.Count -gt 0) {
         throw "$($failures.Count) Arduino test sketch build(s) failed: $($failures -join ', ')"
     }

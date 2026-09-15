@@ -103,11 +103,21 @@ $tools = .\tools\build\Install-Az3166BuildTools.ps1 `
 .\tools\test\Test-Az3166Sketches.ps1 `
 	-ArduinoCli $tools.ArduinoCliPath `
 	-ArduinoDataDirectory $tools.ArduinoDataDirectory `
-	-ArduinoUnitDirectory $tools.ArduinoUnitDirectory
+	-ArduinoUnitDirectory $tools.ArduinoUnitDirectory `
+	-OutputDirectory .\artifacts\sketches
 ```
 
 Add `-Sketch .\tests\hardware\UnitTest` to the sketch-test command to compile a
 single project. The toolchain root must not exceed 70 characters.
+
+`-OutputDirectory` is required. Each sketch gets its own retained verbose log,
+build context, tool identities, compilation database, sketch-named firmware,
+raw and structured sizes, and intermediate build files. Nonempty output roots
+are rejected; choose a fresh output directory for another run.
+All requested sketches are attempted, and any build or evidence failure makes
+the command fail. `-VerboseBuild` remains accepted but output is always verbose.
+See [build evidence and validation findings](docs/persistent-build-evidence.md)
+for the layout, CI artifact links, and the existing path-dependent binary caveat.
 
 The release workflow selects the relocated tools and host tests when present,
 and falls back to their original paths for historical tags. Package source paths

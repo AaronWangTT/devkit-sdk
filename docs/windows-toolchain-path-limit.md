@@ -30,7 +30,10 @@ Each case used a fresh directory directly under `C:\` whose absolute length
 matched the requested value. The verified download cache, sketch, local Core
 checkout, FQBN, and compile command remained unchanged. Setup ran offline
 through `Install-Az3166BuildTools.ps1`; compilation ran through
-`Test-Az3166Sketches.ps1 -VerboseBuild`.
+`Test-Az3166Sketches.ps1 -VerboseBuild` before PR 3 added the required
+`-OutputDirectory`. When repeating this experiment, add a distinct empty
+output directory for each case; verbose logs and artifacts are now always
+retained as described in [persistent build evidence](persistent-build-evidence.md).
 
 The verbose output contained no response-file arguments. Include and object
 paths were measured directly from the emitted compiler commands. Shortening

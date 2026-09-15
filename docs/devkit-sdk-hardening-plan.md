@@ -63,7 +63,8 @@ $tools = ./tools/build/Install-Az3166BuildTools.ps1 `
 ./tools/test/Test-Az3166Sketches.ps1 `
   -ArduinoCli $tools.ArduinoCliPath `
   -ArduinoDataDirectory $tools.ArduinoDataDirectory `
-  -ArduinoUnitDirectory $tools.ArduinoUnitDirectory
+  -ArduinoUnitDirectory $tools.ArduinoUnitDirectory `
+  -OutputDirectory ./artifacts/sketches
 ```
 
 This discovers the same 13 projects under `examples` and `tests/hardware`, stages
@@ -81,13 +82,17 @@ Compile one project or supply explicit installed tool locations:
   -ArduinoCli $tools.ArduinoCliPath `
   -ArduinoDataDirectory $tools.ArduinoDataDirectory `
   -ArduinoUnitDirectory $tools.ArduinoUnitDirectory `
+  -OutputDirectory ./artifacts/unit-test `
   -Sketch ./tests/hardware/UnitTest
 ```
 
 Builds fail on compiler errors and report flash/RAM usage. The installer owns
 only the selected root and leaves its verified download cache intact when
-`-Clean` is used. Temporary build files are currently removed when the driver
-exits; retaining diagnostics/artifacts is still a hardening task.
+`-Clean` is used. Use a nonexistent or empty output directory. The driver retains
+complete verbose logs, identities, databases, firmware, sizes, and intermediate
+build files on success and failure; only private staging is removed. See
+[persistent build evidence](persistent-build-evidence.md) for the retained layout
+and validation findings.
 
 ### Inspect Or Integrate The Platform
 

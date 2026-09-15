@@ -175,11 +175,12 @@ evidence under a stable directory per sketch:
   build-context.json
   compiler-versions.txt
   compile_commands.json
-  firmware.elf
-  firmware.map
-  firmware.bin
+  <sketch>.ino.elf
+  <sketch>.ino.map
+  <sketch>.ino.bin
   size.txt
   size.json
+  build/
 ```
 
 The driver must:
@@ -209,6 +210,11 @@ to its log, sizes, and artifact names but does not replace the raw evidence.
 - spaces in repository and output paths do not corrupt command capture;
 - the existing 13 sketches still compile;
 - retained binaries and size results match the pre-PR baseline.
+
+Implementation details, matched-path validation results, and findings deferred
+for later review are recorded in
+[Persistent Build Evidence](persistent-build-evidence.md). Legacy `.pde`
+sketches retain their original suffix instead of `.ino`.
 
 ## PR 4: Compiler Parameter Normalization
 
