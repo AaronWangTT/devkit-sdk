@@ -188,7 +188,7 @@ function Get-Az3166EvidenceSummary {
             $target = if ($ArtifactUrl) { $ArtifactUrl } else { ($relative.Split('/') | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/' }
             $links[$name] = "[$relative]($target)"
         }
-        $sizes = @('size.txt', 'size.json' | Where-Object { $links.ContainsKey($_) } | ForEach-Object { $links[$_] }) -join ', '
+        $sizes = @(@('size.txt', 'size.json') | Where-Object { $links.ContainsKey($_) } | ForEach-Object { $links[$_] }) -join ', '
         $firmware = @($context.artifacts | ForEach-Object { $links[$_.name] }) -join ', '
         "| $($directory.Name) | $($context.status) | $($links['build.log']) | $sizes | $firmware |"
     }

@@ -110,6 +110,14 @@ Total                 492
     Set-Content -LiteralPath (Join-Path $failedPath 'build.log') -Value 'compiler failed' -Encoding utf8
     $summary = (Get-Az3166EvidenceSummary -OutputDirectory $summaryRoot) -join "`n"
     Assert-EvidenceTest ($summary.Contains('[Failed/build.log](Failed/build.log)') -and $summary.Contains('| failed |')) 'An early failure was omitted from the evidence summary.'
+    Assert-EvidenceTest (-not $summary.Contains('size.txt') -and -not $summary.Contains('size.json')) 'Missing size reports were listed in a failed-build summary.'
+    foreach ($sizeName in @('size.txt', 'size.json')) {
+        Set-Content -LiteralPath (Join-Path $failedPath $sizeName) -Value 'retained size report' -Encoding utf8
+    }
+    $summary = (Get-Az3166EvidenceSummary -OutputDirectory $summaryRoot) -join "`n"
+    foreach ($sizeName in @('size.txt', 'size.json')) {
+        Assert-EvidenceTest ($summary.Contains("[Failed/$sizeName](Failed/$sizeName)")) "Missing size-report hyperlink: $sizeName"
+    }
     $summary = (Get-Az3166EvidenceSummary -OutputDirectory $summaryRoot -ArtifactUrl 'https://example.test/artifact') -join "`n"
     Assert-EvidenceTest ($summary.Contains('[Failed/build.log](https://example.test/artifact)')) 'CI summary did not link the retained artifact.'
     $summary = (Get-Az3166EvidenceSummary -OutputDirectory $summaryRoot -ArtifactUrl 'https://example.test/artifact' -ArtifactRootDirectory $fixtureRoot) -join "`n"
@@ -240,8 +248,19 @@ Total                 492
         New-Item -ItemType Directory -Path $invalidLayout | Out-Null
         Set-Content -LiteralPath (Join-Path $invalidLayout 'Other.ino') -Value 'void setup() {} void loop() {}' -Encoding utf8
         $fqbn = (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json') | ConvertFrom-Json).arduino.fqbn
+        $layoutSketchbook = Join-Path $fixtureRoot 'layout-sketchbook'
+        . (Join-Path $repositoryRoot 'tools/package/Az3166PackageLayout.ps1')
+        Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination (Join-Path $layoutSketchbook 'hardware/AZ3166Checkout/stm32f4')
+        $layoutConfig = Join-Path $OutputDirectory 'invalid-sketch-layout-config.json'
+        @{
+            directories = @{
+                data = [IO.Path]::GetFullPath($ArduinoDataDirectory)
+                downloads = Join-Path $fixtureRoot 'layout-downloads'
+                user = $layoutSketchbook
+            }
+        } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $layoutConfig -Encoding utf8
         $invalidResult = Invoke-Az3166EvidenceProcess -FilePath $ArduinoCli `
-            -Arguments @('compile', '--fqbn', $fqbn, '--only-compilation-database', $invalidLayout) `
+            -Arguments @('--config-file', $layoutConfig, 'compile', '--fqbn', $fqbn, '--only-compilation-database', $invalidLayout) `
             -LogPath (Join-Path $OutputDirectory 'invalid-sketch-layout.log') -CaptureOutput
         Assert-EvidenceTest ($invalidResult.ExitCode -ne 0 -and $invalidResult.Output.Contains('main file missing from sketch')) 'Pinned CLI unexpectedly accepted a sketch without its matching main file.'
         Write-Host 'PASS real compiler/linker failures, complete diagnostics, partial artifacts, continued builds, native statuses, identities, space-containing paths, and stale-evidence rejection'

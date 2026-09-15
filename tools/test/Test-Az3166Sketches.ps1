@@ -269,7 +269,7 @@ try {
                 Copy-Item -LiteralPath $databasePath -Destination (Join-Path $evidencePath 'compile_commands.json')
             }
             if ($result.ExitCode -ne 0) { throw "Arduino CLI database generation failed with exit code $($result.ExitCode)." }
-            $sketchFile = @('ino', 'pde' | ForEach-Object { Join-Path $sketchDirectory "$sketchName.$_" } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })[0]
+            $sketchFile = @(@('ino', 'pde') | ForEach-Object { Join-Path $sketchDirectory "$sketchName.$_" } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })[0]
             $context.compilationDatabase.entries = Assert-Az3166CompilationDatabase -Path $databasePath `
                 -SketchSource (Join-Path $buildPath "sketch/$([IO.Path]::GetFileName($sketchFile)).cpp")
         }
