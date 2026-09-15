@@ -40,6 +40,11 @@ any writes, so root metadata and unrelated sketch results cannot mix between run
 Duplicate sketch-folder names are also rejected. Use a fresh output directory for another run.
 Root evidence names (`compiler-versions.txt`, `az3166-build-lock.json`, and
 `summary.md`) are reserved and cannot be used as sketch-directory names.
+On Windows, the absolute `<output>/<sketch>/build` path must not exceed 140
+characters. Preflight rejects longer paths without writes; use a shorter output
+root. This is a conservative tested build-path bound, separate from the
+installer's 70-character toolchain-root limit, and is not a claimed failure
+boundary for GCC or every possible user-supplied source layout.
 The driver never deletes prior evidence. `-VerboseBuild` is retained for caller
 compatibility, but every build now uses `--verbose --warnings all` and streams
 both CLI output channels to the console and `build.log` as they arrive.
@@ -117,6 +122,10 @@ shared installer. Both repository and evidence paths contained spaces.
 - Database structure/sketch-identity, structured section sizes, and empty-failure
   summary tests passed. All 15 existing build-lock tests passed.
 - A normal representative build retained every required nonempty artifact.
+- A representative AzureIotHubExample build passed with an absolute retained
+  build-directory length of 140 characters; the longest generated file path was
+  194 characters. The driver enforces this conservative Windows bound, and a
+  141-character preflight fixture is rejected without creating output.
 - Real compiler/linker failure fixtures passed, including a subsequent successful
   sketch and exact-copy hash checks.
 - All 13 pre-PR sketches and all 13 new-driver sketches compiled. Matched-path
@@ -168,3 +177,9 @@ locations; every reported section row matched exactly.
    foreign-owned. Validation used a disposable Windows-local checkout with
    spaces, created with Linux Git. No global safe-directory exception or account
    change was made; this is a local host prerequisite, not a toolchain change.
+4. **Independent output-path constraint.** Retained builds inherit the selected
+  output root, unlike the old temporary build tree. A 140-character absolute
+  build path is verified and enforced conservatively on Windows; measurement of
+  a wider output-path boundary is deferred. The existing 70-character installer
+  limit describes a different include-path lookup problem and is not evidence
+  that arbitrarily deep build-output paths work.

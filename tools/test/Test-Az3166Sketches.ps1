@@ -93,6 +93,10 @@ foreach ($sketchDirectory in $sketchDirectories) {
         throw "Sketch names must be unique safe directory names and not reserved for evidence: $sketchName"
     }
     $destination = Join-Path $outputRoot $sketchName
+    $retainedBuildPath = Join-Path $destination 'build'
+    if ($IsWindows -and $retainedBuildPath.Length -gt 140) {
+        throw "Windows build path length $($retainedBuildPath.Length) exceeds the supported maximum of 140; choose a shorter -OutputDirectory: $retainedBuildPath"
+    }
     if (Test-Path -LiteralPath $destination) {
         throw "Sketch output already exists; choose a fresh -OutputDirectory: $destination"
     }
@@ -276,15 +280,8 @@ try {
         catch {
             $issues.Add("Compilation database: $($_.Exception.Message)")
         }
-        $context.finishedAt = [DateTime]::UtcNow.ToString('o')
-        $context.status = if ($issues.Count -eq 0) { 'passed' } else { 'failed' }
-        $context.errors = @($issues)
         try {
-            $context | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $contextPath -Encoding utf8
-            foreach ($issue in $issues) {
-                Write-Host $issue
-                Add-Content -LiteralPath $logPath -Value $issue -Encoding utf8
-            }
+            Complete-Az3166BuildEvidence -Context $context -Issues $issues -ContextPath $contextPath -LogPath $logPath
         }
         catch {
             $issues.Add("Could not finish evidence for ${relativePath}: $($_.Exception.Message)")

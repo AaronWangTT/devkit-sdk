@@ -98,7 +98,7 @@ function Assert-Az3166CompilationDatabase {
         $properties = @($entry.PSObject.Properties.Name)
         if ('file' -notin $properties -or 'directory' -notin $properties -or
             $entry.file -isnot [string] -or [string]::IsNullOrWhiteSpace($entry.file) -or
-            $entry.directory -isnot [string] -or -not [IO.Path]::IsPathRooted($entry.directory)) {
+            $entry.directory -isnot [string] -or -not [IO.Path]::IsPathFullyQualified($entry.directory)) {
             throw 'Compilation database entry is missing a source file or absolute working directory.'
         }
         $hasArguments = 'arguments' -in $properties -and $entry.arguments -is [array] -and
@@ -108,7 +108,10 @@ function Assert-Az3166CompilationDatabase {
         if (-not $hasArguments -and -not $hasCommand) {
             throw 'Compilation database entry is missing compiler arguments.'
         }
-        $source = if ([IO.Path]::IsPathRooted($entry.file)) { $entry.file } else { Join-Path $entry.directory $entry.file }
+        if ([IO.Path]::IsPathRooted($entry.file) -and -not [IO.Path]::IsPathFullyQualified($entry.file)) {
+            throw 'Compilation database source must be fully qualified or relative to its working directory.'
+        }
+        $source = if ([IO.Path]::IsPathFullyQualified($entry.file)) { $entry.file } else { Join-Path $entry.directory $entry.file }
         if ([IO.Path]::GetFullPath($source).Equals($expected, $comparison)) {
             $matchesSketch = $true
         }
@@ -117,6 +120,30 @@ function Assert-Az3166CompilationDatabase {
         throw "Compilation database has no entry for the built sketch: $SketchSource"
     }
     return $database.Count
+}
+
+function Complete-Az3166BuildEvidence {
+    param(
+        [Collections.IDictionary]$Context,
+        [Collections.Generic.List[string]]$Issues,
+        [string]$ContextPath,
+        [string]$LogPath
+    )
+
+    try {
+        foreach ($issue in $Issues) {
+            Write-Host $issue
+            Add-Content -LiteralPath $LogPath -Value $issue -Encoding utf8 -ErrorAction Stop
+        }
+    }
+    catch {
+        $Issues.Add("Could not append evidence diagnostics: $($_.Exception.Message)")
+        Write-Host $Issues[-1]
+    }
+    $Context.finishedAt = [DateTime]::UtcNow.ToString('o')
+    $Context.status = if ($Issues.Count -eq 0) { 'passed' } else { 'failed' }
+    $Context.errors = @($Issues)
+    $Context | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $ContextPath -Encoding utf8 -ErrorAction Stop
 }
 
 function ConvertFrom-Az3166SizeReport {

@@ -86,7 +86,33 @@ exit 23
         catch { $rejected = $true }
         Assert-EvidenceTest $rejected "Invalid compilation database was accepted: $invalid"
     }
+    if ($IsWindows) {
+        foreach ($property in @('directory', 'file')) {
+            foreach ($partialPath in @('\root-relative', 'C:drive-relative')) {
+                $invalidEntry = $entry.Clone()
+                $invalidEntry[$property] = $partialPath
+                ConvertTo-Json -InputObject @($invalidEntry) -Depth 4 | Set-Content -LiteralPath $databasePath -Encoding utf8
+                $rejected = $false
+                try { $null = Assert-Az3166CompilationDatabase -Path $databasePath -SketchSource $sketchSource }
+                catch { $rejected = $true }
+                Assert-EvidenceTest $rejected "Partially qualified database path was accepted: $property=$partialPath"
+            }
+        }
+    }
     Write-Host 'PASS compilation database structure and built-sketch identity'
+
+    $failedContextPath = Join-Path $fixtureRoot 'final-context.json'
+    $failedContext = [ordered]@{ status = 'running'; errors = @(); finishedAt = $null }
+    $failedIssues = [Collections.Generic.List[string]]::new()
+    $failedIssues.Add('original compile failure')
+    & {
+        function Add-Content { throw 'fixture append failure' }
+        Complete-Az3166BuildEvidence -Context $failedContext -Issues $failedIssues -ContextPath $failedContextPath -LogPath $log
+    }
+    $finalContext = Get-Content -Raw -LiteralPath $failedContextPath | ConvertFrom-Json
+    Assert-EvidenceTest ($finalContext.status -ceq 'failed' -and $finalContext.errors.Count -eq 2 -and
+        $finalContext.errors[1].Contains('fixture append failure')) 'Final context omitted the diagnostic-log write failure.'
+    Write-Host 'PASS retained context includes diagnostic-log write failures'
 
     $size = ConvertFrom-Az3166SizeReport -ElfName 'Example.ino.elf' -Output @'
 Example.ino.elf :
@@ -171,6 +197,22 @@ Total                 492
         Assert-EvidenceTest (-not (Test-Path -LiteralPath $unusedOutput)) 'Reserved-name rejection created output.'
     }
     Write-Host 'PASS root evidence filenames cannot collide with sketch names'
+
+    if ($IsWindows) {
+        $longOutput = Join-Path ([IO.Path]::GetPathRoot($fixtureRoot)) "az3166-length-$([guid]::NewGuid().ToString('N'))"
+        $longOutput += 'p' * (141 - $longOutput.Length - '\Preflight\build'.Length)
+        Assert-EvidenceTest ((Join-Path $longOutput 'Preflight/build').Length -eq 141) 'The over-limit build path fixture is not 141 characters long.'
+        $failure = $null
+        try {
+            & $driver -ArduinoCli (Join-Path $PSHOME 'pwsh.exe') `
+                -ArduinoDataDirectory $fixtureRoot -ArduinoUnitDirectory $preflightUnit `
+                -OutputDirectory $longOutput -Sketch $preflightSketch
+        }
+        catch { $failure = $_.Exception.Message }
+        Assert-EvidenceTest ($failure -like 'Windows build path length 141 exceeds the supported maximum of 140;*') 'An untested long Windows build path was accepted.'
+        Assert-EvidenceTest (-not (Test-Path -LiteralPath $longOutput)) 'Build-path length preflight created output.'
+        Write-Host 'PASS Windows build paths beyond the measured 140-character support limit are rejected before writes'
+    }
 
     if ($ArduinoCli) {
         Assert-EvidenceTest (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) 'Target evidence tests require -OutputDirectory.'
