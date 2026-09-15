@@ -1,5 +1,6 @@
 #include "Arduino.h"
 #include "ArduinoUnit.h"
+#include "OTAFirmwareUpdate.h"
 #include "HTS221Sensor.h"
 #include "lis2mdlSensor.h"
 #include "LSM6DSLSensor.h"
@@ -8,6 +9,15 @@
 #include "SystemWiFi.h"
 #include "PinNames.h"
 #include "config.h"
+
+extern "C" int OTAHeaderCLinkTest(void);
+int OTAHeaderCppLinkTest();
+
+test(ota_api_linkage)
+{
+    assertTrue(OTAHeaderCLinkTest());
+    assertTrue(OTAHeaderCppLinkTest());
+}
 
 void setup() {
   I2CInit();
