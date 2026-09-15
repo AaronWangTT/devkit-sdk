@@ -32,7 +32,8 @@ function Assert-InstallerTest {
 function Assert-InstallerRejected {
     param(
         [hashtable]$Arguments,
-        [string[]]$ExpectedMessages
+        [string[]]$ExpectedMessages,
+        [string[]]$UnexpectedMessages = @()
     )
 
     $rejected = $false
@@ -43,6 +44,11 @@ function Assert-InstallerRejected {
         foreach ($expectedMessage in $ExpectedMessages) {
             if ($_.Exception.Message -notlike $expectedMessage) {
                 throw "Expected error '$expectedMessage', received '$($_.Exception.Message)'."
+            }
+        }
+        foreach ($unexpectedMessage in $UnexpectedMessages) {
+            if ($_.Exception.Message -like $unexpectedMessage) {
+                throw "Unexpected error '$unexpectedMessage' in '$($_.Exception.Message)'."
             }
         }
         $rejected = $true
@@ -155,9 +161,65 @@ try {
         -ExpectedMessages @(
             '*AZ3166 build tools are invalid:*',
             '*missing file:*arduino-cli.exe*',
+            '*missing file:*SystemVersion.h*',
             '*expected exactly one openocd.exe*'
         )
     Write-Host 'PASS partial managed installations are diagnosed'
+
+    $unitPropertiesPath = Join-Path $root 'test-libraries/ArduinoUnit/library.properties'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $unitPropertiesPath) -Force | Out-Null
+    foreach ($unitProperties in @("name=ArduinoUnit`nversion=0.0.0", 'name=ArduinoUnit')) {
+        Set-Content -LiteralPath $unitPropertiesPath -Value $unitProperties -Encoding ascii
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+            -ExpectedMessages @("*ArduinoUnit version is *, expected '$($lock.arduino.unit.version)'*")
+    }
+    Write-Host 'PASS wrong and missing ArduinoUnit versions are rejected'
+
+    Set-Content -LiteralPath $unitPropertiesPath -Value 'not a properties file' -Encoding ascii
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+        -ExpectedMessages @('*ArduinoUnit metadata is invalid:*')
+    Write-Host 'PASS malformed ArduinoUnit metadata is diagnosed'
+
+    Set-Content -LiteralPath $unitPropertiesPath -Value "name=ArduinoUnit`nversion=$($lock.arduino.unit.version)" -Encoding ascii
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+        -ExpectedMessages @('*missing file:*arduino-cli.exe*') `
+        -UnexpectedMessages @('*ArduinoUnit version is *', '*ArduinoUnit metadata is invalid:*')
+    Write-Host 'PASS locked ArduinoUnit version metadata is accepted'
+
+    $coreVersionHeaderPath = Join-Path $root "portable/packages/AZ3166/hardware/stm32f4/$($lock.core.version)/cores/arduino/system/SystemVersion.h"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $coreVersionHeaderPath) -Force | Out-Null
+    Set-Content -LiteralPath $coreVersionHeaderPath -Value @(
+        '#define DEVKIT_MAJOR_VERSION 0',
+        '#define DEVKIT_MINOR_VERSION 0',
+        '#define DEVKIT_PATCH_VERSION 0'
+    ) -Encoding ascii
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+        -ExpectedMessages @("*Core version is '0.0.0', expected '$($lock.core.version)'*")
+    Write-Host 'PASS wrong installed Core versions are rejected'
+
+    foreach ($headerContent in @('#define DEVKIT_MAJOR_VERSION 2', '#define DEVKIT_MAJOR_VERSION unknown')) {
+        Set-Content -LiteralPath $coreVersionHeaderPath -Value $headerContent -Encoding ascii
+        Assert-InstallerRejected `
+            -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+            -ExpectedMessages @('*Core version metadata is invalid:*')
+    }
+    Write-Host 'PASS missing and malformed Core version definitions are diagnosed'
+
+    $expectedCoreVersion = [version]$lock.core.version
+    Set-Content -LiteralPath $coreVersionHeaderPath -Value @(
+        "#define DEVKIT_MAJOR_VERSION $($expectedCoreVersion.Major)",
+        "#define DEVKIT_MINOR_VERSION $($expectedCoreVersion.Minor)",
+        "#define DEVKIT_PATCH_VERSION $($expectedCoreVersion.Build)"
+    ) -Encoding ascii
+    Assert-InstallerRejected `
+        -Arguments @{ Root = $root; DownloadCache = $cache; VerifyOnly = $true } `
+        -ExpectedMessages @('*missing file:*arduino-cli.exe*') `
+        -UnexpectedMessages @('*Core version is *', '*Core version metadata is invalid:*')
+    Write-Host 'PASS locked Core version metadata is accepted'
 
     $idePath = Join-Path $root 'arduino_debug.exe'
     Copy-Item -LiteralPath (Join-Path $PSHOME 'pwsh.exe') -Destination $idePath
@@ -228,4 +290,4 @@ finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host '14 toolchain-installer tests passed.'
+Write-Host '20 toolchain-installer tests passed.'

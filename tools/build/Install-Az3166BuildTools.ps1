@@ -27,6 +27,7 @@ if ($Clean -and $VerifyOnly) {
 }
 
 . (Join-Path $PSScriptRoot 'Az3166Build.Common.ps1')
+. (Join-Path $PSScriptRoot '../package/Az3166PackageLayout.ps1')
 
 $buildLock = Get-Az3166BuildLock -Path $LockPath
 $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -141,15 +142,18 @@ function Get-Az3166InstallationProblems {
         $problems.Add('the installation was created from a different build lock')
     }
 
+    $coreVersionHeaderPath = Join-Path $Paths.CoreDirectory 'cores/arduino/system/SystemVersion.h'
+    $unitPropertiesPath = Join-Path $Paths.ArduinoUnitDirectory 'library.properties'
     foreach ($requiredFile in @(
         $Paths.ArduinoCliPath,
         $Paths.ArduinoIdePath,
         (Join-Path $Paths.CoreDirectory 'platform.txt'),
         (Join-Path $Paths.CoreDirectory 'boards.txt'),
+        $coreVersionHeaderPath,
         $Paths.CompilerPath,
         $Paths.TargetHeaderPath,
         $Paths.BoardIndexPath,
-        (Join-Path $Paths.ArduinoUnitDirectory 'library.properties'),
+        $unitPropertiesPath,
         (Join-Path $Paths.ArduinoUnitDirectory 'src/ArduinoUnit.h')
     )) {
         if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
@@ -166,10 +170,35 @@ function Get-Az3166InstallationProblems {
             $problems.Add("Board Manager index SHA-256 is $indexHash")
         }
     }
+    if (Test-Path -LiteralPath $coreVersionHeaderPath -PathType Leaf) {
+        try {
+            $coreVersion = Get-Az3166CoreVersion `
+                -HeaderContent (Get-Content -Raw -LiteralPath $coreVersionHeaderPath) `
+                -Source $coreVersionHeaderPath
+            if ($coreVersion -cne $buildLock.core.version) {
+                $problems.Add("Core version is '$coreVersion', expected '$($buildLock.core.version)'")
+            }
+        }
+        catch {
+            $problems.Add("Core version metadata is invalid: $($_.Exception.Message)")
+        }
+    }
     if (Test-Path -LiteralPath $Paths.ArduinoIdePath -PathType Leaf) {
         $ideVersion = (Get-Item -LiteralPath $Paths.ArduinoIdePath).VersionInfo.ProductVersion
         if ($ideVersion -cne $buildLock.arduino.ide.version) {
             $problems.Add("Arduino IDE product version is '$ideVersion', expected '$($buildLock.arduino.ide.version)'")
+        }
+    }
+    if (Test-Path -LiteralPath $unitPropertiesPath -PathType Leaf) {
+        try {
+            $unitProperties = ConvertFrom-StringData -StringData (Get-Content -Raw -LiteralPath $unitPropertiesPath)
+            $unitVersion = $unitProperties['version']
+            if ($unitVersion -cne $buildLock.arduino.unit.version) {
+                $problems.Add("ArduinoUnit version is '$unitVersion', expected '$($buildLock.arduino.unit.version)'")
+            }
+        }
+        catch {
+            $problems.Add("ArduinoUnit metadata is invalid: $($_.Exception.Message)")
         }
     }
     $compareHeader = Get-ChildItem `

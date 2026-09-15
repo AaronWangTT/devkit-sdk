@@ -124,7 +124,8 @@ $toolchainCacheKey = [regex]::Match($workflow, '(?m)^\s+key: az3166-build-tools-
 foreach ($cacheInput in @(
     'tools/build/az3166-build-lock.json',
     'tools/build/Install-Az3166BuildTools.ps1',
-    'tools/build/Az3166Build.Common.ps1'
+    'tools/build/Az3166Build.Common.ps1',
+    'tools/package/Az3166PackageLayout.ps1'
 )) {
     Assert-BuildConfigurationTest ($toolchainCacheKey.Contains("'$cacheInput'")) "The toolchain cache key does not hash its installer input: $cacheInput"
 }
