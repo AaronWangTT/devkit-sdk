@@ -58,8 +58,8 @@ public:
     * @param    dataBuff            The data to be written secure chip.
     * @param    buffSize            The size of written data. The valid range of different data zone is different.
     * @param    dataZoneIndex       The index of zone written data to. The valid input is {0, 2, 3, 5, 6, 7, 8, 10}.
-    *                               {3, 5, 10} are reserved settings zones. {0, 2, 6} are reserved for later mini solutions.
-    *                               So we recommend user to use {7, 8}
+    *                               {3, 10} store Wi-Fi settings; {5, 6} are reserved for optional-profile credentials.
+    *                               {0, 7, 8} store certificates; {2} remains reserved. Preserve allocations across profiles.
     *
     * @return   Return 0 on success, otherwise return -1. The failure might be caused by input dataSize bigger than data zone could write.
     */
@@ -72,8 +72,8 @@ public:
     * @param    buffSize            The size of data need to be read.
     * @param    offset              The offset of data in data zone to start read data from.
     * @param    dataZoneIndex       The index of zone to read data from. The valid input is {0, 2, 3, 5, 6, 7, 8, 10}.
-    *                               {3, 5, 10} are reserved settings zones. {0, 2, 6} are reserved for later mini solutions.
-    *                               So we recommend user to use {7, 8}
+    *                               {3, 10} store Wi-Fi settings; {5, 6} are reserved for optional-profile credentials.
+    *                               {0, 7, 8} store certificates; {2} remains reserved. Preserve allocations across profiles.
     *
     * @return   Return read buffer size on success, otherwise return -1.
     */
