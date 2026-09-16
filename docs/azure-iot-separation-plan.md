@@ -109,6 +109,31 @@ commands became private, invalid UDS lengths are rejected, assembled DPS strings
 are bounded, and missing multipart boundaries return an error. This is not a
 general HTTP parser or configuration-security audit.
 
+The default web page remains Wi-Fi-only in both profiles, exactly as before the
+separation. The weak `__sys_setup()` implementation calls `EnableSystemWeb(0)`;
+`main()` invokes that hook before deciding whether to enter AP mode. Full-profile
+applications opt into cloud fields by overriding the hook, not by waiting for
+Arduino `setup()`, which is only reached in user mode. For example:
+
+```cpp
+#include <SystemFunc.h>
+#include <SystemWeb.h>
+#include <azure-iot/AzureConfiguration.h>
+
+void __sys_setup(void)
+{
+	EnableSystemWeb(WEB_SETTING_IOT_DPS_SYMMETRIC_KEY);
+}
+```
+
+For a connection string and certificate instead, pass
+`WEB_SETTING_IOT_DEVICE_CONN_STRING | WEB_SETTING_IOT_CERT`. DPS symmetric-key
+mode takes precedence, so enabling every bit does not expose all credential
+modes together. The full-profile DPS link probe exercises this early hook with
+the DPS flag; the base and ordinary BoardInit builds retain the Wi-Fi-only
+default. Configuration commands on the serial CLI are independently available
+in the full profile. No automatic cloud provisioning is started by this hook.
+
 ### 3. Prove Azure Archive Linking
 
 Use the pinned Arduino CLI and GCC to prove that an Azure sketch can discover

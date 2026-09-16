@@ -1,7 +1,15 @@
 #include <DevkitDPSClient.h>
 #include <DevKitMQTTClient.h>
+#include <SystemFunc.h>
+#include <SystemWeb.h>
+#include <azure-iot/AzureConfiguration.h>
 
 volatile bool exerciseCloudPaths = false;
+
+void __sys_setup(void)
+{
+    EnableSystemWeb(WEB_SETTING_IOT_DPS_SYMMETRIC_KEY);
+}
 
 void setup()
 {
