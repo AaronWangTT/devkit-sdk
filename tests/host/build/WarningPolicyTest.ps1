@@ -8,6 +8,10 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 . (Join-Path $repositoryRoot 'tools/test/Az3166Warnings.ps1')
 $layout = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'platform/az3166/package-layout.json') | ConvertFrom-Json
+. (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
+$lock = Get-Az3166BuildLock
+$policy = Get-Az3166WarningPolicy -BuildLock $lock
+Assert-Az3166WarningSnapshots -Policy $policy -RepositoryRoot $repositoryRoot
 
 function Assert-WarningPolicyTest {
     param([bool]$Condition, [string]$Message)
@@ -27,7 +31,7 @@ $context = [pscustomobject]@{
     }
 }
 
-$diagnostics = @(ConvertFrom-Az3166Diagnostics -Context $context -Layout $layout -Lines @(
+$diagnostics = @(ConvertFrom-Az3166Diagnostics -Context $context -Layout $layout -Policy $policy -Lines @(
     'C:\stage\hardware\AZ3166Checkout\stm32f4\cores\arduino\Print.h:34:22: warning: unused parameter ''value'' [-Wunused-parameter]'
     'C:/stage/hardware/AZ3166Checkout/stm32f4/cores/arduino/httpclient/http_parser/http_parser.h:42: warning: historical message'
     'C:/stage/hardware/AZ3166Checkout/stm32f4/system/mbed-os/platform/FileHandle.h:9:2: note: referenced here'
@@ -44,7 +48,7 @@ $diagnostics = @(ConvertFrom-Az3166Diagnostics -Context $context -Layout $layout
 Assert-WarningPolicyTest ($diagnostics.Count -eq 11) 'Diagnostics were dropped or non-diagnostic output was parsed.'
 Assert-WarningPolicyTest ($diagnostics[0].source -ceq 'src/core/arduino/Print.h' -and $diagnostics[0].ownership -eq 'first-party') 'Staged Core ownership was not mapped.'
 Assert-WarningPolicyTest ($diagnostics[0].line -eq 34 -and $diagnostics[0].column -eq 22 -and $diagnostics[0].option -eq '-Wunused-parameter' -and $diagnostics[0].message -ceq "unused parameter 'value'") 'GCC diagnostic fields were not retained.'
-Assert-WarningPolicyTest ($diagnostics[1].source -ceq 'vendor/http-parser/http_parser.h' -and $diagnostics[1].ownership -eq 'vendor' -and $null -eq $diagnostics[1].option) 'Longest manifest mapping must win for vendor code staged beneath first-party directories.'
+Assert-WarningPolicyTest ($diagnostics[1].source -ceq 'src/extensions/http-client/http_parser/http_parser.h' -and $diagnostics[1].ownership -eq 'vendor' -and $null -eq $diagnostics[1].option) 'Component-local parser header must remain vendor-owned at its unchanged staged path.'
 Assert-WarningPolicyTest ($diagnostics[2].source -ceq 'vendor/mbed-os/platform/FileHandle.h' -and $diagnostics[2].severity -eq 'note') 'Vendor notes were not retained.'
 Assert-WarningPolicyTest ($diagnostics[3].source -ceq 'ArduinoUnit/src/ArduinoUnit.h' -and $diagnostics[3].ownership -eq 'test-dependency') 'Downloaded dependency ownership was not mapped.'
 Assert-WarningPolicyTest ($diagnostics[4].ownership -eq 'toolchain') 'Runtime header ownership was not mapped.'
@@ -53,6 +57,13 @@ Assert-WarningPolicyTest ($diagnostics[6].ownership -eq 'first-party') 'Generate
 foreach ($diagnostic in $diagnostics[7..10]) {
     Assert-WarningPolicyTest ($diagnostic.ownership -eq 'unclassified') "Unknown diagnostic was classified: $($diagnostic.raw)"
 }
+$overlappingLayout = $layout | ConvertTo-Json -Depth 6 | ConvertFrom-Json
+$overlappingLayout.mappings += [pscustomobject]@{
+    source = 'vendor/fixture-http-parser'
+    destination = 'cores/arduino/httpclient/http_parser'
+}
+$overlappingSource = Resolve-Az3166DiagnosticSource -Path $diagnostics[1].originalSource -Context $context -Layout $overlappingLayout -Policy $policy
+Assert-WarningPolicyTest ($overlappingSource.source -ceq 'vendor/fixture-http-parser/http_parser.h' -and $overlappingSource.ownership -eq 'vendor') 'Longest manifest mapping must win for nested staged components.'
 Write-Host 'PASS GCC fields, Windows paths, manifest precedence, all ownership classes, and unknown diagnostics'
 
 $uncContext = $context | ConvertTo-Json -Depth 6 | ConvertFrom-Json
@@ -83,22 +94,32 @@ Assert-WarningPolicyTest ($diagnostics[1].ownership -eq 'first-party' -and $diag
 Assert-WarningPolicyTest ($diagnostics[3].ownership -eq 'unclassified') 'Linux path comparisons must be case-sensitive.'
 Write-Host 'PASS Linux paths, relative segments, maintained libraries, and tests'
 
-. (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
-$lock = Get-Az3166BuildLock
-$policy = Get-Az3166WarningPolicy -BuildLock $lock
-Assert-Az3166WarningSnapshots -Policy $policy -RepositoryRoot $repositoryRoot
 $snapshotDiagnostic = @(ConvertFrom-Az3166Diagnostics -Context $context -Layout $layout -Policy $policy -Lines @(
     '/stage/platform/libraries/Audio/src/nau88c10.c:212: warning: control reaches end of non-void function [-Wreturn-type]'
     '/stage/platform/libraries/Audio/src/AudioClass.cpp:360: warning: unused variable [-Wunused-variable]'
+    '/stage/platform/cores/arduino/httpclient/http_parser/http_parser.c:634: warning: parser implementation'
+    '/repo/src/extensions/http-client/http_parser/http_parser.h:42: warning: parser header'
+    '/stage/platform/cores/arduino/httpclient/http_client.cpp:53: warning: maintained HTTP wrapper'
 ))
 Assert-WarningPolicyTest ($snapshotDiagnostic[0].ownership -eq 'vendor' -and $snapshotDiagnostic[1].ownership -eq 'first-party') 'Snapshot ownership must not exempt the maintained Audio wrapper.'
+Assert-WarningPolicyTest ($snapshotDiagnostic[2].source -ceq 'src/extensions/http-client/http_parser/http_parser.c' -and $snapshotDiagnostic[2].ownership -eq 'vendor') 'Staged parser implementation lost its vendor classification.'
+Assert-WarningPolicyTest ($snapshotDiagnostic[3].source -ceq 'src/extensions/http-client/http_parser/http_parser.h' -and $snapshotDiagnostic[3].ownership -eq 'vendor') 'Repository parser header lost its vendor classification.'
+Assert-WarningPolicyTest ($snapshotDiagnostic[4].ownership -eq 'first-party') 'Parser snapshot ownership must not exempt the maintained HTTP wrapper.'
 $changedSnapshotPolicy = $policy | ConvertTo-Json -Depth 8 | ConvertFrom-Json
 $changedSnapshotPolicy.vendorSnapshots[0].sha256 = '0' * 64
 $rejected = $false
 try { Assert-Az3166WarningSnapshots -Policy $changedSnapshotPolicy -RepositoryRoot $repositoryRoot }
 catch { $rejected = $_.Exception.Message -like 'Vendor snapshot changed;*' }
 Assert-WarningPolicyTest $rejected 'Modified library-local vendor snapshot content was accepted.'
-Write-Host 'PASS library-local vendor snapshots are content-pinned without exempting maintained wrappers'
+foreach ($parserSource in @('src/extensions/http-client/http_parser/http_parser.c', 'src/extensions/http-client/http_parser/http_parser.h')) {
+    $changedSnapshotPolicy = $policy | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    ($changedSnapshotPolicy.vendorSnapshots | Where-Object { $_.source -ceq $parserSource }).sha256 = '0' * 64
+    $rejected = $false
+    try { Assert-Az3166WarningSnapshots -Policy $changedSnapshotPolicy -RepositoryRoot $repositoryRoot }
+    catch { $rejected = $_.Exception.Message -like 'Vendor snapshot changed;*' }
+    Assert-WarningPolicyTest $rejected "Modified parser snapshot content was accepted: $parserSource"
+}
+Write-Host 'PASS component-local vendor snapshots are content-pinned without exempting maintained wrappers'
 $policy.allowances = @([pscustomobject]@{
     id = 'mbed-unused-parameter'
     ownership = 'vendor'
@@ -167,6 +188,11 @@ foreach ($mutation in @(
     { param($fixture) $fixture.allowances[0] | Add-Member -NotePropertyName option -NotePropertyValue ' ' }
     { param($fixture) $fixture.allowances[0] | Add-Member -NotePropertyName option -NotePropertyValue 42 }
     { param($fixture) $fixture.allowances += $fixture.allowances[0] }
+    { param($fixture) $fixture.vendorSnapshots[0].source = 'src/extensions/http-client/http_parser/*.c' }
+    { param($fixture) $fixture.vendorSnapshots[0].source = 'src/extensions/http-client/http_parser/../http_client.h' }
+    { param($fixture) $fixture.vendorSnapshots[0].source = 'src/core/arduino/Print.h' }
+    { param($fixture) $fixture.vendorSnapshots[0].sha256 = '' }
+    { param($fixture) $fixture.vendorSnapshots += $fixture.vendorSnapshots[0] }
 )) {
     $fixture = $policy | ConvertTo-Json -Depth 8 | ConvertFrom-Json
     & $mutation $fixture

@@ -34,6 +34,18 @@
       "component": "ST-MXCHIP discovery peripherals",
       "version": "snapshot@53524f91e9325534a5c8fb27eafc7622a43f5276",
       "sha256": "b5685b25c7eaddad41e05979f0e7ec75c8e8d59a2ecbbb4454596e48c54fa449"
+    },
+    {
+      "source": "src/extensions/http-client/http_parser/http_parser.c",
+      "component": "http-parser 2.7.1",
+      "version": "snapshot@fa0722ee8021d3a7f372591ce2c7e9aeaabe9343",
+      "sha256": "800600ed435050773583d26f9baa13db5ba40208778746a9772102ef6fe7fe15"
+    },
+    {
+      "source": "src/extensions/http-client/http_parser/http_parser.h",
+      "component": "http-parser 2.7.1",
+      "version": "snapshot@fa0722ee8021d3a7f372591ce2c7e9aeaabe9343",
+      "sha256": "d1a5815bf8b22242dfecdf67c298b4dfe655ac97712e9a65234d973f4a960271"
     }
   ],
   "allowances": [

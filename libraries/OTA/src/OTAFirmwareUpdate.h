@@ -4,6 +4,9 @@
 #ifndef __OTA_FIRMWARE_UPDATE_H__
 #define __OTA_FIRMWARE_UPDATE_H__
 
+#include <stddef.h>
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -18,7 +21,11 @@ extern "C"
 *
 * @return   Return the size of the new firmware on success, otherwise return -1 if encounter network issue, return -2 if encounter external flash accessing issue.
 */
+#ifdef __cplusplus
 int OTADownloadFirmware(const char *url, uint16_t *crc16Checksum, const char* ssl_ca_pem = NULL);
+#else
+int OTADownloadFirmware(const char *url, uint16_t *crc16Checksum, const char* ssl_ca_pem);
+#endif
 
 /*
 * @brief    Apply the new firmware, after reboot the Device will update to the new version

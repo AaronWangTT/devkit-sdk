@@ -22,8 +22,9 @@ paths and UNC roots are case-insensitive; Linux roots are case-sensitive.
 
 Staged paths are mapped through
 [the package manifest](../platform/az3166/package-layout.json), choosing the
-longest matching destination. In particular, vendor HTTP-parser files staged
-beneath the Core HTTP-client directory remain vendor-owned. Classification is:
+longest matching destination. Exact content-pinned snapshots also retain vendor
+ownership when stored inside a maintained component. In particular, the parser
+under the Core HTTP-client directory remains vendor-owned. Classification is:
 
 - maintained Core, BSP, extensions, libraries, sketches, and tests: first-party;
 - repository vendor snapshots and prebuilt interfaces: vendor;
@@ -33,12 +34,16 @@ beneath the Core HTTP-client directory remain vendor-owned. Classification is:
 
 Three ST/MXCHIP-derived C snapshots still live inside the historical Audio
 library: `nau88c10.c`, `stm32412g_discovery_audio.c`, and
-`stm32412g_discovery.c`. The policy names each exact repository file and pins
-its SHA-256 over decoded text re-encoded as UTF-8 without a BOM, with CRLF
-normalized to LF. Builds reject changed snapshot contents before staging.
-Allowance component/version values must match the corresponding snapshot pin.
-This does not exempt the maintained Audio wrapper, other library files, or any
-Core/BSP/extension path. No source relocation or vendor code fix is included.
+`stm32412g_discovery.c`. The unchanged
+[http-parser 2.7.1 source and header](../src/extensions/http-client/http_parser)
+are also stored with their consuming component, alongside the original license.
+The policy names each exact repository file and pins its SHA-256 over decoded
+text re-encoded as UTF-8 without a BOM, with CRLF normalized to LF. Builds reject
+changed snapshot contents before staging. Allowance component/version values
+must match the corresponding snapshot pin. Snapshot classification alone grants
+no warning allowance. The maintained Audio and HTTP wrappers, other library
+files, and other Core/BSP/extension files remain first-party. Moving the parser
+does not change its packaged paths or add any warning allowances.
 
 Every first-party warning, unknown warning, ambiguous allowance match, or stale
 allowance fails the complete inventory. An option-based rule cannot match a

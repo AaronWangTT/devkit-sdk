@@ -76,15 +76,10 @@
     { "source": "src/extensions/telemetry", "destination": "cores/arduino/Telemetry" },
     { "source": "src/extensions/display/OledDisplay.cpp", "destination": "cores/arduino/OledDisplay.cpp" },
     { "source": "src/extensions/display/OledDisplay.h", "destination": "cores/arduino/OledDisplay.h" },
-    { "source": "src/extensions/ota/OTAFirmwareUpdate.cpp", "destination": "cores/arduino/system/OTAFirmwareUpdate.cpp" },
-    { "source": "src/extensions/ota/OTAFirmwareUpdate.h", "destination": "cores/arduino/system/OTAFirmwareUpdate.h" },
-    { "source": "src/extensions/diagnostics/SerialLog.cpp", "destination": "cores/arduino/system/SerialLog.cpp" },
-    { "source": "src/extensions/diagnostics/SerialLog.h", "destination": "cores/arduino/system/SerialLog.h" },
     { "source": "vendor/mbed-os", "destination": "system/mbed-os" },
     { "source": "vendor/azure-iot-sdk-c", "destination": "system/azure-iot-sdk-c" },
     { "source": "vendor/mxchip", "destination": "system/az3166-driver" },
     { "source": "vendor/prebuilt/az3166/libdevkit-sdk-core-lib.a", "destination": "system/libdevkit-sdk-core-lib.a" },
-    { "source": "vendor/http-parser", "destination": "cores/arduino/httpclient/http_parser" },
     { "source": "vendor/mbed-memory-status", "destination": "system/utilities" },
     { "source": "libraries", "destination": "libraries" }
   ]

@@ -49,7 +49,7 @@ With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) 
 | --- | --- |
 | [src/core/arduino](src/core/arduino) | Arduino compatibility APIs and the Core version API. |
 | [src/bsp/az3166](src/bsp/az3166) | Board adapters, startup integration, configuration, variants, and boot support. |
-| [src/extensions](src/extensions) | Core-hosted networking, HTTP, time, configuration, telemetry, display, OTA, and diagnostics services. |
+| [src/extensions](src/extensions) | Core-hosted networking, HTTP, time, configuration, telemetry, and display services. |
 | [vendor](vendor) | Imported dependency bundles, headers, licenses, and prebuilt archives. |
 | [platform/az3166](platform/az3166) | Arduino metadata and the source-to-package map. |
 | [libraries](libraries) | Arduino library packages with their original metadata and examples. |
@@ -63,13 +63,27 @@ With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) 
 | [docs](docs/devkit-sdk-hardening-plan.md) | Structure and hardening plan. |
 
 The [package map](platform/az3166/package-layout.json) assigns every payload file
-to its original installed location under the archive's `AZ3166/` prefix. Both
+to its installed location under the archive's `AZ3166/` prefix. Both
 checkout staging and committed-revision packaging use the same validated map.
 Do not copy ownership directories directly into an Arduino installation; use
 [Stage-Az3166Platform.ps1](tools/package/Stage-Az3166Platform.ps1) or the build
-drivers. Library names, public headers, default service inclusion, and the 15
-library examples are preserved. The extension category does not make those
-services optional at build time.
+drivers. The 15 library examples remain with their libraries. The extension
+category does not make those services optional at build time.
+
+AzureIoT owns [its serial logging helpers](libraries/AzureIoT/src/SerialLog.h),
+which now compile only when that library is selected. The header name and C
+function names are unchanged; an external sketch including this header now
+selects AzureIoT instead of finding it in the Core. The
+[OTA library](libraries/OTA/library.properties) similarly provides
+[OTAFirmwareUpdate.h](libraries/OTA/src/OTAFirmwareUpdate.h) on demand, using
+the Core HTTP client and board flash services. This relocation does not change
+or validate OTA runtime behavior.
+
+The HTTP client carries its unchanged third-party
+[http-parser snapshot](src/extensions/http-client/http_parser), including the
+license. Its installed `cores/arduino/httpclient/http_parser` path is unchanged,
+and exact content pins preserve its vendor warning classification. The
+Core-hosted HTTP server and its separate parser remain unchanged.
 
 ## Tests
 
