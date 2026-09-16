@@ -138,13 +138,16 @@ int httpd_purge_headers(int sock);
  *  actual data that is received. Care has been taken that, in such situations,
  *  the HTTP headers are parsed only once. When it returns zero it indicates
  *  that all the data has been received.
+ *  Short socket reads are accumulated up to length or the declared body size.
+ *  Header scratch space is separate from the caller's body buffer. Chunked
+ *  bodies, premature EOF, and socket or header failures return an error.
  *
  *  Note that this API is optional and WSGI handlers may prefer to parse the
  *  headers and get the data as per their wish using other HTTPD APIs.
  *
  *  @param[in] req      The incoming HTTP request \ref httpd_request_t
  *  @param[out] content The buffer in which the data is to be received
- *  @param[in] length   The length of the content buffer
+ *  @param[in] length   Maximum body bytes to receive; content must also have one byte for the terminator.
  *  @return  The number of bytes still remaining to be read if successful
  *  @return  -WM_FAIL   :otherwise
  */

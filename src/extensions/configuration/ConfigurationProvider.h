@@ -24,4 +24,9 @@ int ReadConfigurationSettings(int options, const ConfigurationForm *form, void *
 int SaveConfigurationSettings(void *settings, char *destination, size_t capacity);
 void FreeConfigurationSettings(void *settings);
 
+inline size_t GetConfigurationRequestCapacity(int options, size_t standardValueBytes)
+{
+    return 2048 + 3 * (standardValueBytes + GetConfigurationBodySize(options));
+}
+
 #endif

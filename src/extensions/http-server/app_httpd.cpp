@@ -328,7 +328,7 @@ int web_system_setting_result_page(httpd_request_t *req)
     memset(value_ssid, 0, sizeof(value_ssid));
     memset(value_pass, 0, sizeof(value_pass));
 
-    buf_size = 512 + WIFI_SSID_MAX_LEN + WIFI_PWD_MAX_LEN + GetConfigurationBodySize(web_settings);
+    buf_size = GetConfigurationRequestCapacity(web_settings, WIFI_SSID_MAX_LEN + WIFI_PWD_MAX_LEN);
     buf = (char *)calloc(buf_size, 1);
     if (buf == NULL)
     {

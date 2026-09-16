@@ -38,16 +38,22 @@ try {
             @{
                 Name = "$provider-configuration-test"
                 Arguments = @(
-                    '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
+                    '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror', '-Wmissing-include-dirs'
                     '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections'
                     if ($provider -eq 'base') { '-DAZ3166_TEST_BASE' }
                     '-I', "$platform/system/mbed-os"
                     '-I', "$platform/system/az3166-driver/mico/include"
                     '-I', "$platform/cores/arduino"
                     '-I', "$platform/cores/arduino/system"
-                    '-I', "$platform/cores/arduino/system/azure-iot"
+                    if ($provider -eq 'azure') { '-I', "$platform/cores/arduino/system/azure-iot" }
                     "$repositoryRoot/tests/host/cloud/AzureConfigurationTest.cpp"
                 )
+                SupportArguments = if ($provider -eq 'azure') { @(
+                    '-x', 'c', '-std=c99', '-Wall', '-Wextra', '-Werror'
+                    '-D__MICO_H_', '-DMODEL="AZ3166"', '-ffunction-sections', '-fdata-sections'
+                    '-I', "$platform/system/az3166-driver/mico/include"
+                    '-c', "$platform/cores/arduino/httpserver/http-strings.c"
+                ) } else { @() }
                 RunArguments = @()
                 Sanitize = $true
             }
@@ -108,6 +114,13 @@ try {
     foreach ($test in $tests) {
         $executable = Join-Path $temporaryRoot ($test.Name + $(if ($IsWindows) { '.exe' } else { '' }))
         $arguments = @($test.Arguments) + @($LinkerFlags)
+        if ($test.ContainsKey('SupportArguments') -and $test.SupportArguments) {
+            $supportObject = Join-Path $temporaryRoot "$($test.Name)-support.o"
+            $supportArguments = @($test.SupportArguments)
+            & $compilerCommand.Source @supportArguments -o $supportObject
+            if ($LASTEXITCODE -ne 0) { throw "Host C support failed to compile: $($test.Name)" }
+            $arguments += $supportObject
+        }
         if ($Sanitize -and $test.Sanitize) {
             $arguments += @('-fsanitize=address,undefined', '-fno-omit-frame-pointer')
         }

@@ -496,47 +496,38 @@ int httpd_send_response(httpd_request_t *req, const char *first_line,
 }
 int httpd_get_data(httpd_request_t *req, char *content, int length)
 {
-	int ret;
-	char *buf;
-
-	/* Is this condition required? */
-	if (req->body_nbytes >= HTTPD_MAX_MESSAGE - 2)
-		return -kInProgressErr;
-
-
-	buf = malloc(HTTPD_MAX_MESSAGE);
-	if (!buf) {
-		httpd_d("Failed to allocate memory for buffer");
-		return -kInProgressErr;
-	}
+	if (req == NULL || content == NULL || length <= 0)
+		return -WM_E_HTTPD_DATA_RD;
+	content[0] = '\0';
 
 	if (!req->hdr_parsed) {
-		ret = httpd_parse_hdr_tags(req, req->sock, buf,
+		char *header_buffer = (char *)malloc(HTTPD_MAX_MESSAGE);
+		if (header_buffer == NULL)
+			return -WM_E_HTTPD_DATA_RD;
+		int status = httpd_parse_hdr_tags(req, req->sock, header_buffer,
 			HTTPD_MAX_MESSAGE);
+		free(header_buffer);
+		if (status != kNoErr)
+			return -WM_E_HTTPD_DATA_RD;
+		req->hdr_parsed = 1;
+	}
 
-		if (ret != kNoErr) {
-			httpd_d("Unable to parse header tags");
-			goto out;
-		} else {
-			httpd_d("Headers parsed successfully\r\n");
-			req->hdr_parsed = 1;
+	if (req->chunked || req->body_nbytes < 0 || req->remaining_bytes < 0 ||
+		req->remaining_bytes > req->body_nbytes)
+		return -WM_E_HTTPD_DATA_RD;
+
+	int requested = req->remaining_bytes < length ? req->remaining_bytes : length;
+	int received = 0;
+	while (received < requested) {
+		int count = httpd_recv(req->sock, content + received, requested - received, 0);
+		if (count <= 0 || count > requested - received) {
+			content[0] = '\0';
+			return -WM_E_HTTPD_DATA_RD;
 		}
+		received += count;
+		req->remaining_bytes -= count;
 	}
-
-	/* handle here */
-	ret = httpd_recv(req->sock, content,
-			length, 0);
-	if (ret == -1) {
-		httpd_d("Failed to read POST data");
-		goto out;
-	}
-	/* scratch will now have the JSON data */
-	content[ret] = '\0';
-	req->remaining_bytes -= ret;
-	httpd_d("Read %d bytes and remaining %d bytes",
-		ret, req->remaining_bytes);
-out:
-	free(buf);
+	content[received] = '\0';
 	return req->remaining_bytes;
 }
 

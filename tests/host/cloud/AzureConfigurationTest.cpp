@@ -4,6 +4,7 @@
 #include <cstring>
 #include <map>
 #include <string>
+#include <vector>
 
 static std::map<int, std::string> stored;
 
@@ -67,6 +68,37 @@ static const int kInProgressErr = -4;
 static const int kGeneralErr = -5;
 #include "../../../src/extensions/http-server/helper.c"
 #include "../../../src/extensions/http-server/http_parse.c"
+#define MIN(first, second) ((first) < (second) ? (first) : (second))
+#include "../../../src/extensions/http-server/httpd_wsgi.c"
+#undef MIN
+
+static std::string incomingBody;
+static size_t incomingOffset;
+static size_t receiveChunk = 31;
+static bool receiveFailure;
+static std::vector<std::string> incomingHeaders;
+static size_t headerIndex;
+static std::string multipartBoundary = "----test-boundary";
+
+int httpd_recv(int, void *buffer, size_t length, int)
+{
+    if (receiveFailure) { return -1; }
+    size_t available = incomingBody.size() - incomingOffset;
+    size_t count = available < length ? available : length;
+    if (count > receiveChunk) { count = receiveChunk; }
+    memcpy(buffer, incomingBody.data() + incomingOffset, count);
+    incomingOffset += count;
+    return count;
+}
+
+int htsys_getln_soc(int, char *buffer, int capacity)
+{
+    if (headerIndex == incomingHeaders.size()) { return -kInProgressErr; }
+    const std::string &header = incomingHeaders[headerIndex++];
+    assert(header.size() < static_cast<size_t>(capacity));
+    memcpy(buffer, header.c_str(), header.size() + 1);
+    return header.size();
+}
 
 static int readField(void *context, const char *name, char *value, size_t capacity)
 {
@@ -79,8 +111,7 @@ static int readField(void *context, const char *name, char *value, size_t capaci
 
 static int readMultipartField(void *context, const char *name, char *value, size_t capacity)
 {
-    char boundary[] = "----test-boundary";
-    return httpd_get_tag_from_multipart_form(static_cast<char *>(context), boundary, name, value, capacity);
+    return httpd_get_tag_from_multipart_form(static_cast<char *>(context), &multipartBoundary[0], name, value, capacity);
 }
 
 static int readUrlEncodedField(void *context, const char *name, char *value, size_t capacity)
@@ -168,6 +199,82 @@ int main(void)
     assert(ReadConfigurationSettings(3, &urlForm, &settings) != 0);
     FreeConfigurationSettings(settings);
     assert(stored.empty());
+
+    multipartBoundary.assign(70, 'b');
+    incomingBody.clear();
+    auto addPart = [](const char *name, const std::string &value) {
+        incomingBody += "--" + multipartBoundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n";
+    };
+    addPart("input_ssid_method", "select");
+    addPart("SSID", std::string(WIFI_SSID_MAX_LEN, 's'));
+    addPart("PASS", std::string(WIFI_PWD_MAX_LEN, 'p'));
+    addPart("DeviceConnectionString", std::string(AZ_IOT_HUB_MAX_LEN - 1, 'x'));
+    addPart("certificate", std::string(AZ_IOT_X509_MAX_LEN, 'c'));
+    incomingBody += "--" + multipartBoundary + "--\r\n";
+    incomingHeaders = {"Content-Length: " + std::to_string(incomingBody.size()) + "\r\n",
+        "Content-Type: multipart/form-data; boundary=" + multipartBoundary + "\r\n", "\r\n"};
+    headerIndex = 0;
+    incomingOffset = 0;
+    httpd_request_t request = {};
+    std::vector<char> requestBuffer(GetConfigurationRequestCapacity(3, WIFI_SSID_MAX_LEN + WIFI_PWD_MAX_LEN), '\0');
+    assert(incomingBody.size() < requestBuffer.size());
+    assert(httpd_get_data(&request, requestBuffer.data(), requestBuffer.size() - 1) == 0);
+    assert(request.hdr_parsed == 1 && request.body_nbytes == static_cast<int>(incomingBody.size()));
+    assert(std::string(requestBuffer.data()) == incomingBody);
+    multipartForm.context = requestBuffer.data();
+    assert(ReadConfigurationSettings(3, &multipartForm, &settings) == 0);
+    assert(SaveConfigurationSettings(settings, page, sizeof(page)) > 0);
+    assert(stored[AZ_IOT_HUB_ZONE_IDX].size() == AZ_IOT_HUB_MAX_LEN);
+    assert(stored[STSAFE_ZONE_0_IDX].size() == AZ_IOT_X509_MAX_LEN + 1);
+    FreeConfigurationSettings(settings);
+    stored.clear();
+
+    incomingOffset = 0;
+    request.remaining_bytes = request.body_nbytes;
+    assert(httpd_get_data(&request, requestBuffer.data(), incomingBody.size() - 1) == 1);
+    assert(httpd_get_data(&request, requestBuffer.data(), requestBuffer.size() - 1) == 0);
+    incomingOffset = 0;
+    request.remaining_bytes = request.body_nbytes;
+    incomingBody.pop_back();
+    assert(httpd_get_data(&request, requestBuffer.data(), requestBuffer.size() - 1) < 0);
+    assert(requestBuffer[0] == '\0' && stored.empty());
+    receiveFailure = true;
+    incomingOffset = 0;
+    request.remaining_bytes = request.body_nbytes;
+    assert(httpd_get_data(&request, requestBuffer.data(), requestBuffer.size() - 1) < 0);
+    receiveFailure = false;
+    request.chunked = 1;
+    assert(httpd_get_data(&request, requestBuffer.data(), requestBuffer.size() - 1) < 0);
+    request.chunked = 0;
+    request.hdr_parsed = 0;
+    incomingHeaders.clear();
+    headerIndex = 0;
+    assert(httpd_get_data(&request, requestBuffer.data(), requestBuffer.size() - 1) < 0);
+    assert(stored.empty());
+
+    incomingBody.clear();
+    auto addEncodedField = [](const char *name, size_t length, const char *encodedByte) {
+        incomingBody += std::string(name) + "=";
+        for (size_t index = 0; index < length; ++index) { incomingBody += encodedByte; }
+        incomingBody += "&";
+    };
+    addEncodedField("SSID", WIFI_SSID_MAX_LEN, "%73");
+    addEncodedField("PASS", WIFI_PWD_MAX_LEN, "%70");
+    addEncodedField("DeviceConnectionString", AZ_IOT_HUB_MAX_LEN - 1, "%78");
+    addEncodedField("certificate", AZ_IOT_X509_MAX_LEN, "%63");
+    incomingBody += "end=1";
+    assert(incomingBody.size() < requestBuffer.size());
+    incomingOffset = 0;
+    request.hdr_parsed = 1;
+    request.body_nbytes = incomingBody.size();
+    request.remaining_bytes = request.body_nbytes;
+    assert(httpd_get_data(&request, requestBuffer.data(), requestBuffer.size() - 1) == 0);
+    urlForm.context = requestBuffer.data();
+    assert(ReadConfigurationSettings(3, &urlForm, &settings) == 0);
+    assert(SaveConfigurationSettings(settings, page, sizeof(page)) > 0);
+    assert(stored[AZ_IOT_HUB_ZONE_IDX].size() == AZ_IOT_HUB_MAX_LEN);
+    assert(stored[STSAFE_ZONE_0_IDX].size() == AZ_IOT_X509_MAX_LEN + 1);
+    FreeConfigurationSettings(settings);
 
     stored.clear();
     assert(getIoTHubConnectionString() == NULL);

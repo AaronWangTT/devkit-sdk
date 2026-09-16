@@ -336,6 +336,18 @@ rejection assertion fails against the pre-fix parser and passes under sanitizers
 with the fix. No general HTTP parser or live configuration-security audit is
 claimed by this targeted correction.
 
+The receive path also separates its 1,024-byte header scratch buffer from the
+form body. Configuration capacity includes 2,048 bytes of framing plus three
+bytes per maximum decoded value byte for percent encoding. Tests use this same
+capacity with a 70-byte multipart boundary, a 511-byte connection string, and a
+2,639-byte certificate, including a fully percent-encoded request. Socket reads
+are accumulated in bounds; header failures, premature EOF, read errors, and
+unsupported chunked requests fail. An oversized body returns remaining bytes,
+which the configuration handler rejects before parsing or saving. The tests
+exercise the real receiver/header/form implementations with 31-byte socket
+fragments and fail against the pre-fix receiver. This is local simulation and
+ARM compile evidence, not physical-board or live HTTP validation.
+
 ### Final Ownership Validation
 
 The five Azure platform source/header files were consolidated under
