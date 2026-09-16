@@ -15,7 +15,8 @@ param(
 
     [switch]$VerboseBuild,
 
-    [string[]]$Sketch
+    [string[]]$Sketch,
+    [string]$Profile
 )
 
 Set-StrictMode -Version Latest
@@ -27,8 +28,10 @@ $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $PSScriptRoot 'Az3166BuildEvidence.ps1')
 . (Join-Path $PSScriptRoot 'Az3166Warnings.ps1')
 $buildLock = Get-Az3166BuildLock
+$packageLayout = Get-Az3166PackageLayout -RepositoryRoot $repositoryRoot -Profile $Profile
+$Profile = $packageLayout.Profile
 $warningPolicyPath = Join-Path $repositoryRoot 'tools/build/az3166-warning-policy.json'
-$warningPolicy = Get-Az3166WarningPolicy -Path $warningPolicyPath -BuildLock $buildLock
+$warningPolicy = Get-Az3166WarningPolicy -Path $warningPolicyPath -BuildLock $buildLock -Profile $Profile
 Assert-Az3166WarningSnapshots -Policy $warningPolicy -RepositoryRoot $repositoryRoot
 $layoutPath = Join-Path $repositoryRoot 'platform/az3166/package-layout.json'
 $warningLayout = Get-Content -Raw -LiteralPath $layoutPath | ConvertFrom-Json
@@ -36,6 +39,9 @@ $fqbn = $buildLock.arduino.fqbn
 $sketchRoots = @(
     (Join-Path $repositoryRoot "examples")
     (Join-Path $repositoryRoot "tests/hardware")
+    (Join-Path $repositoryRoot "tests/host/package/fixtures/AzureDpsLinkProbe")
+    (Join-Path $repositoryRoot "libraries/Sensors/examples/SensorStatus")
+    (Join-Path $repositoryRoot "libraries/Audio/examples/VoiceRecord")
 )
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) "az3166-tests-$([guid]::NewGuid().ToString('N'))"
 
@@ -76,6 +82,7 @@ else {
             $_.BaseName -eq $_.Directory.Name
         } |
         ForEach-Object { $_.Directory.FullName } |
+        Where-Object { $Profile -eq 'azure-iot' -or [IO.Path]::GetRelativePath($repositoryRoot, $_).Replace('\', '/') -cnotin $warningPolicy.azureSketches } |
         Sort-Object -Unique -CaseSensitive)
 }
 
@@ -90,7 +97,7 @@ if ((Test-Path -LiteralPath $outputRoot) -and
     throw "Output directory must be empty; choose a fresh -OutputDirectory: $outputRoot"
 }
 $sketchNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-foreach ($reservedName in @('compiler-versions.txt', 'az3166-build-lock.json', 'summary.md', 'az3166-warning-policy.json', 'package-layout.json', 'warning-summary.json', 'warning-summary.md')) {
+foreach ($reservedName in @('compiler-versions.txt', 'az3166-build-lock.json', 'summary.md', 'az3166-warning-policy.json', 'package-layout.json', 'warning-summary.json', 'warning-summary.md', 'package-profile.json', 'az3166-azure-archive.json', 'platform.txt', 'platform.local.txt', 'azure-only-symbols.json')) {
     $null = $sketchNames.Add($reservedName)
 }
 foreach ($sketchDirectory in $sketchDirectories) {
@@ -131,7 +138,7 @@ try {
     $probes = @(
         @{ Name = 'git'; Path = $gitCommand; Arguments = @('--version') }
         @{ Name = 'arduinoCli'; Path = $arduinoCliCommand.Source; Arguments = @('version') }
-        foreach ($tool in @('gcc', 'g++', 'as', 'ar', 'ld', 'objcopy', 'size')) {
+        foreach ($tool in @('gcc', 'g++', 'as', 'ar', 'ld', 'objcopy', 'size', 'nm')) {
             @{ Name = $tool; Path = Join-Path $compilerDirectory "arm-none-eabi-$tool$(if ($IsWindows) { '.exe' })"; Arguments = @('--version') }
         }
     )
@@ -166,10 +173,28 @@ try {
         compilerRoot = Split-Path -Parent $compilerDirectory
         warningPolicySha256 = (Get-FileHash -LiteralPath $warningPolicyPath -Algorithm SHA256).Hash.ToLowerInvariant()
         packageLayoutSha256 = (Get-FileHash -LiteralPath $layoutPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        packageProfile = $Profile
     }
     New-Item -ItemType Directory -Path $librariesDirectory -Force | Out-Null
     New-Item -ItemType Directory -Path $downloadsDirectory -Force | Out-Null
-    Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination $platformDirectory
+    Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination $platformDirectory -Profile $Profile -Ar $identities.ar.path -Nm $identities.nm.path
+    $retainedProfile = Join-Path $outputRoot 'package-profile.json'
+    Copy-Item -LiteralPath (Join-Path $platformDirectory 'package-profile.json') -Destination $retainedProfile
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot $packageLayout.ArchivePartition) -Destination (Join-Path $outputRoot 'az3166-azure-archive.json')
+    Copy-Item -LiteralPath (Join-Path $platformDirectory 'platform.txt') -Destination (Join-Path $outputRoot 'platform.txt')
+    $environment.packageProfileSha256 = (Get-FileHash -LiteralPath $retainedProfile).Hash.ToLowerInvariant()
+    $environment.archivePartitionSha256 = (Get-FileHash -LiteralPath (Join-Path $outputRoot 'az3166-azure-archive.json')).Hash.ToLowerInvariant()
+    $environment.platformSha256 = (Get-FileHash -LiteralPath (Join-Path $outputRoot 'platform.txt')).Hash.ToLowerInvariant()
+    if ($Profile -eq 'azure-iot') {
+        Copy-Item -LiteralPath (Join-Path $platformDirectory 'platform.local.txt') -Destination (Join-Path $outputRoot 'platform.local.txt')
+        $environment.platformOverlaySha256 = (Get-FileHash -LiteralPath (Join-Path $outputRoot 'platform.local.txt')).Hash.ToLowerInvariant()
+    }
+    $partition = Get-Content -Raw -LiteralPath (Join-Path $outputRoot 'az3166-azure-archive.json') | ConvertFrom-Json
+    $originalArchive = Join-Path $repositoryRoot $partition.source
+    if ((Get-FileHash -LiteralPath $originalArchive).Hash.ToLowerInvariant() -cne $partition.sha256) { throw 'Archive changed before symbol validation.' }
+    $azureOnlySymbols = Get-Az3166DefinedSymbols $originalArchive $identities.nm.path
+    $azureOnlySymbols.ExceptWith((Get-Az3166DefinedSymbols (Join-Path $platformDirectory 'system/libdevkit-sdk-base.a') $identities.nm.path))
+    @($azureOnlySymbols | Sort-Object -CaseSensitive) | ConvertTo-Json -AsArray | Set-Content -LiteralPath (Join-Path $outputRoot 'azure-only-symbols.json') -Encoding utf8
     Copy-Item `
         -LiteralPath $arduinoUnitDirectory `
         -Destination (Join-Path $librariesDirectory 'ArduinoUnit') `
@@ -217,6 +242,7 @@ try {
             compilationDatabase = [ordered]@{ arguments = @($arguments) + '--only-compilation-database'; exitCode = $null; entries = 0 }
             sizeExitCode = $null
             artifacts = @()
+            azureOnlySymbols = @()
             errors = @()
         }
         try {
@@ -266,6 +292,11 @@ try {
             }
             $elf = @($artifacts | Where-Object { $_.Extension -eq '.elf' -and $_.Length -gt 0 })
             if ($elf.Count -eq 1) {
+                $context.azureOnlySymbols = @((Get-Az3166DefinedSymbols $elf[0].FullName $identities.nm.path) |
+                    Where-Object { $azureOnlySymbols.Contains($_) } | Sort-Object -CaseSensitive)
+                if ($Profile -eq 'base' -and $context.azureOnlySymbols.Count -gt 0) { throw 'Azure-only definitions were linked into base firmware.' }
+                if ($Profile -eq 'azure-iot' -and $relativePath.Replace('\', '/') -cin $warningPolicy.azureSketches -and
+                    $context.azureOnlySymbols.Count -eq 0) { throw 'The Azure probe did not link Azure definitions.' }
                 $result = Invoke-Az3166EvidenceProcess -FilePath $identities['size'].path `
                     -Arguments @('-A', $elf[0].FullName) -LogPath $logPath -CaptureOutput
                 $context.sizeExitCode = $result.ExitCode

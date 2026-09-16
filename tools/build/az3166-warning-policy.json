@@ -14,7 +14,15 @@
     "examples/peripherals/spi/BarometricPressureSensor",
     "examples/peripherals/spi/DigitalPotControl",
     "tests/hardware/UnitTest",
-    "tests/hardware/manual/HttpTest"
+    "tests/hardware/manual/HttpTest",
+    "tests/host/package/fixtures/AzureDpsLinkProbe",
+    "libraries/Sensors/examples/SensorStatus",
+    "libraries/Audio/examples/VoiceRecord"
+  ],
+  "azureSketches": [
+    "examples/cloud/AzureIotHubExample",
+    "examples/cloud/VoiceToTwitter",
+    "tests/host/package/fixtures/AzureDpsLinkProbe"
   ],
   "vendorSnapshots": [
     {
@@ -51,6 +59,7 @@
   "allowances": [
     {
       "id": "azure-enum-type-limits",
+      "profiles": ["azure-iot"],
       "ownership": "vendor",
       "sourceGlob": "vendor/azure-iot-sdk-c/deps/azure-macro-utils-c/inc/azure_macro_utils/macro_utils.h",
       "option": "-Wtype-limits",

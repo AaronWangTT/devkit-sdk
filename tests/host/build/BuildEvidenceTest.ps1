@@ -344,7 +344,10 @@ Total                 492
         $fqbn = (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'tools/build/az3166-build-lock.json') | ConvertFrom-Json).arduino.fqbn
         $layoutSketchbook = Join-Path $fixtureRoot 'layout-sketchbook'
         . (Join-Path $repositoryRoot 'tools/package/Az3166PackageLayout.ps1')
-        Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination (Join-Path $layoutSketchbook 'hardware/AZ3166Checkout/stm32f4')
+        $validContext = Get-Content -Raw -LiteralPath (Join-Path $OutputDirectory 'ZValidEvidence/build-context.json') | ConvertFrom-Json
+        Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination (Join-Path $layoutSketchbook 'hardware/AZ3166Checkout/stm32f4') `
+            -Profile $validContext.environment.packageProfile `
+            -Ar $validContext.environment.tools.ar.path -Nm $validContext.environment.tools.nm.path
         $layoutConfig = Join-Path $OutputDirectory 'invalid-sketch-layout-config.json'
         @{
             directories = @{

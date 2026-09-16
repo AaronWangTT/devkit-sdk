@@ -15,6 +15,10 @@ $before = Get-Az3166RecipeProperties -Platform $baseline.Platform -Boards $basel
 $after = Get-Az3166RecipeProperties `
     -Platform (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'platform/az3166/platform.txt')) `
     -Boards (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'platform/az3166/boards.txt')) -Board $board
+$full = Get-Az3166RecipeProperties `
+    -Platform ((Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'platform/az3166/platform.txt')) + "`n" +
+        (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'platform/az3166/azure-iot/platform.local.txt'))) `
+    -Boards (Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'platform/az3166/boards.txt')) -Board $board
 
 function Assert-CompilerParameters {
     param([bool]$Condition, [string]$Message)
@@ -27,7 +31,7 @@ foreach ($group in @(
     'compiler.optimization.flags', 'compiler.debug.flags', 'compiler.language.c.flags', 'compiler.language.cpp.flags',
     'compiler.codegen.sections.flags', 'compiler.codegen.dependencies.flags', 'compiler.defines.target',
     'compiler.defines.assembly', 'compiler.defines.arduino', 'compiler.includes.system', 'compiler.includes.mbed',
-    'compiler.includes.bsp', 'compiler.includes.azure', 'compiler.includes.core', 'compiler.warnings.first_party',
+    'compiler.includes.bsp', 'compiler.includes.core', 'compiler.warnings.first_party',
     'compiler.link.diagnostics.flags', 'compiler.link.script.flags',
     'compiler.link.map.flags', 'compiler.link.sections.flags', 'compiler.link.search.flags', 'compiler.link.wrap.flags',
     'compiler.link.libraries.flags', 'compiler.link.specs.flags', 'compiler.link.symbols.flags'
@@ -42,19 +46,28 @@ $properties = @(
     'recipe.c.o.pattern', 'recipe.cpp.o.pattern', 'recipe.S.o.pattern',
     'recipe.ar.pattern', 'recipe.c.combine.pattern', 'recipe.objcopy.bin.pattern', 'recipe.size.pattern'
 )
-foreach ($profile in @('none', 'default', 'more', 'all')) {
-    $before['compiler.warning_flags'] = $before["compiler.warning_flags.$profile"]
-    if ($profile -eq 'default') { $before['compiler.warning_flags'] = $before['compiler.warning_flags.all'] }
-    $after['compiler.warning_flags'] = $after["compiler.warning_flags.$profile"]
-    foreach ($name in $properties) {
-        $expected = Expand-Az3166RecipeProperty -Properties $before -Name $name
-        $expected = $expected.Replace(' -Wno-unused-parameter -Wno-missing-field-initializers', '')
-        $actual = Expand-Az3166RecipeProperty -Properties $after -Name $name
-        Assert-CompilerParameters ($expected -ceq $actual) "Expanded property changed for ${profile}/${name}.`nExpected: $expected`nActual: $actual"
+Assert-CompilerParameters ($after.ContainsKey('compiler.includes.cloud') -and $after['compiler.includes.cloud'] -ceq '') 'Base must not have Azure include paths.'
+Assert-CompilerParameters ($full['compiler.includes.cloud'] -ceq $before['compiler.includes.azure']) 'Full profile must preserve historical SDK header visibility.'
+foreach ($packageProfile in @('base', 'azure-iot')) {
+    $candidate = if ($packageProfile -eq 'base') { $after } else { $full }
+    $baselineProperties = $before.Clone()
+    if ($packageProfile -eq 'base') { $baselineProperties['compiler.includes.azure'] = '' }
+    $replacement = if ($packageProfile -eq 'base') { '-ldevkit-sdk-base' } else { '-ldevkit-sdk-azure -ldevkit-sdk-base' }
+    $baselineProperties['compiler.link.libraries.flags'] = $before['compiler.link.libraries.flags'].Replace('-ldevkit-sdk-core-lib', $replacement)
+    foreach ($profile in @('none', 'default', 'more', 'all')) {
+        $baselineProperties['compiler.warning_flags'] = $before["compiler.warning_flags.$profile"]
+        if ($profile -eq 'default') { $baselineProperties['compiler.warning_flags'] = $before['compiler.warning_flags.all'] }
+        $candidate['compiler.warning_flags'] = $candidate["compiler.warning_flags.$profile"]
+        foreach ($name in $properties) {
+            $expected = Expand-Az3166RecipeProperty -Properties $baselineProperties -Name $name
+            $expected = $expected.Replace(' -Wno-unused-parameter -Wno-missing-field-initializers', '')
+            $actual = Expand-Az3166RecipeProperty -Properties $candidate -Name $name
+            Assert-CompilerParameters ($expected -ceq $actual) "Expanded property changed for ${packageProfile}/${profile}/${name}.`nExpected: $expected`nActual: $actual"
+        }
     }
 }
 Assert-CompilerParameters ((Expand-Az3166RecipeProperty -Properties $after -Name 'compiler.warning_flags.default') -ceq '-Wall -Wextra') 'Default warnings must remain visible.'
-Write-Host 'PASS all recipes differ from PR 4 only by the reviewed default warning selection and removed historical suppressions'
+Write-Host 'PASS base/full recipes differ from PR 4 only by reviewed warnings, Azure includes, and split archive selection'
 
 $fixture = @{ root = 'before {group} {unknown} after'; group = '-O2 {debug}'; debug = '-g' }
 Assert-CompilerParameters ((Expand-Az3166RecipeProperty $fixture 'root') -ceq 'before -O2 -g {unknown} after') 'Recursive expansion lost argument order or unresolved runtime properties.'

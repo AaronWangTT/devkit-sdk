@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "azure_iot_hub.h"
+#include "azure-iot/AzureConfiguration.h"
 #include "EEPROMInterface.h"
 #include "iot_hub_mqtt_example.h"
 

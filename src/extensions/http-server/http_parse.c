@@ -625,8 +625,9 @@ static char *httpd_parse_msgbody(char *data_p, const char *tag,
   if (i == (int)val_len) {
     val[val_len] = 0;
     if ((*ptr != '&') && (*ptr != 0)) {
-      httpd_d("Max val length exceeded.  "
-              "Truncating value ");
+      httpd_d("Max val length exceeded.");
+      val[0] = 0;
+      return NULL;
     }
   }
   

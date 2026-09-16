@@ -4,6 +4,7 @@
 #include "DevkitDPSClient.h"
 #include "DiceCore.h"
 #include "EEPROMInterface.h"
+#include "azure-iot/AzureConfiguration.h"
 #include "RiotCore.h"
 
 #include "iothub_client.h"

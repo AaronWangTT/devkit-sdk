@@ -103,12 +103,9 @@ enum wm_httpd_errno {
  *  This value is essentially the longest single line that the HTTPD can
  *  handle.  This limits programmers and users in some interesting ways.  For
  *  example:
- *  -# This is the maximum length of any url-encoded data sent as the body of a
- *     POST request.
- *     If this limit is exceeded, the server will generate a 500 Internal
- *     Server Error response.
- *     Applications that require a higher capacity for form data must implement
- *     their own custom handler to process form data or tune this value.
+ *  -# This is header scratch capacity, not the request-body limit.
+ *     HTTP handlers supply a bounded body buffer to httpd_get_data() and must
+ *     reject a nonzero remaining byte count before parsing or saving settings.
  *  -# This is the maximum length of a header line that can be processed by
  *     \ref httpd_parse_hdr_tags.  Header lines that exceed this
  *     length will be truncated before being analyzed.  Applications that

@@ -9,14 +9,7 @@
 #include "SystemVersion.h"
 #include "UARTClass.h"
 #include "console_cli.h"
-
-struct console_command 
-{
-    const char *name;
-    const char *help;
-    bool       isPrivacy;
-    void (*function) (int argc, char **argv);
-};
+#include "ConfigurationProvider.h"
 
 #define MAX_CMD_ARG         4
 
@@ -43,25 +36,26 @@ static void reboot_and_exit_command(int argc, char **argv);
 static void wifi_scan(int argc, char **argv);
 static void wifi_ssid_command(int argc, char **argv);
 static void wifi_pwd_Command(int argc, char **argv);
-static void az_iothub_command(int argc, char **argv);
-static void dps_uds_command(int argc, char **argv);
-static void az_iotdps_command(int argc, char **argv);
 static void enable_secure_command(int argc, char **argv);
 
-static const struct console_command cmds[] = {
+static const ConfigurationCommand cmds[] = {
   {"help",          "Help document",                                                                                                                    false, help_command},
   {"version",       "System version",                                                                                                                   false, get_version_command},
   {"exit",          "Exit and reboot",                                                                                                                  false, reboot_and_exit_command},
   {"scan",          "Scan Wi-Fi AP",                                                                                                                    false, wifi_scan},
   {"set_wifissid",  "Set Wi-Fi SSID",                                                                                                                   false, wifi_ssid_command},
   {"set_wifipwd",   "Set Wi-Fi password",                                                                                                               true,  wifi_pwd_Command},
-  {"set_az_iothub", "Set IoT Hub device connection string",                                                                                             false, az_iothub_command},
-  {"set_dps_uds",   "Set DPS Unique Device Secret (UDS) for X.509 certificates.",                                                                       true,  dps_uds_command},
-  {"set_az_iotdps", "Set DPS Symmetric Key. Format: \"DPSEndpoint=global.azure-devices-provisioning.net;IdScope=XXX;DeviceId=XXX;SymmetricKey=XXX\"",   false, az_iotdps_command},
   {"enable_secure", "Enable secure channel between AZ3166 and secure chip",                                                                             false, enable_secure_command},
 };
 
-static const int cmd_count = sizeof(cmds) / sizeof(struct console_command);
+static const ConfigurationCommand *commandAt(size_t index)
+{
+    const size_t count = sizeof(cmds) / sizeof(cmds[0]);
+    if (index < count) { return &cmds[index]; }
+    size_t extraCount = 0;
+    const ConfigurationCommand *extra = GetConfigurationCommands(&extraCount);
+    return index - count < extraCount ? &extra[index - count] : NULL;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Command handlers
@@ -69,9 +63,9 @@ static void print_help()
 {
     Serial.print("Configuration console:\r\n");
     
-    for (int i = 0; i < cmd_count; i++)
+    for (size_t index = 0; const ConfigurationCommand *command = commandAt(index); ++index)
     {
-        Serial.printf(" - %s: %s.\r\n", cmds[i].name, cmds[i].help);
+        Serial.printf(" - %s: %s.\r\n", command->name, command->help);
     }
 }
 
@@ -203,71 +197,6 @@ static void wifi_pwd_Command(int argc, char **argv)
     }
 }
 
-static void az_iothub_command(int argc, char **argv)
-{
-    if (argc == 1 || argv[1] == NULL) 
-    {
-        Serial.printf("Usage: set_az_iothub <connection string>. Please provide the connection string of the Azure IoT hub.\r\n");
-        return;
-    }
-    int len = strlen(argv[1]) + 1;
-    if (len == 0 || len > AZ_IOT_HUB_MAX_LEN)
-    {
-        Serial.printf("Invalid Azure IoT hub connection string.\r\n");
-        return;
-    }
-    
-    int result = write_eeprom(argv[1], AZ_IOT_HUB_ZONE_IDX);
-    if (result == 0)
-    {
-        Serial.printf("INFO: Set Azure Iot hub connection string successfully.\r\n");
-    }
-}
-
-static void dps_uds_command(int argc, char **argv)
-{
-    char* uds = NULL;
-    if (argc == 1 || argv[1] == NULL)
-    {
-        Serial.printf("Usage: set_dps_uds [uds]. Please provide the UDS for DPS.\r\n");
-        return;
-    }
-
-    int len = strlen(argv[1]) + 1;
-    if (len != DPS_UDS_MAX_LEN)
-    {
-        Serial.printf("Invalid UDS.\r\n");
-    }
-    uds = argv[1];
-        
-    int result = write_eeprom(uds, DPS_UDS_ZONE_IDX);
-    if (result == 0)
-    {
-        Serial.printf("INFO: Set DPS UDS successfully.\r\n");
-    }
-}
-
-static void az_iotdps_command(int argc, char **argv)
-{
-    if (argc == 1 || argv[1] == NULL) 
-    {
-        Serial.printf("Usage: set_az_iotdps <connection string>. Please provide the connection string of DPS.\r\n");
-        return;
-    }
-    int len = strlen(argv[1]) + 1;
-    if (len == 0 || len > AZ_IOT_HUB_MAX_LEN)
-    {
-        Serial.printf("Invalid DPS connection string.\r\n");
-        return;
-    }
-
-    int result = write_eeprom(argv[1], AZ_IOT_HUB_ZONE_IDX);
-    if (result == 0)
-    {
-        Serial.printf("INFO: Set DPS connection string successfully.\r\n");
-    }
-}
-
 static void enable_secure_command(int argc, char **argv)
 {
     int ret = -2;
@@ -342,12 +271,12 @@ static bool is_privacy_cmd(char *inbuf, unsigned int bp)
         {
             // Check the table
             cmdName[j] = 0;
-            for(int i = 0; i < cmd_count; i++)
+            for (size_t index = 0; const ConfigurationCommand *command = commandAt(index); ++index)
             {
-                if(strcmp(cmds[i].name, cmdName) == 0)
+                if(strcmp(command->name, cmdName) == 0)
                 {
                     // It's privacy command
-                    return cmds[i].isPrivacy;
+                    return command->isPrivacy;
                 }
             }
             break;
@@ -523,11 +452,11 @@ static int handle_input(char* inbuf)
     
     Serial.printf("\r\n");
     
-    for(int i = 0; i < cmd_count; i++)
+    for (size_t index = 0; const ConfigurationCommand *command = commandAt(index); ++index)
     {
-        if(strcmp(cmds[i].name, argv[0]) == 0)
+        if(strcmp(command->name, argv[0]) == 0)
         {
-            cmds[i].function(argc, argv);
+            command->function(argc, argv);
             return 0;
         }
     }

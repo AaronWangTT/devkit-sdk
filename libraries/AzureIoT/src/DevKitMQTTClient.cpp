@@ -4,6 +4,7 @@
 #include "DevKitMQTTClient.h"
 #include "DevkitDPSClient.h"
 #include "EEPROMInterface.h"
+#include "azure-iot/AzureConfiguration.h"
 #include "SerialLog.h"
 #include "SystemTickCounter.h"
 #include "SystemTime.h"

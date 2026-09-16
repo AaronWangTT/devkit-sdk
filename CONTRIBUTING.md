@@ -47,6 +47,11 @@ cd devkit-sdk
 pwsh -File ./tools/package/Stage-Az3166Platform.ps1 -Destination ./artifacts/platform
 ```
 
+Staging defaults to `base`. Add `-Profile azure-iot` for a complete Azure-enabled
+platform, using a different empty destination. PowerShell 7 and GNU `ar`/`nm`
+are required; on Windows, pass the pinned ARM tools through `-Ar` and `-Nm` if
+they are not on PATH. The sketch driver selects those tools automatically.
+
 The staging destination must be empty. It is generated output for inspection or
 manual integration, not an editing location. The test drivers create their own
 temporary staging areas, so this explicit staging step is not a prerequisite for
@@ -61,17 +66,21 @@ libraries under `libraries`. Archived tooling is documented in
 [legacy/README.md](legacy/README.md); relocating it does not make it supported
 or safe to run against production services.
 
-Install the pinned AZ3166 toolchain and compile all 13 standalone examples and
-device-test projects from the repository root using PowerShell 7 or later:
+Install the pinned AZ3166 toolchain and validate both profiles from the repository
+root using PowerShell 7 or later: 13 base sketches and 16 full sketches. Both
+include SensorStatus and VoiceRecord; full additionally checks the two cloud
+examples and the Azure DPS link probe.
 
 ```powershell
 $tools = .\tools\build\Install-Az3166BuildTools.ps1 `
      -Root C:\a -DownloadCache C:\az3166-downloads
-.\tools\test\Test-Az3166Sketches.ps1 `
-     -ArduinoCli $tools.ArduinoCliPath `
-     -ArduinoDataDirectory $tools.ArduinoDataDirectory `
-     -ArduinoUnitDirectory $tools.ArduinoUnitDirectory `
-     -OutputDirectory .\artifacts\sketches
+foreach ($profile in @('base', 'azure-iot')) {
+     .\tools\test\Test-Az3166Sketches.ps1 -Profile $profile `
+          -ArduinoCli $tools.ArduinoCliPath `
+          -ArduinoDataDirectory $tools.ArduinoDataDirectory `
+          -ArduinoUnitDirectory $tools.ArduinoUnitDirectory `
+          -OutputDirectory ".\artifacts\sketches-$profile"
+}
 ```
 
 The toolchain root must not exceed 70 characters. Native host-test commands and
@@ -90,15 +99,31 @@ Run the shared native tests using PowerShell 7 and GCC with sanitizer support:
 pwsh -File ./tests/host/build/BuildEvidenceTest.ps1
 pwsh -File ./tests/host/build/WarningPolicyTest.ps1
 pwsh -File ./tests/host/package/PackageLayoutTest.ps1
-pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Sanitize
+pwsh -File ./tests/host/package/AzureArchiveTest.ps1
+pwsh -File ./tests/host/package/ReleaseProfileTest.ps1
+pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Profile base -Sanitize
+pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Profile azure-iot -Sanitize
 ```
 
 The C++ tests use dependency fakes, not the ARM-only vendor binaries. To verify package generation
 from a committed revision, run:
 
 ```powershell
-pwsh -File .\tools\package\Test-Az3166BoardPackage.ps1
+pwsh -File .\tools\package\Test-Az3166BoardPackage.ps1 -Profile base
+pwsh -File .\tools\package\Test-Az3166BoardPackage.ps1 -Profile azure-iot
 ```
+
+The [Azure IoT separation plan](docs/azure-iot-separation-plan.md) documents
+native timer/configuration tests, occurrence-aware archive partition contracts,
+and production base/full validation. Profile-aware builds default to base and
+never modify the installed toolchain. Packaging reads committed revisions only;
+uncommitted changes are exercised by staging/host/sketch tests. On Windows,
+the package and archive tests accept explicit `-Ar` and `-Nm` paths as well.
+
+The release workflow validates both profiles at the exact tag, but publishes only
+the profile recorded in that tag's `releaseProfile`. No tag, major-version bump,
+hardware attestation, release, or external index update is implied by running
+these checks. Publication requires separate approval and physical acceptance.
 
 Sketch compilation does not execute the hardware tests. Record physical-board
 results separately, including any fixtures or external services required.

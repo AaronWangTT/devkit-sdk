@@ -12,6 +12,14 @@
 #include "iothubtransportmqtt.h"
 #include "certs/certs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+const char *getIoTHubConnectionString(void);
+#ifdef __cplusplus
+}
+#endif
+
 typedef void (*CONNECTION_STATUS_CALLBACK)(IOTHUB_CLIENT_CONNECTION_STATUS result, IOTHUB_CLIENT_CONNECTION_STATUS_REASON reason);
 typedef void (*SEND_CONFIRMATION_CALLBACK)(IOTHUB_CLIENT_CONFIRMATION_RESULT result);
 typedef void (*MESSAGE_CALLBACK)(const char* message, int length);

@@ -186,7 +186,33 @@ Assert-BuildConfigurationTest ($workflow.Contains('-VerifyOnly')) 'Core package 
 Assert-BuildConfigurationTest ($workflow.Contains('-Offline')) 'Core package CI does not exercise an offline second setup.'
 Assert-BuildConfigurationTest (-not $workflow.Contains('Invoke-WebRequest')) 'Core package CI still owns a toolchain download.'
 Assert-BuildConfigurationTest (-not $workflow.Contains('arduino/setup-arduino-cli')) 'Core package CI still uses a separate Arduino CLI installer.'
+Assert-BuildConfigurationTest ($workflow.Contains("foreach (`$profile in @('base', 'azure-iot'))") -and
+    $workflow.Contains('-Profile $profile') -and $workflow.Contains('AzureArchiveTest.ps1') -and
+    $workflow.Contains('workflow_call:') -and $workflow.Contains('inputs.revision || github.sha')) 'CI must validate both profiles and support exact-revision release gates.'
 Assert-BuildConfigurationTest ($workflow.Contains('steps.build-lock.outputs.short_toolchain_root_name')) 'Core package CI does not use the locked short toolchain-root name.'
+$selection = [regex]::Match($workflow, '(?ms)^      - name: Select Linux archive tools\r?\n.*?        run: \|\r?\n(?<script>(?:          [^\r\n]*\r?\n)+)').Groups['script'].Value
+Assert-BuildConfigurationTest (-not [string]::IsNullOrWhiteSpace($selection)) 'The Linux archive-tool selection block was not found.'
+$selectionOutput = [IO.Path]::GetTempFileName()
+$previousGitHubEnvironment = $env:GITHUB_ENV
+try {
+    $env:GITHUB_ENV = $selectionOutput
+    & {
+        function Get-Command {
+            param([string]$Name, [string]$CommandType, [string]$ErrorAction)
+            [pscustomobject]@{ Source = "/usr/bin/$Name" }
+            [pscustomobject]@{ Source = "/bin/$Name" }
+        }
+        & ([scriptblock]::Create($selection))
+    }
+    $exports = @(Get-Content -LiteralPath $selectionOutput)
+    Assert-BuildConfigurationTest ($exports.Count -eq 2 -and
+        $exports[0] -ceq 'AZ3166_AR=/usr/bin/ar' -and $exports[1] -ceq 'AZ3166_NM=/usr/bin/nm') 'Archive-tool selection joined duplicate executable paths.'
+}
+finally {
+    $env:GITHUB_ENV = $previousGitHubEnvironment
+    Remove-Item -LiteralPath $selectionOutput -Force
+}
+Write-Host 'PASS Linux archive-tool exports select one executable when PATH contains duplicate matches'
 $toolchainCacheStep = [regex]::Match($workflow, '(?ms)^      - name: Cache AZ3166 [^\r\n]+\r?\n.*?(?=^      - name:)').Value
 Assert-BuildConfigurationTest ($toolchainCacheStep.Contains('path: ${{ runner.temp }}/az3166-downloads')) 'The toolchain cache must contain portable downloads only.'
 Assert-BuildConfigurationTest (-not $toolchainCacheStep.Contains('short_toolchain_root_name')) 'CI must not restore an installation owned by another absolute root.'
