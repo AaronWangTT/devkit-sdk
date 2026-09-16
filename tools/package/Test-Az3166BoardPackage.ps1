@@ -4,7 +4,10 @@ param(
 
     [string]$ExpectedVersion,
 
-    [string]$OutputDirectory = (Join-Path ([System.IO.Path]::GetTempPath()) "az3166-core-package")
+    [string]$OutputDirectory = (Join-Path ([System.IO.Path]::GetTempPath()) "az3166-core-package"),
+    [string]$Profile,
+    [string]$Ar = 'ar',
+    [string]$Nm = 'nm'
 )
 
 Set-StrictMode -Version Latest
@@ -25,7 +28,7 @@ function Invoke-GitText {
 }
 
 $resolvedCommit = Invoke-GitText -GitArguments @("rev-parse", "$Revision^{commit}")
-$layout = Get-Az3166PackageLayout -RepositoryRoot $repositoryRoot -Revision $resolvedCommit
+$layout = Get-Az3166PackageLayout -RepositoryRoot $repositoryRoot -Revision $resolvedCommit -Profile $Profile
 $versionHeaderPath = ($layout.Files | Where-Object {
     $_.Destination -ceq 'cores/arduino/system/SystemVersion.h'
 }).Source
@@ -43,15 +46,16 @@ if ($ExpectedVersion -and $version -ne $ExpectedVersion) {
 
 $outputDirectoryFullPath = [System.IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Path $outputDirectoryFullPath -Force | Out-Null
-$outputPath = Join-Path $outputDirectoryFullPath "AZ3166-$version.zip"
-$comparisonPath = Join-Path $outputDirectoryFullPath "AZ3166-$version.reproducibility-check.zip"
+$profileSuffix = if ($layout.SchemaVersion -ge 2) { "-$($layout.Profile)" } else { '' }
+$outputPath = Join-Path $outputDirectoryFullPath "AZ3166-$version$profileSuffix.zip"
+$comparisonPath = Join-Path $outputDirectoryFullPath "AZ3166-$version$profileSuffix.reproducibility-check.zip"
 $extractRoot = Join-Path (
     [System.IO.Path]::GetTempPath()
 ) "az3166-package-$([guid]::NewGuid().ToString('N'))"
 
 try {
-    $primary = & $packageBuilder -OutputPath $outputPath -Revision $resolvedCommit
-    $comparison = & $packageBuilder -OutputPath $comparisonPath -Revision $resolvedCommit
+    $primary = & $packageBuilder -OutputPath $outputPath -Revision $resolvedCommit -Profile $layout.Profile -Ar $Ar -Nm $Nm
+    $comparison = & $packageBuilder -OutputPath $comparisonPath -Revision $resolvedCommit -Profile $layout.Profile -Ar $Ar -Nm $Nm
     if (
         $primary.Size -ne $comparison.Size -or
         $primary.SHA256 -ne $comparison.SHA256
@@ -71,11 +75,15 @@ try {
     if ($packagedVersion -ne $version) {
         throw "Packaged Core version $packagedVersion does not match source version $version."
     }
+    if ($layout.ArchiveInputs.Count -gt 0) {
+        Assert-Az3166PackagedProfile (Join-Path $extractRoot 'AZ3166') $layout.Profile $resolvedCommit
+    }
 
     [pscustomobject]@{
         Path = $primary.Path
         Revision = $resolvedCommit
         Version = $version
+        Profile = $layout.Profile
         Size = $primary.Size
         SHA256 = $primary.SHA256
     }

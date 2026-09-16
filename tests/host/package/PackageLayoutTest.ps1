@@ -43,6 +43,84 @@ function Assert-LayoutRejected {
 }
 
 $cases = [ordered]@{
+    'Azure platform sources are full-only and staged once outside the Arduino library' = {
+        param($root, $manifest)
+        $base = Get-Az3166PackageLayout -RepositoryRoot $repositoryRoot -Profile base
+        $full = Get-Az3166PackageLayout -RepositoryRoot $repositoryRoot -Profile azure-iot
+        Assert-LayoutTest (@($base.Files | Where-Object { $_.Source.StartsWith('libraries/AzureIoT/', [StringComparison]::Ordinal) }).Count -eq 0) 'Azure-owned files leaked into base.'
+        $expected = [ordered]@{
+            'AzureConfiguration.cpp' = 'cores/arduino/system/azure-iot/AzureConfiguration.cpp'
+            'AzureConfiguration.h' = 'cores/arduino/system/azure-iot/AzureConfiguration.h'
+            'telemetry/Telemetry.cpp' = 'cores/arduino/Telemetry/Telemetry.cpp'
+            'telemetry/TelemetryClient.cpp' = 'cores/arduino/Telemetry/TelemetryClient.cpp'
+            'telemetry/TelemetryClient.h' = 'cores/arduino/Telemetry/TelemetryClient.h'
+        }
+        $platformFiles = @($full.Files | Where-Object { $_.Source.StartsWith('libraries/AzureIoT/platform/', [StringComparison]::Ordinal) })
+        Assert-LayoutTest ($platformFiles.Count -eq $expected.Count) 'Unexpected Azure platform inventory.'
+        foreach ($entry in $expected.GetEnumerator()) {
+            $matches = @($platformFiles | Where-Object { $_.Source -ceq "libraries/AzureIoT/platform/$($entry.Key)" })
+            Assert-LayoutTest ($matches.Count -eq 1 -and $matches[0].Destination -ceq $entry.Value) 'Azure platform source was omitted, duplicated, or staged under the library.'
+        }
+        Assert-LayoutTest (@($full.Files | Where-Object { $_.Destination -ceq 'libraries/AzureIoT/library.properties' }).Count -eq 1) 'Arduino library metadata was lost.'
+    }
+    'profiles select payloads without weakening complete input accounting' = {
+        param($root, $manifest)
+        $manifest.schemaVersion = 2
+        $manifest.defaultProfile = 'base'
+        $manifest.mappings[-1].profiles = @('azure-iot')
+        Save-LayoutFixtureManifest $root $manifest
+        $base = Get-Az3166PackageLayout -RepositoryRoot $root
+        $full = Get-Az3166PackageLayout -RepositoryRoot $root -Profile azure-iot
+        Assert-LayoutTest ($base.Profile -ceq 'base' -and $base.Files.Count -eq 5) 'Default base selection is incorrect.'
+        Assert-LayoutTest ($full.Profile -ceq 'azure-iot' -and $full.Files.Count -eq 6) 'Full profile dropped optional files.'
+        $null = Invoke-Az3166LayoutGit $root @('-c', 'core.autocrlf=false', 'add', '--', '.')
+        $snapshot = (Invoke-Az3166LayoutGit $root @('write-tree')).Trim()
+        $committed = Get-Az3166PackageLayout -RepositoryRoot $root -Revision $snapshot -Profile azure-iot
+        Assert-LayoutTest (@(Compare-Object -CaseSensitive $committed.Files.Destination $full.Files.Destination).Count -eq 0) 'Revision profile selection differs.'
+        Write-LayoutFixtureFile $root 'payload/forgotten.h' 'unclassified optional source'
+        Assert-LayoutRejected $root 'Unmapped package inputs:*'
+    }
+    'profile-specific providers can use the same destination' = {
+        param($root, $manifest)
+        $manifest.schemaVersion = 2
+        $manifest.defaultProfile = 'base'
+        Write-LayoutFixtureFile $root 'payload/base-provider.cpp' 'base'
+        Write-LayoutFixtureFile $root 'payload/azure-provider.cpp' 'azure'
+        $manifest.mappings += @(
+            @{ source = 'payload/base-provider.cpp'; destination = 'cores/arduino/provider.cpp'; profiles = @('base') }
+            @{ source = 'payload/azure-provider.cpp'; destination = 'cores/arduino/provider.cpp'; profiles = @('azure-iot') }
+        )
+        Save-LayoutFixtureManifest $root $manifest
+        foreach ($profile in @('base', 'azure-iot')) {
+            $layout = Get-Az3166PackageLayout -RepositoryRoot $root -Profile $profile
+            Assert-LayoutTest ($layout.Files.Count -eq 7) 'A provider was missing or included twice.'
+            $provider = @($layout.Files | Where-Object { $_.Destination -ceq 'cores/arduino/provider.cpp' })
+            $expected = if ($profile -eq 'base') { 'payload/base-provider.cpp' } else { 'payload/azure-provider.cpp' }
+            Assert-LayoutTest ($provider.Count -eq 1 -and $provider[0].Source -ceq $expected) 'Wrong provider selected.'
+        }
+    }
+    'unknown and invalid profile declarations are rejected' = {
+        param($root, $manifest)
+        $manifest.schemaVersion = 2
+        $manifest.defaultProfile = 'typo'
+        Save-LayoutFixtureManifest $root $manifest
+        Assert-LayoutRejected $root '*valid defaultProfile*'
+        $manifest.defaultProfile = 'base'
+        foreach ($profiles in @(@('typo'), @('base', 'base'), @())) {
+            $manifest.mappings[-1].profiles = $profiles
+            Save-LayoutFixtureManifest $root $manifest
+            Assert-LayoutRejected $root 'Invalid mapping profiles:*'
+        }
+    }
+    'legacy layouts retain full payload and reject a base request' = {
+        param($root, $manifest)
+        $layout = Get-Az3166PackageLayout -RepositoryRoot $root
+        Assert-LayoutTest ($layout.Profile -ceq 'azure-iot' -and $layout.Files.Count -eq 6) 'Legacy default changed.'
+        $rejected = $false
+        try { $null = Get-Az3166PackageLayout -RepositoryRoot $root -Profile base }
+        catch { $rejected = $_.Exception.Message -like 'Historical layouts support only*' }
+        Assert-LayoutTest $rejected 'A legacy payload was mislabeled as base.'
+    }
     'checkout and revision map the same complete payload' = {
         param($root, $manifest)
         $null = Invoke-Az3166LayoutGit $root @('-c', 'core.autocrlf=false', 'add', '--', '.')
@@ -139,7 +217,7 @@ $cases = [ordered]@{
     }
     'unsupported schema versions are rejected' = {
         param($root, $manifest)
-        $manifest.schemaVersion = 2
+        $manifest.schemaVersion = 99
         Save-LayoutFixtureManifest $root $manifest
         Assert-LayoutRejected $root 'Unsupported package-layout schema version:*'
     }

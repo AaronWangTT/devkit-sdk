@@ -12,13 +12,14 @@ The fork's `master` branch preserves Microsoft's archived upstream history and
 does not receive HomeTemperature maintenance changes. Submit maintained Core
 fixes, packaging changes, and release preparation through pull requests to
 `maintenance`. Core package CI validates the runtime version API, verifies
-repeatable package builds on Windows and Ubuntu, and requires both platforms to
-produce byte-for-byte identical archives. To perform the same package check
-locally from a committed revision:
+repeatable base and Azure-enabled package builds on Windows and Ubuntu, and
+requires both hosts to produce byte-for-byte identical archives per profile.
+For a committed profile-aware revision, run the package check with PowerShell 7
+and GNU `ar`/`nm` on PATH (or pass their paths using `-Ar` and `-Nm`):
 
 ```powershell
 & .\tools\package\Test-Az3166BoardPackage.ps1 `
-	-ExpectedVersion 2.0.2 `
+	-Revision HEAD -Profile base `
 	-OutputDirectory .\artifacts
 ```
 
@@ -26,14 +27,26 @@ The package builder disables Git's automatic line-ending conversion and uses
 UTC ZIP timestamps without modifying the caller's Git configuration or
 environment.
 
-A numeric semantic-version tag created from a verified `maintenance` commit must
-exactly match `SystemVersion.h`. Creating or pushing the tag does not publish a
-release. To publish it, manually run the `Core release` workflow from the
-`maintenance` branch and supply the existing tag as its version input. The
-workflow verifies that the tag belongs to `maintenance`, repeats the package and
-runtime checks from that tagged commit, and creates the versioned GitHub release.
-It does not update the package-index or consumer repositories. Re-running it for
-an existing release fails rather than replacing the release or moving its tag.
+The new default is `base`; request `-Profile azure-iot` for a complete board
+package with Azure support. Neither profile ships the original monolithic
+archive. Historical 2.x tags remain full packages with their original filenames
+and hashes, and reject a base-profile request. Working-tree changes are not
+included by `-Revision HEAD`; use staging for uncommitted source validation.
+
+A release tag on `maintenance` must match the runtime version and record its
+one intended `releaseProfile` in the package layout. Profile-based publication
+requires an approved next-major version. The manual `Core release` workflow
+requires the matching profile and explicit hardware/firmware-review confirmation,
+runs both-profile CI at the resolved tag commit, and compares the selected
+artifact with CI before publication. It publishes only that profile for that
+version. Existing releases cannot be overwritten.
+
+Release metadata supplies immutable archive fields for the separately reviewed
+Board Manager index update; the workflow does not edit that index or consumer
+repositories. Azure users must pin an Azure-enabled version: upgrading to a newer
+base release removes Azure support. See the
+[separation and release plan](docs/azure-iot-separation-plan.md) for acceptance
+limits and the release process. No new major release has been published yet.
 
 Core package CI continues to run automatically for pull requests and pushes to
 `maintenance`. Its uploaded files are short-lived workflow artifacts for
@@ -67,8 +80,13 @@ to its installed location under the archive's `AZ3166/` prefix. Both
 checkout staging and committed-revision packaging use the same validated map.
 Do not copy ownership directories directly into an Arduino installation; use
 [Stage-Az3166Platform.ps1](tools/package/Stage-Az3166Platform.ps1) or the build
-drivers. The 15 library examples remain with their libraries. The extension
-category does not make those services optional at build time.
+drivers. Library examples remain with their libraries. Profile membership, not
+the directory name alone, determines whether an extension is included. Azure
+configuration and Application Insights telemetry live under
+[libraries/AzureIoT/platform](libraries/AzureIoT/platform), outside the library's
+sketch-selected source tree. Full-profile mappings still compile them in the
+Core; they are not copied into the installed Arduino library. The base provider
+and telemetry stub have no cloud behavior.
 
 AzureIoT owns [its serial logging helpers](libraries/AzureIoT/src/SerialLog.h),
 which now compile only when that library is selected. The header name and C
@@ -83,25 +101,34 @@ The HTTP client carries its unchanged third-party
 [http-parser snapshot](src/extensions/http-client/http_parser), including the
 license. Its installed `cores/arduino/httpclient/http_parser` path is unchanged,
 and exact content pins preserve its vendor warning classification. The
-Core-hosted HTTP server and its separate parser remain unchanged.
+Core-hosted HTTP server now delegates optional cloud settings to a build-selected
+provider; its separate parsing implementation is unchanged. See the
+[Azure IoT separation plan](docs/azure-iot-separation-plan.md) for the validated
+base/full boundaries. Base configuration keeps Wi-Fi settings but no Azure
+commands, credential fields, or cloud writes. The empty provider is selected
+instead of AzureConfiguration, not in addition to it; nonzero cloud option flags
+are currently ignored in base builds.
 
 ## Tests
 
 Core package CI runs package-map contract tests on Windows and Ubuntu. It uses
 [Test-Az3166HostTests.ps1](tools/test/Test-Az3166HostTests.ps1) to execute the
-runtime-version check and the WiFiUDP and legacy IoT-client harnesses on Ubuntu.
-Both client harnesses use AddressSanitizer
-and UndefinedBehaviorSanitizer. They compile the client implementation with
-dependency fakes; they do not execute the ARM-only vendor libraries or the real
-JSON parser. The corresponding checks also run during releases when the tagged
-revision contains those harnesses.
+runtime-version, timer, base/full configuration, WiFiUDP, and legacy IoT-client
+harnesses on Ubuntu. Base runs four programs and full runs six, with
+AddressSanitizer and UndefinedBehaviorSanitizer where supported. Client tests use dependency fakes;
+configuration tests also exercise the real multipart helper. They do not execute
+the ARM-only vendor libraries or the real JSON parser. The corresponding checks
+also run during releases when the tagged revision contains those harnesses.
 
-On Windows, [Test-Az3166Sketches.ps1](tools/test/Test-Az3166Sketches.ps1)
-discovers sketches under `examples` and `tests/hardware` and compiles them against
-the checkout. This preserves the existing 13-project coverage: 11 standalone
-examples and 2 device-test projects. The 15 examples inside the shipped Arduino
-libraries are unchanged and are not included in this scan. These are compile-only
-checks, not hardware execution or validation against live cloud services.
+On Windows, [Test-Az3166Sketches.ps1](tools/test/Test-Az3166Sketches.ps1) compiles
+13 base sketches and 16 full sketches using the same production staging code.
+Both include SensorStatus and VoiceRecord so Sensors and Audio coverage does not
+depend on cloud examples. Full also includes the two cloud examples and the
+[Azure DPS link probe](tests/host/package/fixtures/AzureDpsLinkProbe/AzureDpsLinkProbe.ino).
+Other library examples are not implicitly added. Base ELF files must have no
+Azure-only definitions; cloud probes must actually link Azure definitions.
+These are compile-only checks, not hardware execution or validation against
+live cloud services.
 `tests/hardware/manual/HttpTest` is an unbounded HTTP/NTP concurrency and memory
 diagnostic, not an automated pass/fail suite. Native build commands are in the
 [CI workflow](.github/workflows/core-package-ci.yml).
@@ -114,11 +141,13 @@ Install the pinned toolchain and run the sketch checks from the repository root:
 ```powershell
 $tools = .\tools\build\Install-Az3166BuildTools.ps1 `
 	-Root C:\a -DownloadCache C:\az3166-downloads
-.\tools\test\Test-Az3166Sketches.ps1 `
-	-ArduinoCli $tools.ArduinoCliPath `
-	-ArduinoDataDirectory $tools.ArduinoDataDirectory `
-	-ArduinoUnitDirectory $tools.ArduinoUnitDirectory `
-	-OutputDirectory .\artifacts\sketches
+foreach ($profile in @('base', 'azure-iot')) {
+	.\tools\test\Test-Az3166Sketches.ps1 -Profile $profile `
+		-ArduinoCli $tools.ArduinoCliPath `
+		-ArduinoDataDirectory $tools.ArduinoDataDirectory `
+		-ArduinoUnitDirectory $tools.ArduinoUnitDirectory `
+		-OutputDirectory ".\artifacts\sketches-$profile"
+}
 ```
 
 Add `-Sketch .\tests\hardware\UnitTest` to the sketch-test command to compile a
@@ -133,11 +162,11 @@ the command fail. `-VerboseBuild` remains accepted but output is always verbose.
 See [build evidence and validation findings](docs/persistent-build-evidence.md)
 for the layout, CI artifact links, and the existing path-dependent binary caveat.
 
-The release workflow selects the relocated tools and host tests when present,
-and falls back to their original paths for historical tags. Package source paths
-are resolved from the requested Git revision, including the historical
-`AZ3166/src` layout. Packaging uses a temporary Git index when combining split
-directories, preserving the caller's index and the published Arduino layout.
+Package source paths, the archive splitter, and its inputs are resolved from the
+requested Git revision. Packaging still supports the historical `AZ3166/src`
+layout; the current release workflow only publishes approved profile-aware major
+versions. A temporary Git index combines mapped and generated artifacts without
+changing the caller's index or installed toolchain.
 
 To run the host checks with native GCC and PowerShell 7:
 

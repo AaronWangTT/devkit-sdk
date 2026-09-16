@@ -4,6 +4,8 @@
 #ifndef __SYSTEM_TICKCOUNTER_H__
 #define __SYSTEM_TICKCOUNTER_H__
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C"
 {

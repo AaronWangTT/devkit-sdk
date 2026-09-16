@@ -6,7 +6,10 @@ param(
     [string]$ExpectedVersion,
     [switch]$Sanitize,
     [switch]$CompileOnly,
-    [string[]]$LinkerFlags = @()
+    [string[]]$LinkerFlags = @(),
+    [string]$Profile,
+    [string]$Ar = 'ar',
+    [string]$Nm = 'nm'
 )
 
 Set-StrictMode -Version Latest
@@ -20,13 +23,44 @@ $previousAsan = $env:ASAN_OPTIONS
 $previousUbsan = $env:UBSAN_OPTIONS
 
 try {
-    Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination $platform
+    $layout = Get-Az3166PackageLayout -RepositoryRoot $repositoryRoot -Profile $Profile
+    Copy-Az3166Platform -RepositoryRoot $repositoryRoot -Destination $platform -Profile $layout.Profile -Ar $Ar -Nm $Nm
+    Write-Host "Host-test profile: $($layout.Profile)"
+    if ($layout.Profile -eq 'base') { Write-Host 'Azure configuration and legacy cloud-client tests run only in the azure-iot profile.' }
     $versionHeader = Join-Path $platform 'cores/arduino/system/SystemVersion.h'
     $version = Get-Az3166CoreVersion -HeaderContent (Get-Content -Raw -LiteralPath $versionHeader) -Source $versionHeader
     if ($ExpectedVersion -and $version -ne $ExpectedVersion) {
         throw "Core version $version does not match expected version $ExpectedVersion."
     }
     $tests = @(
+        foreach ($provider in @('base', 'azure')) {
+            if ($provider -eq 'azure' -and $layout.Profile -eq 'base') { continue }
+            @{
+                Name = "$provider-configuration-test"
+                Arguments = @(
+                    '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
+                    if ($provider -eq 'base') { '-DAZ3166_TEST_BASE' }
+                    '-I', "$platform/system/mbed-os"
+                    '-I', "$platform/system/az3166-driver/mico/include"
+                    '-I', "$platform/cores/arduino"
+                    '-I', "$platform/cores/arduino/system"
+                    '-I', "$platform/cores/arduino/system/azure-iot"
+                    "$repositoryRoot/tests/host/cloud/AzureConfigurationTest.cpp"
+                )
+                RunArguments = @()
+                Sanitize = $true
+            }
+        }
+        @{
+            Name = 'system-tick-test'
+            Arguments = @(
+                '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
+                '-I', "$platform/system/mbed-os"
+                "$repositoryRoot/tests/host/core/SystemTickCounterTest.cpp"
+            )
+            RunArguments = @()
+            Sanitize = $true
+        }
         @{
             Name = 'system-version-test'
             Arguments = @(
@@ -50,7 +84,7 @@ try {
             RunArguments = @()
             Sanitize = $true
         }
-        @{
+        if ($layout.Profile -eq 'azure-iot') { @{
             Name = 'iot-client-test'
             Arguments = @(
                 '-std=gnu++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
@@ -64,7 +98,7 @@ try {
             )
             RunArguments = @()
             Sanitize = $true
-        }
+        } }
     )
     if ($Sanitize) {
         $env:ASAN_OPTIONS = 'detect_leaks=1:halt_on_error=1'
@@ -90,10 +124,10 @@ try {
         }
     }
     if ($CompileOnly) {
-        Write-Host '3 host programs compiled and linked; no tests executed.'
+        Write-Host "$($tests.Count) host programs compiled and linked; no tests executed."
     }
     else {
-        Write-Host '3 host programs compiled and executed successfully.'
+        Write-Host "$($tests.Count) host programs compiled and executed successfully."
     }
 }
 finally {

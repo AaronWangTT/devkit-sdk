@@ -18,6 +18,13 @@ function Assert-WarningPolicyTest {
     if (-not $Condition) { throw $Message }
 }
 
+$basePolicy = Get-Az3166WarningPolicy -BuildLock $lock -Profile base
+$fullPolicy = Get-Az3166WarningPolicy -BuildLock $lock -Profile azure-iot
+Assert-WarningPolicyTest ($basePolicy.inventorySketches.Count -eq 13 -and $fullPolicy.inventorySketches.Count -eq 16) 'Profile test inventories are incorrect.'
+Assert-WarningPolicyTest ('azure-enum-type-limits' -cnotin $basePolicy.allowances.id -and
+    'azure-enum-type-limits' -cin $fullPolicy.allowances.id) 'Azure allowances leaked into base policy or vanished from full policy.'
+Write-Host 'PASS explicit base/full sketch inventories and scoped Azure warning allowance'
+
 $context = [pscustomobject]@{
     sketch = 'examples/board/BoardInit'
     sketchDirectory = 'C:/repository with spaces/examples/board/BoardInit'
@@ -65,6 +72,16 @@ $overlappingLayout.mappings += [pscustomobject]@{
 $overlappingSource = Resolve-Az3166DiagnosticSource -Path $diagnostics[1].originalSource -Context $context -Layout $overlappingLayout -Policy $policy
 Assert-WarningPolicyTest ($overlappingSource.source -ceq 'vendor/fixture-http-parser/http_parser.h' -and $overlappingSource.ownership -eq 'vendor') 'Longest manifest mapping must win for nested staged components.'
 Write-Host 'PASS GCC fields, Windows paths, manifest precedence, all ownership classes, and unknown diagnostics'
+
+foreach ($profile in @('base', 'azure-iot')) {
+    $profileContext = $context | ConvertTo-Json -Depth 6 | ConvertFrom-Json
+    $profileContext.environment | Add-Member -NotePropertyName packageProfile -NotePropertyValue $profile
+    $source = Resolve-Az3166DiagnosticSource -Path "$($context.environment.stagedPlatformDirectory)/cores/arduino/Telemetry/Telemetry.cpp" `
+        -Context $profileContext -Layout $layout -Policy $policy
+    $expected = if ($profile -eq 'base') { 'src/extensions/telemetry/TelemetryStub.cpp' } else { 'libraries/AzureIoT/platform/telemetry/Telemetry.cpp' }
+    Assert-WarningPolicyTest ($source.source -ceq $expected) 'Diagnostic ownership selected an inactive profile mapping.'
+}
+Write-Host 'PASS diagnostic ownership selects the active profile provider'
 
 $uncContext = $context | ConvertTo-Json -Depth 6 | ConvertFrom-Json
 $uncContext.environment.stagedPlatformDirectory = '//build-host/share with spaces/platform'
@@ -239,7 +256,7 @@ try {
     $context | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $contextPath -Encoding utf8
     Set-Content -LiteralPath $stderrPath -Value '' -Encoding utf8
     $report = Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $policy -Layout $layout -RequireCompleteInventory
-    Assert-WarningPolicyTest (-not $report.passed -and $report.evidenceIssues -contains 'Warning inventory does not contain the required 13 sketches.') 'CI accepted an incomplete warning inventory.'
+    Assert-WarningPolicyTest (-not $report.passed -and $report.evidenceIssues -contains "Warning inventory does not contain the required $($policy.inventorySketches.Count) sketches.") 'CI accepted an incomplete warning inventory.'
     Remove-Item -LiteralPath $stderrPath
     $report = Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $policy -Layout $layout
     Assert-WarningPolicyTest (-not $report.passed -and $report.evidenceIssues[0] -like '*Missing raw diagnostic stream*') 'Missing raw diagnostics were silently accepted.'
@@ -271,6 +288,46 @@ try {
     $report = Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $policy -Layout $layout
     Assert-WarningPolicyTest (-not $report.passed -and $report.evidenceIssues[0] -like '*missing provenance*package-layout.json*') 'Missing context provenance was accepted.'
     Write-Host 'PASS retained lock, policy, and layout hashes must match every build context; missing provenance fails'
+
+    foreach ($profile in @('base', 'azure-iot')) {
+        $profilePolicy = Get-Az3166WarningPolicy -BuildLock $lock -Profile $profile
+        $profilePolicy.allowances = @()
+        $profileInputs = [ordered]@{
+            lockSha256 = 'az3166-build-lock.json'
+            warningPolicySha256 = 'az3166-warning-policy.json'
+            packageLayoutSha256 = 'package-layout.json'
+            packageProfileSha256 = 'package-profile.json'
+            archivePartitionSha256 = 'az3166-azure-archive.json'
+            platformSha256 = 'platform.txt'
+        }
+        @{ profile = $profile } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $fixtureRoot 'package-profile.json') -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $fixtureRoot 'az3166-azure-archive.json') -Value '{}' -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $fixtureRoot 'platform.txt') -Value 'compiler.includes.cloud=' -Encoding utf8
+        if ($profile -eq 'azure-iot') {
+            $profileInputs.platformOverlaySha256 = 'platform.local.txt'
+            Set-Content -LiteralPath (Join-Path $fixtureRoot 'platform.local.txt') -Value 'compiler.includes.cloud=fixture' -Encoding utf8
+        }
+        $context.environment | Add-Member -Force -NotePropertyName packageProfile -NotePropertyValue $profile
+        foreach ($entry in $profileInputs.GetEnumerator()) {
+            $context.environment | Add-Member -Force -NotePropertyName $entry.Key -NotePropertyValue (Get-FileHash -LiteralPath (Join-Path $fixtureRoot $entry.Value)).Hash.ToLowerInvariant()
+        }
+        $context | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $contextPath -Encoding utf8
+        Assert-WarningPolicyTest (Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $profilePolicy -Layout $layout).passed "Valid $profile evidence was rejected."
+        foreach ($entry in $profileInputs.GetEnumerator() | Where-Object { $_.Key -notin $inputFiles.Keys }) {
+            $inputPath = Join-Path $fixtureRoot $entry.Value
+            $original = [IO.File]::ReadAllBytes($inputPath)
+            Add-Content -LiteralPath $inputPath -Value ' ' -Encoding utf8
+            $context | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $contextPath -Encoding utf8
+            $report = Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $profilePolicy -Layout $layout
+            Assert-WarningPolicyTest (-not $report.passed -and @($report.evidenceIssues | Where-Object { $_ -like "*Retained input hash mismatch* $($entry.Value)*" }).Count -gt 0) "Changed $profile evidence input was accepted: $($entry.Value)"
+            [IO.File]::WriteAllBytes($inputPath, $original)
+        }
+        $context.environment.packageProfile = if ($profile -eq 'base') { 'azure-iot' } else { 'base' }
+        $context | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $contextPath -Encoding utf8
+        $report = Export-Az3166WarningEvidence -OutputDirectory $fixtureRoot -Policy $profilePolicy -Layout $layout
+        Assert-WarningPolicyTest (-not $report.passed -and @($report.evidenceIssues | Where-Object { $_ -like '*mismatched package profile*' }).Count -gt 0) 'Mixed-profile evidence was accepted.'
+    }
+    Write-Host 'PASS profile, partition, platform, and overlay evidence hashes plus mixed-profile rejection'
 }
 finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -279,5 +336,7 @@ finally {
 $workflow = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot '.github/workflows/core-package-ci.yml')
 Assert-WarningPolicyTest ($workflow.Contains('./tests/host/build/WarningPolicyTest.ps1') -and $workflow.Contains('warning-summary.md')) 'CI must run warning contracts and publish the rule summary.'
 $driver = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'tools/test/Test-Az3166Sketches.ps1')
+Assert-WarningPolicyTest ($driver.Contains('tests/host/package/fixtures/AzureDpsLinkProbe') -and
+    'tests/host/package/fixtures/AzureDpsLinkProbe' -cin $policy.inventorySketches) 'The default gate must explicitly compile the Azure wrapper and DPS.'
 Assert-WarningPolicyTest ($driver.Contains('Export-Az3166WarningEvidence') -and $driver.Contains('Assert-Az3166WarningSnapshots') -and $driver.Contains('-RequireCompleteInventory:(-not $Sketch)')) 'The sketch driver must enforce warnings, snapshot ownership, and complete default inventory.'
 Write-Host 'PASS CI and the shared sketch driver enforce and retain warning policy evidence'

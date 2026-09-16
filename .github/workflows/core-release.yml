@@ -1,190 +1,148 @@
 name: Core release
-run-name: Release Core ${{ inputs.version }} (manual)
+run-name: Release Core ${{ inputs.version }} (${{ inputs.profile }})
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Existing numeric semantic-version tag to publish (for example, 2.0.3)
+        description: Existing approved numeric major-transition tag to publish
         required: true
         type: string
+      profile:
+        description: Must match releaseProfile in the tagged package layout
+        required: true
+        type: choice
+        default: base
+        options:
+          - base
+          - azure-iot
+      hardware_validated:
+        description: Confirm physical-board acceptance and review of original-versus-split firmware differences
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: core-release-${{ inputs.version }}
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
-    name: Publish Core release
+  prepare:
+    name: Validate immutable release request
     runs-on: ubuntu-24.04
-
+    outputs:
+      revision: ${{ steps.request.outputs.revision }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Validate manual release request
-        id: release
+      - name: Validate tag, profile, and release authorization
+        id: request
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_PROFILE: ${{ inputs.profile }}
+          HARDWARE_VALIDATED: ${{ inputs.hardware_validated }}
         run: |
-          if ($env:GITHUB_REF -ne "refs/heads/maintenance") {
-            throw "Run this workflow from the maintenance branch. Received $env:GITHUB_REF."
-          }
-          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') {
-            throw "Release version must be a numeric semantic version such as 2.0.3."
-          }
+          if ($env:GITHUB_REF -ne 'refs/heads/maintenance') { throw 'Dispatch releases from maintenance.' }
+          if ($env:HARDWARE_VALIDATED -ne 'true') { throw 'Physical-board acceptance and firmware-difference review must be confirmed before publication.' }
+          if ($env:RELEASE_VERSION -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Invalid numeric version.' }
+          $tag = "refs/tags/$env:RELEASE_VERSION"
+          $revision = git rev-parse --verify "$tag^{commit}"
+          if ($LASTEXITCODE -ne 0) { throw 'Create and approve the release tag before dispatch.' }
+          $revision = $revision.Trim()
+          git merge-base --is-ancestor $revision origin/maintenance
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag is not on maintenance.' }
+          git checkout --detach $revision
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot check out release revision.' }
+          . ./tools/package/Az3166Release.ps1
+          . ./tools/package/Az3166PackageLayout.ps1
+          . ./tools/build/Az3166Build.Common.ps1
+          $manifest = Get-Content ./platform/az3166/package-layout.json -Raw | ConvertFrom-Json
+          $header = Get-Content ./src/core/arduino/SystemVersion.h -Raw
+          $version = Get-Az3166CoreVersion -HeaderContent $header -Source 'SystemVersion.h'
+          Assert-Az3166ReleaseRequest -Version $env:RELEASE_VERSION -Profile $env:RELEASE_PROFILE `
+            -LayoutManifest $manifest -CoreVersion $version -LegacyVersion (Get-Az3166BuildLock).core.version
+          "revision=$revision" >> $env:GITHUB_OUTPUT
 
-          $tagRef = "refs/tags/$env:RELEASE_VERSION"
-          git show-ref --verify --quiet $tagRef
-          if ($LASTEXITCODE -ne 0) {
-            throw "Release tag $env:RELEASE_VERSION does not exist. Create and push it before dispatching this workflow."
-          }
+  validate:
+    name: Validate both profiles at the release revision
+    needs: prepare
+    uses: ./.github/workflows/core-package-ci.yml
+    with:
+      revision: ${{ needs.prepare.outputs.revision }}
 
-          $tagCommit = (git rev-parse "$tagRef^{commit}").Trim()
-          git merge-base --is-ancestor $tagCommit origin/maintenance
-          if ($LASTEXITCODE -ne 0) {
-            throw "Release tag $env:RELEASE_VERSION is not on the maintenance branch."
-          }
-
-          git checkout --detach $tagCommit
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not check out release tag $env:RELEASE_VERSION."
-          }
-          "tag_commit=$tagCommit" >> $env:GITHUB_OUTPUT
-
-      - name: Build and verify tagged package
+  release:
+    name: Publish one verified profile
+    needs: [prepare, validate]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.revision }}
+      - name: Download exact-revision verified packages
+        uses: actions/download-artifact@v4
+        with:
+          name: AZ3166-${{ inputs.version }}-ubuntu
+          path: ${{ runner.temp }}/verified-packages
+      - name: Rebuild and verify the selected artifact
         id: package
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ inputs.version }}
-          TAG_COMMIT: ${{ steps.release.outputs.tag_commit }}
+          RELEASE_PROFILE: ${{ inputs.profile }}
+          TAG_COMMIT: ${{ needs.prepare.outputs.revision }}
         run: |
-          $packageVerifier = "./tools/package/Test-Az3166BoardPackage.ps1"
-          if (-not (Test-Path -LiteralPath $packageVerifier -PathType Leaf)) {
-            $packageVerifier = "./tools/Test-Az3166BoardPackage.ps1"
-          }
-          $result = & $packageVerifier `
-            -Revision $env:TAG_COMMIT `
-            -ExpectedVersion $env:RELEASE_VERSION `
-            -OutputDirectory (Join-Path $env:RUNNER_TEMP "package")
+          $result = & ./tools/package/Test-Az3166BoardPackage.ps1 -Revision $env:TAG_COMMIT `
+            -ExpectedVersion $env:RELEASE_VERSION -Profile $env:RELEASE_PROFILE `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP 'release-package')
+          $verified = Join-Path $env:RUNNER_TEMP "verified-packages/$([IO.Path]::GetFileName($result.Path))"
+          if ((Get-FileHash -LiteralPath $verified).Hash.ToLowerInvariant() -cne $result.SHA256) { throw 'Release archive differs from the artifact validated by CI.' }
+          . ./tools/package/Az3166Release.ps1
+          $metadata = New-Az3166ReleaseMetadata -Version $env:RELEASE_VERSION -Profile $env:RELEASE_PROFILE `
+            -Revision $env:TAG_COMMIT -Repository $env:GITHUB_REPOSITORY -PackagePath $result.Path -ExpectedSHA256 $result.SHA256
+          $metadataPath = Join-Path $env:RUNNER_TEMP 'release-package/release-profile.json'
+          $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding utf8
           "path=$($result.Path)" >> $env:GITHUB_OUTPUT
+          "metadata=$metadataPath" >> $env:GITHUB_OUTPUT
           "sha256=$($result.SHA256)" >> $env:GITHUB_OUTPUT
-          "version=$($result.Version)" >> $env:GITHUB_OUTPUT
-          $result | Format-List
-
-      - name: Validate package layout contracts
-        if: hashFiles('tests/host/package/PackageLayoutTest.ps1') != ''
-        shell: pwsh
-        run: ./tests/host/package/PackageLayoutTest.ps1
-
-      - name: Run Core host tests
-        if: hashFiles('tools/test/Test-Az3166HostTests.ps1') != ''
-        shell: pwsh
-        run: |
-          ./tools/test/Test-Az3166HostTests.ps1 -Sanitize `
-            -ExpectedVersion '${{ steps.package.outputs.version }}'
-
-      - name: Verify historical runtime version API
-        if: hashFiles('tools/test/Test-Az3166HostTests.ps1') == ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          platform_source=src
-          if [[ ! -d "$platform_source" ]]; then
-            platform_source=AZ3166/src
-          fi
-          test_source=tests/host/core/SystemVersionTest.cpp
-          if [[ ! -f "$test_source" ]]; then
-            test_source=tools/SystemVersionTest.cpp
-          fi
-          g++ -std=c++11 \
-            -include cstdint \
-            -I "$platform_source/cores/arduino/system" \
-            "$platform_source/cores/arduino/system/SystemVersion.cpp" \
-            "$test_source" \
-            -o "$RUNNER_TEMP/system-version-test"
-          "$RUNNER_TEMP/system-version-test" "${{ steps.package.outputs.version }}"
-
-      - name: Run historical WiFiUDP host tests
-        if: hashFiles('tools/test/Test-Az3166HostTests.ps1') == '' && hashFiles('tests/host/wifi/WiFiUdpTest.cpp', 'AZ3166/tests/WiFiTest/WiFiUdpTest.cpp') != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          platform_source=src
-          if [[ ! -d "$platform_source" ]]; then
-            platform_source=AZ3166/src
-          fi
-          test_source=tests/host/wifi/WiFiUdpTest.cpp
-          if [[ ! -f "$test_source" ]]; then
-            test_source=AZ3166/tests/WiFiTest/WiFiUdpTest.cpp
-          fi
-          g++ -std=c++11 -O1 -g -Wall -Wextra -Werror \
-            -fsanitize=address,undefined \
-            -fno-omit-frame-pointer \
-            -I "$platform_source/system/mbed-os/features/netsocket" \
-            -I "$platform_source/cores/arduino/system" \
-            "$test_source" \
-            -o "$RUNNER_TEMP/wifiudp-test"
-          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
-          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
-            "$RUNNER_TEMP/wifiudp-test"
-
-      - name: Run historical legacy client host tests
-        if: hashFiles('tools/test/Test-Az3166HostTests.ps1') == '' && hashFiles('tests/host/cloud/IotClientTest.cpp', 'AZ3166/tests/VoiceToTwitter/IotClientTest.cpp') != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          platform_source=src
-          if [[ ! -d "$platform_source" ]]; then
-            platform_source=AZ3166/src
-          fi
-          test_source=tests/host/cloud/IotClientTest.cpp
-          if [[ ! -f "$test_source" ]]; then
-            test_source=AZ3166/tests/VoiceToTwitter/IotClientTest.cpp
-          fi
-          g++ -std=gnu++11 -O1 -g -Wall -Wextra -Werror \
-            -ffunction-sections -fdata-sections \
-            -fsanitize=address,undefined -fno-omit-frame-pointer \
-            -I "$platform_source/cores/arduino" \
-            -I "$platform_source/cores/arduino/httpclient" \
-            -I "$platform_source/system/azure-iot-sdk-c/deps/parson" \
-            -I "$platform_source/system/azure-iot-sdk-c/c-utility/inc" \
-            "$test_source" \
-            -Wl,--gc-sections \
-            -o "$RUNNER_TEMP/iot-client-test"
-          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
-          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
-            "$RUNNER_TEMP/iot-client-test"
-
-      - name: Publish GitHub release
+      - name: Publish immutable GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           PACKAGE_PATH: ${{ steps.package.outputs.path }}
+          METADATA_PATH: ${{ steps.package.outputs.metadata }}
           PACKAGE_SHA256: ${{ steps.package.outputs.sha256 }}
-          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_PROFILE: ${{ inputs.profile }}
+          TAG_COMMIT: ${{ needs.prepare.outputs.revision }}
         run: |
-          $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          $currentTag = gh api "repos/$env:GITHUB_REPOSITORY/commits/$env:RELEASE_VERSION" --jq .sha
+          if ($LASTEXITCODE -ne 0 -or $currentTag.Trim() -cne $env:TAG_COMMIT) { throw 'Release tag moved after validation.' }
+          $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @"
-          Maintained AZ3166 Arduino Core release for AaronWangTT/HomeTemperature,
-          based on Microsoft's final 2.0.0 release.
+          AZ3166 $env:RELEASE_VERSION, profile: $env:RELEASE_PROFILE.
 
-          The release tag and getDevkitVersion() both report $env:PACKAGE_VERSION.
-          The attached Board Manager archive was generated reproducibly from the
-          tagged platform source tree.
+          Validated source revision: $env:TAG_COMMIT
+          Archive SHA-256: $env:PACKAGE_SHA256
 
-          Artifact SHA-256: $env:PACKAGE_SHA256
-          "@ | Set-Content -LiteralPath $notesPath -Encoding utf8NoBOM
+          Both base and Azure-enabled profiles passed host, target, and deterministic
+          package gates. Hardware acceptance was confirmed by the release operator.
+          Only the selected profile is published for this version.
 
-          gh release create $env:PACKAGE_VERSION $env:PACKAGE_PATH `
-            --repo $env:GITHUB_REPOSITORY `
-            --verify-tag `
-            --title "AZ3166 Core $env:PACKAGE_VERSION" `
-            --notes-file $notesPath `
-            --latest
+          Base versions do not include Azure IoT support. Azure users must pin an
+          Azure-enabled version; upgrading to a later base version removes support.
+          The attached release-profile.json contains the reviewed archive fields
+          for the separately maintained Board Manager index. This workflow does not
+          edit that index or upgrade downstream consumers.
+          "@ | Set-Content -LiteralPath $notesPath -Encoding utf8
+          gh release create $env:RELEASE_VERSION $env:PACKAGE_PATH $env:METADATA_PATH `
+            --repo $env:GITHUB_REPOSITORY --verify-tag `
+            --title "AZ3166 Core $env:RELEASE_VERSION ($env:RELEASE_PROFILE)" --notes-file $notesPath --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation failed; existing releases must never be overwritten.' }

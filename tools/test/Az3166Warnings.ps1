@@ -42,6 +42,8 @@ function Resolve-Az3166DiagnosticSource {
     $staged = Get-Az3166DiagnosticRelativePath -Path $normalized -Root $Context.environment.stagedPlatformDirectory
     if ($null -ne $staged) {
         foreach ($mapping in @($Layout.mappings | Sort-Object { $_.destination.Length } -Descending)) {
+            if ($mapping.PSObject.Properties['profiles'] -and $Context.environment.PSObject.Properties['packageProfile'] -and
+                $Context.environment.packageProfile -cnotin $mapping.profiles) { continue }
             $suffix = Get-Az3166DiagnosticRelativePath -Path $normalized -Root "$($Context.environment.stagedPlatformDirectory)/$($mapping.destination)"
             if ($null -ne $suffix) {
                 $source = $mapping.source + $(if ($suffix) { '/' + $suffix })
@@ -135,11 +137,23 @@ function Assert-Az3166WarningPolicy {
     }
     $sketches = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($sketch in $Policy.inventorySketches) {
-        if ($sketch -cnotmatch '^(examples|tests/hardware)/[A-Za-z0-9_/-]+$' -or -not $sketches.Add($sketch)) {
+        if (($sketch -cnotmatch '^(examples|tests/hardware)/[A-Za-z0-9_/-]+$' -and
+            $sketch -cnotin @('tests/host/package/fixtures/AzureDpsLinkProbe', 'libraries/Sensors/examples/SensorStatus', 'libraries/Audio/examples/VoiceRecord')) -or -not $sketches.Add($sketch)) {
             throw "Invalid or duplicate warning inventory sketch: $sketch"
         }
     }
-    if ($sketches.Count -ne 13) { throw 'Warning policy must cover the existing 13-sketch inventory.' }
+    if ($Policy.PSObject.Properties['azureSketches']) {
+        if ($sketches.Count -ne 16 -or -not $sketches.Contains('libraries/Sensors/examples/SensorStatus') -or
+            -not $sketches.Contains('libraries/Audio/examples/VoiceRecord') -or
+            $Policy.azureSketches -isnot [array] -or $Policy.azureSketches.Count -ne 3 -or
+            @($Policy.azureSketches | Select-Object -Unique).Count -ne 3 -or
+            @($Policy.azureSketches | Where-Object { -not $sketches.Contains($_) }).Count -gt 0) {
+            throw 'Profile warning policy requires the 16-sketch inventory and three explicit Azure sketches.'
+        }
+    }
+    elseif ($sketches.Count -notin @(13, 14)) {
+        throw 'Historical warning policy must cover the existing sketch inventory.'
+    }
     $snapshots = @{}
     foreach ($snapshot in $Policy.vendorSnapshots) {
         if ($snapshot.source -cnotmatch '^(?:libraries/[A-Za-z0-9_-]+/src|src/extensions/[A-Za-z0-9_-]+)(?:/[A-Za-z0-9_-]+)*/[A-Za-z0-9_-]+\.(?:c|h)$' -or
@@ -151,6 +165,12 @@ function Assert-Az3166WarningPolicy {
     }
     $identifiers = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($rule in $Policy.allowances) {
+        if ($rule.PSObject.Properties['profiles'] -and
+            ($rule.profiles -isnot [array] -or $rule.profiles.Count -eq 0 -or
+                @($rule.profiles | Where-Object { $_ -cnotin @('base', 'azure-iot') }).Count -gt 0 -or
+                @($rule.profiles | Select-Object -Unique).Count -ne $rule.profiles.Count)) {
+            throw "Invalid warning allowance profiles: $($rule.id)"
+        }
         foreach ($field in @('id', 'ownership', 'sourceGlob', 'component', 'version', 'rationale', 'removalCondition')) {
             if (-not $rule.PSObject.Properties[$field] -or [string]::IsNullOrWhiteSpace($rule.$field)) {
                 throw "Warning allowance requires $field."
@@ -203,10 +223,20 @@ function Assert-Az3166WarningPolicy {
 }
 
 function Get-Az3166WarningPolicy {
-    param([string]$Path = (Join-Path $PSScriptRoot '../build/az3166-warning-policy.json'), $BuildLock)
+    param([string]$Path = (Join-Path $PSScriptRoot '../build/az3166-warning-policy.json'), $BuildLock, [string]$Profile)
 
     $policy = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
     Assert-Az3166WarningPolicy -Policy $policy -BuildLock $BuildLock
+    if ($Profile) {
+        if ($Profile -cnotin @('base', 'azure-iot') -or -not $policy.PSObject.Properties['azureSketches']) {
+            throw 'Profile warning evaluation requires a valid profile and explicit Azure inventory.'
+        }
+        if ($Profile -eq 'base') {
+            $policy.inventorySketches = @($policy.inventorySketches | Where-Object { $_ -cnotin $policy.azureSketches })
+        }
+        $policy.allowances = @($policy.allowances | Where-Object { -not $_.PSObject.Properties['profiles'] -or $Profile -cin $_.profiles })
+        $policy | Add-Member -NotePropertyName packageProfile -NotePropertyValue $Profile
+    }
     return $policy
 }
 
@@ -284,6 +314,17 @@ function Export-Az3166WarningEvidence {
         warningPolicySha256 = 'az3166-warning-policy.json'
         packageLayoutSha256 = 'package-layout.json'
     }
+    if ($Policy.PSObject.Properties['packageProfile']) {
+        $inputFiles.packageProfileSha256 = 'package-profile.json'
+        $inputFiles.archivePartitionSha256 = 'az3166-azure-archive.json'
+        $inputFiles.platformSha256 = 'platform.txt'
+        if ($Policy.packageProfile -eq 'azure-iot') { $inputFiles.platformOverlaySha256 = 'platform.local.txt' }
+        try {
+            $metadata = Get-Content -Raw -LiteralPath (Join-Path $OutputDirectory 'package-profile.json') | ConvertFrom-Json
+            if ($metadata.profile -cne $Policy.packageProfile) { throw 'Retained package profile does not match the warning profile.' }
+        }
+        catch { $evidenceIssues.Add($_.Exception.Message) }
+    }
     $inputHashes = @{}
     foreach ($entry in $inputFiles.GetEnumerator()) {
         try {
@@ -299,6 +340,10 @@ function Export-Az3166WarningEvidence {
         $sketches.Add($sketch)
         $sketchDiagnostics = [Collections.Generic.List[object]]::new()
         $issues = [Collections.Generic.List[string]]::new()
+        if ($Policy.PSObject.Properties['packageProfile'] -and
+            (-not $context.environment.PSObject.Properties['packageProfile'] -or $context.environment.packageProfile -cne $Policy.packageProfile)) {
+            $issues.Add('Build context has a missing or mismatched package profile.')
+        }
         foreach ($entry in $inputFiles.GetEnumerator()) {
             if (-not $inputHashes.ContainsKey($entry.Key) -or
                 -not $context.environment.PSObject.Properties[$entry.Key] -or
@@ -347,11 +392,12 @@ function Export-Az3166WarningEvidence {
     }
     $complete = $sketches.Count -eq $Policy.inventorySketches.Count -and
         (($sketches | Sort-Object -CaseSensitive) -join "`n") -ceq (($Policy.inventorySketches | Sort-Object -CaseSensitive) -join "`n")
-    if ($RequireCompleteInventory -and -not $complete) { $evidenceIssues.Add('Warning inventory does not contain the required 13 sketches.') }
+    if ($RequireCompleteInventory -and -not $complete) { $evidenceIssues.Add("Warning inventory does not contain the required $($Policy.inventorySketches.Count) sketches.") }
     if ($sketches.Count -eq 0) { $evidenceIssues.Add('No sketch build contexts were found.') }
     $report = Get-Az3166WarningResult -Diagnostics @($diagnostics) -Policy $Policy -CheckStale:$complete
     $report.passed = $report.passed -and $evidenceIssues.Count -eq 0 -and $failedSketches.Count -eq 0
     $report | Add-Member -NotePropertyName sketches -NotePropertyValue @($sketches)
+    if ($Policy.PSObject.Properties['packageProfile']) { $report | Add-Member -NotePropertyName packageProfile -NotePropertyValue $Policy.packageProfile }
     $report | Add-Member -NotePropertyName failedSketches -NotePropertyValue @($failedSketches)
     $report | Add-Member -NotePropertyName evidenceIssues -NotePropertyValue @($evidenceIssues)
     $report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'warning-summary.json') -Encoding utf8

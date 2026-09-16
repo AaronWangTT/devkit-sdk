@@ -6,6 +6,7 @@
 #include "OLEDDisplay.h"
 #include "http_client.h"
 #include "parson.h"
+#include "azure-iot/AzureConfiguration.h"
 #include "AudioClass.h"
 
 #define RGB_LED_BRIGHTNESS  16

@@ -186,6 +186,9 @@ Assert-BuildConfigurationTest ($workflow.Contains('-VerifyOnly')) 'Core package 
 Assert-BuildConfigurationTest ($workflow.Contains('-Offline')) 'Core package CI does not exercise an offline second setup.'
 Assert-BuildConfigurationTest (-not $workflow.Contains('Invoke-WebRequest')) 'Core package CI still owns a toolchain download.'
 Assert-BuildConfigurationTest (-not $workflow.Contains('arduino/setup-arduino-cli')) 'Core package CI still uses a separate Arduino CLI installer.'
+Assert-BuildConfigurationTest ($workflow.Contains("foreach (`$profile in @('base', 'azure-iot'))") -and
+    $workflow.Contains('-Profile $profile') -and $workflow.Contains('AzureArchiveTest.ps1') -and
+    $workflow.Contains('workflow_call:') -and $workflow.Contains('inputs.revision || github.sha')) 'CI must validate both profiles and support exact-revision release gates.'
 Assert-BuildConfigurationTest ($workflow.Contains('steps.build-lock.outputs.short_toolchain_root_name')) 'Core package CI does not use the locked short toolchain-root name.'
 $toolchainCacheStep = [regex]::Match($workflow, '(?ms)^      - name: Cache AZ3166 [^\r\n]+\r?\n.*?(?=^      - name:)').Value
 Assert-BuildConfigurationTest ($toolchainCacheStep.Contains('path: ${{ runner.temp }}/az3166-downloads')) 'The toolchain cache must contain portable downloads only.'

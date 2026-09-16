@@ -1,10 +1,8 @@
 #include "Arduino.h"
-#include "AzureIotHub.h"
 #include "AZ3166WiFi.h"
 #include "Sensor.h"
 #include "SystemVersion.h"
 #include "SystemTickCounter.h"
-#include "EEPROMInterface.h"
 
 #include "IoT_DevKit_HW.h"
 
@@ -17,7 +15,6 @@ static LIS2MDLSensor *magnetometer;
 static IRDASensor *IrdaSensor;
 static LPS22HBSensor *pressureSensor;
 
-static char *connString = NULL;
 static const char *boardName = NULL;
 
 // Blink the RGB LED
@@ -84,7 +81,7 @@ int initIoTDevKit(int isShowInfo)
     }
     if ((ext_i2c = new DevI2C(D14, D15)) == NULL)
     {
-        LogError("Failed to initialize I2C.");
+        Serial.printf("Failed to initialize I2C.\r\n");
         return -101;
     }
     
@@ -95,7 +92,7 @@ int initIoTDevKit(int isShowInfo)
     }
     if ((acc_gyro = new LSM6DSLSensor(*ext_i2c, D4, D5)) == NULL)
     {
-        LogError("Failed to initialize gyroscope and accelerator sensor.");
+        Serial.printf("Failed to initialize gyroscope and accelerator sensor.\r\n");
         return -102;
     }
     acc_gyro->init(NULL);
@@ -109,7 +106,7 @@ int initIoTDevKit(int isShowInfo)
     }
     if ((ht_sensor = new HTS221Sensor(*ext_i2c)) == NULL)
     {
-        LogError("Failed to initialize humidity and temperature sensor.");
+        Serial.printf("Failed to initialize humidity and temperature sensor.\r\n");
         return -103;
     }
     ht_sensor->init(NULL);
@@ -122,7 +119,7 @@ int initIoTDevKit(int isShowInfo)
     }
     if ((magnetometer = new LIS2MDLSensor(*ext_i2c)) == NULL)
     {
-        LogError("Failed to initialize magnetometer sensor.");
+        Serial.printf("Failed to initialize magnetometer sensor.\r\n");
         return -104;
     }
     magnetometer->init(NULL);
@@ -134,7 +131,7 @@ int initIoTDevKit(int isShowInfo)
     }
     if ((IrdaSensor = new IRDASensor()) == NULL)
     {
-        LogError("Failed to initialize IrDa sensor.");
+        Serial.printf("Failed to initialize IrDa sensor.\r\n");
         return -105;
     }
     IrdaSensor->init();
@@ -146,7 +143,7 @@ int initIoTDevKit(int isShowInfo)
     }
     if ((pressureSensor = new LPS22HBSensor(*ext_i2c)) == NULL)
     {
-        LogError("Failed to initialize pressure sensor.");
+        Serial.printf("Failed to initialize pressure sensor.\r\n");
         return -106;
     }
     pressureSensor->init(NULL);
@@ -159,28 +156,6 @@ int initIoTDevKit(int isShowInfo)
     return initWiFi();
 }
 
-const char *getIoTHubConnectionString(void)
-{
-    if (connString == NULL)
-    {
-        uint8_t _connString[AZ_IOT_HUB_MAX_LEN + 1] = {'\0'};
-        EEPROMInterface eeprom;
-        int ret = eeprom.read(_connString, AZ_IOT_HUB_MAX_LEN, 0, AZ_IOT_HUB_ZONE_IDX);
-        if (ret < 0)
-        {
-            LogError("Unable to get the azure iot connection string from EEPROM. Please set the value in configuration mode.");
-            return NULL;
-        }
-        else if (ret == 0)
-        {
-            LogError("The connection string is empty.\r\nPlease set the value in configuration mode.");
-            return NULL;
-        }
-        connString = strdup((char*)_connString);
-    }
-    return connString;
-}
-
 const char *getDevKitName(void)
 {
     if (boardName == NULL)
@@ -189,7 +164,7 @@ const char *getDevKitName(void)
         boardName = (const char *)malloc(len);
         if (boardName == NULL)
         {
-            LogError("No memory");
+            Serial.printf("No memory\r\n");
             return NULL;
         }
         snprintf((char *)boardName, len, "MXChip IoT DevKit %s", GetBoardID());

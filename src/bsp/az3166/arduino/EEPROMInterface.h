@@ -32,17 +32,15 @@
 #define STSAFE_ZONE_10_SIZE		88
 
 // System reserved zone
-#define DPS_UDS_ZONE_IDX        STSAFE_ZONE_6_IDX
 #define WIFI_SSID_ZONE_IDX      STSAFE_ZONE_3_IDX
 #define WIFI_PWD_ZONE_IDX       STSAFE_ZONE_10_IDX
-#define AZ_IOT_HUB_ZONE_IDX     STSAFE_ZONE_5_IDX
+#define EEPROM_DEVICE_CONNECTION_ZONE_IDX STSAFE_ZONE_5_IDX
 
 #define WIFI_SSID_MAX_LEN       32
 #define WIFI_PWD_MAX_LEN        64
-#define AZ_IOT_HUB_MAX_LEN      512
-#define DPS_UDS_MAX_LEN         64
+#define EEPROM_DEVICE_CONNECTION_MAX_LEN 512
 #define EEPROM_DEFAULT_LEN      200
-#define AZ_IOT_X509_MAX_LEN 	(STSAFE_ZONE_0_SIZE + STSAFE_ZONE_7_SIZE + STSAFE_ZONE_8_SIZE - 1)	// Zone 0, 7, 8
+#define EEPROM_X509_MAX_LEN 	(STSAFE_ZONE_0_SIZE + STSAFE_ZONE_7_SIZE + STSAFE_ZONE_8_SIZE - 1)	// Zone 0, 7, 8
 
 /**
  * \brief Write/Read data to/from EEPROM of STSAFE_A100 through I2C interface.
@@ -60,7 +58,7 @@ public:
     * @param    dataBuff            The data to be written secure chip.
     * @param    buffSize            The size of written data. The valid range of different data zone is different.
     * @param    dataZoneIndex       The index of zone written data to. The valid input is {0, 2, 3, 5, 6, 7, 8, 10}.
-    *                               {3, 5, 10} are used for wifi and iot hub connection string. {0, 2, 6} are reserved for later mini solutions.
+    *                               {3, 5, 10} are reserved settings zones. {0, 2, 6} are reserved for later mini solutions.
     *                               So we recommend user to use {7, 8}
     *
     * @return   Return 0 on success, otherwise return -1. The failure might be caused by input dataSize bigger than data zone could write.
@@ -74,7 +72,7 @@ public:
     * @param    buffSize            The size of data need to be read.
     * @param    offset              The offset of data in data zone to start read data from.
     * @param    dataZoneIndex       The index of zone to read data from. The valid input is {0, 2, 3, 5, 6, 7, 8, 10}.
-    *                               {3, 5, 10} are used for wifi and iot hub connection string. {0, 2, 6} are reserved for later mini solutions.
+    *                               {3, 5, 10} are reserved settings zones. {0, 2, 6} are reserved for later mini solutions.
     *                               So we recommend user to use {7, 8}
     *
     * @return   Return read buffer size on success, otherwise return -1.
@@ -112,11 +110,11 @@ public:
     /**
     * @brief    Save device connection string to secure chip.
     *
-    * @param    iotHubString        The device connection string to be saved.
+    * @param    deviceString       The device connection string to be saved.
     *
     * @return   Return 0 on success, otherwise return -1.
     */
-    int saveDeviceConnectionString(char *iotHubString);
+    int saveDeviceConnectionString(char *deviceString);
 
     /**
     * @brief    Save X.509 certificate to secure chip.

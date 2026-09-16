@@ -11,14 +11,11 @@ extern "C"{
     // Initialize the system telemetry
     void telemetry_init();
     
-    // Send an telemetry data to AI asynchronously
-    void send_telemetry_data(const char *iothub, const char *event, const char *message);
+    void send_telemetry_data(const char *context, const char *event, const char *message);
         
-    // Send an telemetry data to AI asynchronously
-    void send_telemetry_data_async(const char *iothub, const char *event, const char *message);
+    void send_telemetry_data_async(const char *context, const char *event, const char *message);
     
-    // Send an telemetry data to AI synchronously
-    void send_telemetry_data_sync(const char *iothub, const char *event, const char *message);
+    void send_telemetry_data_sync(const char *context, const char *event, const char *message);
 
 #ifdef __cplusplus
 }

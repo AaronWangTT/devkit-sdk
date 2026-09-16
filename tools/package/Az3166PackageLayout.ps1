@@ -1,5 +1,7 @@
 #requires -Version 7.0
 
+. (Join-Path $PSScriptRoot 'Az3166PackageProfiles.ps1')
+
 function Get-Az3166CoreVersion {
     param([string]$HeaderContent, [string]$Source)
 
@@ -51,7 +53,8 @@ function Get-Az3166PackageLayout {
     [CmdletBinding()]
     param(
         [string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
-        [string]$Revision
+        [string]$Revision,
+        [string]$Profile
     )
 
     $manifestPath = 'platform/az3166/package-layout.json'
@@ -95,7 +98,7 @@ function Get-Az3166PackageLayout {
                 throw "Package layout is missing '$key'."
             }
         }
-        if ($manifest.schemaVersion -ne 1) {
+        if ($manifest.schemaVersion -notin @(1, 2)) {
             throw "Unsupported package-layout schema version: $($manifest.schemaVersion)"
         }
     }
@@ -105,6 +108,7 @@ function Get-Az3166PackageLayout {
             throw 'No package layout or recognized historical platform was found.'
         }
         $manifest = @{
+            schemaVersion = 1
             payloadRoots = @($source)
             exclude = @()
             mappings = @(@{ source = $source; destination = '.' })
@@ -112,6 +116,44 @@ function Get-Az3166PackageLayout {
         if (@($inventory.Keys | Where-Object { $_.StartsWith('libraries/', [StringComparison]::Ordinal) }).Count -gt 0) {
             $manifest.payloadRoots += 'libraries'
             $manifest.mappings += @{ source = 'libraries'; destination = 'libraries' }
+        }
+    }
+
+    $supportedProfiles = @('base', 'azure-iot')
+    if ($manifest.schemaVersion -eq 2) {
+        if (-not $manifest.ContainsKey('defaultProfile') -or $manifest.defaultProfile -cnotin $supportedProfiles) {
+            throw 'Profile-aware package layouts require a valid defaultProfile.'
+        }
+        if (-not $Profile) { $Profile = $manifest.defaultProfile }
+    }
+    else {
+        if ($Profile -and $Profile -cne 'azure-iot') { throw 'Historical layouts support only the azure-iot profile.' }
+        $Profile = 'azure-iot'
+    }
+    if ($Profile -cnotin $supportedProfiles) { throw "Unknown package profile: $Profile" }
+
+    $archiveInputs = @()
+    $archivePartition = $null
+    if ($manifest.schemaVersion -eq 2 -and $manifest.ContainsKey('archivePartition')) {
+        $archivePartition = $manifest.archivePartition
+        Assert-Az3166LayoutPath $archivePartition
+        $partitionText = if ($Revision) {
+            Invoke-Az3166LayoutGit $RepositoryRoot @('show', "${Revision}:$archivePartition")
+        } else { Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot $archivePartition) }
+        $partition = $partitionText | ConvertFrom-Json
+        Assert-Az3166LayoutPath $partition.source
+        if ($manifest.exclude -cnotcontains $partition.source) { throw 'The original archive must be excluded from profile payloads.' }
+        $archiveInputs = @($archivePartition, $partition.source, 'tools/build/Split-Az3166CoreArchive.ps1')
+        foreach ($inputFile in $archiveInputs) {
+            if (-not $inventory.ContainsKey($inputFile)) { throw "Missing archive generation input: $inputFile" }
+            if ($Revision) {
+                $entry = $inventory[$inputFile]
+                if ($entry.Type -ne 'blob' -or $entry.Mode -notin @('100644', '100755')) { throw "Invalid archive generation input: $inputFile" }
+            }
+            else {
+                $item = Get-Item -LiteralPath (Join-Path $RepositoryRoot $inputFile) -Force -ErrorAction Stop
+                if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Invalid archive generation input: $inputFile" }
+            }
         }
     }
 
@@ -129,6 +171,13 @@ function Get-Az3166PackageLayout {
         }
         Assert-Az3166LayoutPath $mapping.source
         Assert-Az3166LayoutPath $mapping.destination -AllowRoot
+        if ($mapping.Contains('profiles')) {
+            if ($manifest.schemaVersion -ne 2 -or $mapping.profiles -isnot [array] -or $mapping.profiles.Count -eq 0 -or
+                @($mapping.profiles | Where-Object { $_ -cnotin $supportedProfiles }).Count -gt 0 -or
+                @($mapping.profiles | Select-Object -Unique).Count -ne $mapping.profiles.Count) {
+                throw "Invalid mapping profiles: $($mapping.source)"
+            }
+        }
     }
 
     $inputs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -146,6 +195,7 @@ function Get-Az3166PackageLayout {
     $directories = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $files = [System.Collections.Generic.List[object]]::new()
     foreach ($mapping in $manifest.mappings) {
+        $selected = -not $mapping.Contains('profiles') -or $Profile -cin $mapping.profiles
         $matches = @($inputs | Where-Object { Test-Az3166LayoutContains $mapping.source $_ })
         if ($matches.Count -eq 0) {
             throw "Missing package input: $($mapping.source)"
@@ -154,6 +204,19 @@ function Get-Az3166PackageLayout {
             if (-not $mappedInputs.Add($source)) {
                 throw "Package input is mapped more than once: $source"
             }
+            $entry = $inventory[$source]
+            if ($Revision) {
+                if ($entry.Type -ne 'blob' -or $entry.Mode -notin @('100644', '100755')) {
+                    throw "Unsupported package input type: $source"
+                }
+            }
+            else {
+                $item = Get-Item -LiteralPath (Join-Path $RepositoryRoot $source) -Force -ErrorAction Stop
+                if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                    throw "Package input must be a regular file: $source"
+                }
+            }
+            if (-not $selected) { continue }
             $suffix = $source.Substring($mapping.source.Length).TrimStart('/')
             $destination = if ($mapping.destination -eq '.') { $suffix } elseif ($suffix) {
                 "$($mapping.destination)/$suffix"
@@ -169,18 +232,6 @@ function Get-Az3166PackageLayout {
                     throw "Package file/directory collision: $parent"
                 }
                 $null = $directories.Add($parent)
-            }
-            $entry = $inventory[$source]
-            if ($Revision) {
-                if ($entry.Type -ne 'blob' -or $entry.Mode -notin @('100644', '100755')) {
-                    throw "Unsupported package input type: $source"
-                }
-            }
-            else {
-                $item = Get-Item -LiteralPath (Join-Path $RepositoryRoot $source) -Force -ErrorAction Stop
-                if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                    throw "Package input must be a regular file: $source"
-                }
             }
             $files.Add([pscustomobject]@{
                 Source = $source
@@ -199,9 +250,20 @@ function Get-Az3166PackageLayout {
             throw "Missing required package file: $required"
         }
     }
+    if ($archiveInputs.Count -gt 0) {
+        foreach ($generated in @('package-profile.json', 'system/libdevkit-sdk-base.a', 'system/libdevkit-sdk-azure.a')) {
+            if ($destinations.Contains($generated) -or $directories.Contains($generated)) {
+                throw "Reserved generated package destination: $generated"
+            }
+        }
+    }
     return [pscustomobject]@{
         Files = @($files | Sort-Object Destination -CaseSensitive)
         Revision = $Revision
+        Profile = $Profile
+        SchemaVersion = $manifest.schemaVersion
+        ArchiveInputs = $archiveInputs
+        ArchivePartition = $archivePartition
     }
 }
 
@@ -209,7 +271,9 @@ function New-Az3166PlatformTree {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]$Layout,
-        [string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+        [string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
+        [string]$Ar = 'ar',
+        [string]$Nm = 'nm'
     )
 
     if (-not $Layout.Revision) {
@@ -217,10 +281,20 @@ function New-Az3166PlatformTree {
     }
     $previousIndex = $env:GIT_INDEX_FILE
     $temporaryIndex = Join-Path ([IO.Path]::GetTempPath()) "az3166-layout-$([guid]::NewGuid().ToString('N')).index"
+    $generatedRoot = Join-Path ([IO.Path]::GetTempPath()) "az3166-generated-$([guid]::NewGuid().ToString('N'))"
     try {
+        $generatedRecords = @()
+        if ($Layout.ArchiveInputs.Count -gt 0) {
+            Add-Az3166ProfileArtifacts $Layout $RepositoryRoot $generatedRoot $Ar $Nm
+            $generatedRecords = @(Get-ChildItem -LiteralPath $generatedRoot -Recurse -File | ForEach-Object {
+                $objectId = (Invoke-Az3166LayoutGit $RepositoryRoot @('hash-object', '-w', '--no-filters', '--', $_.FullName)).Trim()
+                $destination = [IO.Path]::GetRelativePath($generatedRoot, $_.FullName).Replace('\', '/')
+                "100644 $objectId`t$destination"
+            })
+        }
         $env:GIT_INDEX_FILE = $temporaryIndex
         $null = Invoke-Az3166LayoutGit $RepositoryRoot @('read-tree', '--empty')
-        $records = @($Layout.Files | ForEach-Object { "$($_.Mode) $($_.ObjectId)`t$($_.Destination)" })
+        $records = @($Layout.Files | ForEach-Object { "$($_.Mode) $($_.ObjectId)`t$($_.Destination)" }) + $generatedRecords
         $process = [Diagnostics.Process]::new()
         try {
             $process.StartInfo.FileName = @(Get-Command git -CommandType Application -ErrorAction Stop)[0].Source
@@ -246,6 +320,7 @@ function New-Az3166PlatformTree {
     finally {
         $env:GIT_INDEX_FILE = $previousIndex
         Remove-Item -LiteralPath $temporaryIndex, "$temporaryIndex.lock" -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $generatedRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -253,17 +328,25 @@ function Copy-Az3166Platform {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$Destination,
-        [string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+        [string]$RepositoryRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
+        [string]$Revision,
+        [string]$Profile,
+        [string]$Ar = 'ar',
+        [string]$Nm = 'nm'
     )
 
-    $layout = Get-Az3166PackageLayout -RepositoryRoot $RepositoryRoot
+    $layout = Get-Az3166PackageLayout -RepositoryRoot $RepositoryRoot -Revision $Revision -Profile $Profile
     if ((Test-Path -LiteralPath $Destination) -and
-        @((Get-ChildItem -LiteralPath $Destination -Force)).Count -gt 0) {
+        (-not (Test-Path -LiteralPath $Destination -PathType Container) -or
+            @((Get-ChildItem -LiteralPath $Destination -Force)).Count -gt 0)) {
         throw "Platform staging requires an empty destination: $Destination"
     }
     foreach ($file in $layout.Files) {
         $target = Join-Path $Destination $file.Destination
         $null = New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force
-        Copy-Item -LiteralPath (Join-Path $RepositoryRoot $file.Source) -Destination $target
+        if ($Revision) { Export-Az3166RevisionFile $RepositoryRoot $Revision $file.Source $target }
+        else { Copy-Item -LiteralPath (Join-Path $RepositoryRoot $file.Source) -Destination $target }
     }
+    Add-Az3166ProfileArtifacts $layout $RepositoryRoot $Destination $Ar $Nm
+    if ($layout.ArchiveInputs.Count -gt 0) { Assert-Az3166PackagedProfile $Destination $layout.Profile $Revision }
 }

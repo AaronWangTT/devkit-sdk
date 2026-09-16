@@ -303,28 +303,28 @@ int EEPROMInterface::saveWiFiSetting(char *ssid, char *pwd)
     return ret;
 }
 
-int EEPROMInterface::saveDeviceConnectionString(char *iotHubString)
+int EEPROMInterface::saveDeviceConnectionString(char *deviceString)
 {
-    int len = strlen(iotHubString) + 1;
-    if (len > AZ_IOT_HUB_MAX_LEN)
+    int len = deviceString == NULL ? 1 : strlen(deviceString) + 1;
+    if (len > EEPROM_DEVICE_CONNECTION_MAX_LEN)
     {
         return -1;
     }
     int ret = 0;
-    if (iotHubString == NULL)
+    if (deviceString == NULL)
     {
-        ret = writeWithVerify((uint8_t*)"", 1, AZ_IOT_HUB_ZONE_IDX);
+        ret = writeWithVerify((uint8_t*)"", 1, EEPROM_DEVICE_CONNECTION_ZONE_IDX);
     }
     else
     {
-        ret = writeWithVerify((uint8_t*)iotHubString, len, AZ_IOT_HUB_ZONE_IDX);
+        ret = writeWithVerify((uint8_t*)deviceString, len, EEPROM_DEVICE_CONNECTION_ZONE_IDX);
     }
     return ret;
 }
 
 int EEPROMInterface::saveX509Cert(char *x509Cert)
 {
-    if (x509Cert == NULL || strlen(x509Cert) > AZ_IOT_X509_MAX_LEN)
+    if (x509Cert == NULL || strlen(x509Cert) > EEPROM_X509_MAX_LEN)
     {
         return -1;
     }
@@ -392,7 +392,7 @@ int EEPROMInterface::readDeviceConnectionString(char *deviceConnString, int buff
     {
         return -1;
     }
-    if (read((uint8_t*)deviceConnString, buffSize, 0x00, AZ_IOT_HUB_ZONE_IDX) == -1)
+    if (read((uint8_t*)deviceConnString, buffSize, 0x00, EEPROM_DEVICE_CONNECTION_ZONE_IDX) == -1)
     {
         return -1;
     }
