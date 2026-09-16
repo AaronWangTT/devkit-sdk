@@ -144,6 +144,7 @@ function Get-Az3166PackageLayout {
         Assert-Az3166LayoutPath $partition.source
         if ($manifest.exclude -cnotcontains $partition.source) { throw 'The original archive must be excluded from profile payloads.' }
         $archiveInputs = @($archivePartition, $partition.source, 'tools/build/Split-Az3166CoreArchive.ps1')
+        if ($inventory.ContainsKey('tools/build/Az3166Symbols.ps1')) { $archiveInputs += 'tools/build/Az3166Symbols.ps1' }
         foreach ($inputFile in $archiveInputs) {
             if (-not $inventory.ContainsKey($inputFile)) { throw "Missing archive generation input: $inputFile" }
             if ($Revision) {

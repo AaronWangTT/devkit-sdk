@@ -11,6 +11,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'Az3166Symbols.ps1')
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $manifest = Get-Content -Raw -LiteralPath $ManifestPath | ConvertFrom-Json -AsHashtable
 if ($manifest.schemaVersion -ne 1 -or $manifest.memberCount -le 0 -or
@@ -89,15 +90,14 @@ function Get-ArchiveSymbols {
     $defined = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $strong = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $undefined = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($line in @(Invoke-ArchiveTool $symbolTool @('-g', '-P', $Archive))) {
-        if ($line -match '^(\S+)\s+([A-Za-z?])(?:\s|$)') {
-            $symbol = $Matches[1]
-            $kind = $Matches[2]
-            if ($kind -ceq 'U') { $null = $undefined.Add($symbol) }
-            elseif ($kind -cnotin @('w', 'v')) {
-                $null = $defined.Add($symbol)
-                if ($kind -cnotin @('W', 'V')) { $null = $strong.Add($symbol) }
-            }
+    $lines = @(Invoke-ArchiveTool $symbolTool @('-g', '-A', '-P', $Archive))
+    foreach ($record in @(ConvertFrom-Az3166NmOutput -Lines $lines)) {
+        $symbol = $record.Name
+        $kind = $record.Type
+        if ($kind -ceq 'U') { $null = $undefined.Add($symbol) }
+        elseif ($kind -cnotin @('w', 'v')) {
+            $null = $defined.Add($symbol)
+            if ($kind -cnotin @('W', 'V')) { $null = $strong.Add($symbol) }
         }
     }
     if ($defined.Count -eq 0) { throw "No defined symbols were read from $Archive." }

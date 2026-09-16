@@ -8,8 +8,11 @@ function Assert-Az3166ReleaseRequest {
     }
     if ($Profile -cnotin @('base', 'azure-iot')) { throw 'Release profile must be base or azure-iot.' }
     if ($CoreVersion -cne $Version) { throw 'Release tag does not match the core runtime version.' }
-    if (([version]$Version).Major -le ([version]$LegacyVersion).Major) {
+    if (([version]$Version).Major -ne (([version]$LegacyVersion).Major + 1)) {
         throw 'Profile-based publication requires the approved next major core version.'
+    }
+    if (-not $LayoutManifest.PSObject.Properties['defaultProfile'] -or $LayoutManifest.defaultProfile -cne 'base') {
+        throw 'Profile-based publication requires defaultProfile to remain base.'
     }
     if ($LayoutManifest.schemaVersion -ne 2 -or -not $LayoutManifest.PSObject.Properties['releaseProfile'] -or
         $LayoutManifest.releaseProfile -cne $Profile) {

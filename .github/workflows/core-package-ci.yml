@@ -113,8 +113,8 @@ jobs:
         if: runner.os == 'Linux'
         shell: pwsh
         run: |
-          "AZ3166_AR=$((Get-Command ar -CommandType Application).Source)" >> $env:GITHUB_ENV
-          "AZ3166_NM=$((Get-Command nm -CommandType Application).Source)" >> $env:GITHUB_ENV
+          "AZ3166_AR=$(@(Get-Command ar -CommandType Application -ErrorAction Stop)[0].Source)" >> $env:GITHUB_ENV
+          "AZ3166_NM=$(@(Get-Command nm -CommandType Application -ErrorAction Stop)[0].Source)" >> $env:GITHUB_ENV
 
       - name: Validate archive partition and immutable profile contracts
         shell: pwsh

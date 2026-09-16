@@ -37,6 +37,26 @@ function Assert-PartitionRejected {
 
 try {
     New-Item -ItemType Directory -Path $root | Out-Null
+    $records = @(ConvertFrom-Az3166NmOutput -Lines @(
+        'libbase.a[base.o]:'
+        'base_symbol T 1 6'
+        'base_import U         '
+        'member.o: azure_symbol T 2 8'
+        'C:\tool path\libazure.a[net.o]: _Znwm U'
+        'libbase.a(callback.o): weak_callback W 1 2'
+        'libazure.a[vtable.o]: weak_data V 0 c'
+        'unresolved_weak w'
+        'base.a:member.o: short T 1 4'
+        ''
+    ))
+    $expected = @('base_symbol T', 'base_import U', 'azure_symbol T', '_Znwm U',
+        'weak_callback W', 'weak_data V', 'unresolved_weak w', 'short T')
+    Assert-ArchiveTest ((@($records | ForEach-Object { "$($_.Name) $($_.Type)" }) -join "`n") -ceq ($expected -join "`n")) 'Archive/member prefixes replaced real symbol identities.'
+    $rejected = $false
+    try { $null = ConvertFrom-Az3166NmOutput -Lines @('member.o: not valid symbol output') }
+    catch { $rejected = $_.Exception.Message -like 'Unsupported POSIX nm record:*' }
+    Assert-ArchiveTest $rejected 'Unrecognized symbol output was silently ignored.'
+    Write-Host 'PASS plain and member-prefixed nm records retain real symbols and reject unparsed records'
     $first = & $splitter -OutputDirectory (Join-Path $root 'first') -Ar $Ar -Nm $Nm
     $second = & $splitter -OutputDirectory (Join-Path $root 'second') -Ar $Ar -Nm $Nm
     foreach ($profile in @('base', 'azure')) {
@@ -47,6 +67,10 @@ try {
     Assert-ArchiveTest ($first.archives.base.members -eq 363 -and $first.archives.azure.members -eq 110) 'Unexpected partition inventory.'
     Assert-ArchiveTest ($first.baseRequiresAzure.Count -eq 0 -and $first.conflictingDefinitions.Count -eq 0) 'Invalid binary dependency boundary.'
     Assert-ArchiveTest ($first.azureRequiresBase.Count -gt 0) 'Azure-to-base dependency evidence is missing.'
+    $baseDefinitions = Get-Az3166DefinedSymbols (Join-Path $root 'first/libdevkit-sdk-base.a') $Nm
+    $azureDefinitions = Get-Az3166DefinedSymbols (Join-Path $root 'first/libdevkit-sdk-azure.a') $Nm
+    Assert-ArchiveTest ($baseDefinitions.Contains('us_ticker_read') -and -not $baseDefinitions.Contains('IoTHubClient_GetVersionString') -and
+        $azureDefinitions.Contains('IoTHubClient_GetVersionString')) 'Real base/Azure symbols were not read from member-prefixed nm records.'
     foreach ($name in @('certs.o', 'sha1.o', 'version.o')) {
         $instances = @($first.members | Where-Object { $_.name -ceq $name } | Sort-Object occurrence)
         Assert-ArchiveTest ($instances.Count -eq 2) "Duplicate instance lost: $name"
@@ -89,6 +113,7 @@ try {
     $partition | ConvertTo-Json -Depth 6 | Set-Content "$fixtureRepository/tools/build/az3166-azure-archive.json" -Encoding utf8
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'vendor/prebuilt/az3166/libdevkit-sdk-core-lib.a') -Destination "$fixtureRepository/payload/original.a"
     Copy-Item -LiteralPath $splitter -Destination "$fixtureRepository/tools/build/Split-Az3166CoreArchive.ps1"
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'tools/build/Az3166Symbols.ps1') -Destination "$fixtureRepository/tools/build/Az3166Symbols.ps1"
     @{
         schemaVersion = 2
         defaultProfile = 'base'
@@ -111,6 +136,7 @@ try {
         Assert-ArchiveTest ($metadata.profile -ceq $profile -and $metadata.sourceRevision -ceq $snapshot) 'Generated profile provenance is wrong.'
     }
     [IO.File]::WriteAllText("$fixtureRepository/tools/build/Split-Az3166CoreArchive.ps1", 'throw "Uncommitted splitter must never run"')
+    [IO.File]::WriteAllText("$fixtureRepository/tools/build/Az3166Symbols.ps1", 'throw "Uncommitted symbol parser must never run"')
     [IO.File]::WriteAllText("$fixtureRepository/payload/original.a", 'Uncommitted archive must never be read')
     [IO.File]::WriteAllText("$fixtureRepository/tools/build/az3166-azure-archive.json", '{}')
     foreach ($profile in @('base', 'azure-iot')) {
@@ -120,7 +146,7 @@ try {
     }
     Assert-ArchiveTest ((Invoke-Az3166LayoutGit $fixtureRepository @('write-tree')).Trim() -ceq $snapshot) 'Revision generation changed the caller index.'
     Write-Host 'PASS generated profile trees use immutable inputs and preserve the caller index'
-    Write-Host '9 archive partition and packaging contracts passed.'
+    Write-Host '10 archive partition and packaging contracts passed.'
 }
 finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

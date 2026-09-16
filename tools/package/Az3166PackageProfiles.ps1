@@ -1,13 +1,15 @@
 #requires -Version 7.0
 
+. (Join-Path $PSScriptRoot '../build/Az3166Symbols.ps1')
+
 function Get-Az3166DefinedSymbols {
     param([string]$Path, [string]$Nm)
 
     $definitions = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $lines = @(& $Nm '-g' '-P' '--defined-only' $Path)
+    $lines = @(& $Nm '-g' '-A' '-P' '--defined-only' $Path)
     if ($LASTEXITCODE -ne 0) { throw "Cannot read defined symbols: $Path" }
-    foreach ($line in $lines) {
-        if ($line -match '^(\S+)\s+[A-Za-z](?:\s|$)') { $null = $definitions.Add($Matches[1]) }
+    foreach ($record in @(ConvertFrom-Az3166NmOutput -Lines $lines)) {
+        if ($record.Type -cnotin @('U', 'w', 'v')) { $null = $definitions.Add($record.Name) }
     }
     if ($definitions.Count -eq 0) { throw "Empty symbol inventory: $Path" }
     return ,$definitions

@@ -15,7 +15,7 @@ $request = @{
     Profile = 'base'
     CoreVersion = '3.0.0'
     LegacyVersion = '2.0.2'
-    LayoutManifest = [pscustomobject]@{ schemaVersion = 2; releaseProfile = 'base' }
+    LayoutManifest = [pscustomobject]@{ schemaVersion = 2; defaultProfile = 'base'; releaseProfile = 'base' }
 }
 Assert-Az3166ReleaseRequest @request
 $request.Profile = 'azure-iot'
@@ -28,8 +28,11 @@ foreach ($mutation in @(
     { param($value) $value.Version = '3.0.0-preview' }
     { param($value) $value.CoreVersion = '3.0.1' }
     { param($value) $value.Version = '2.1.0'; $value.CoreVersion = '2.1.0' }
+    { param($value) $value.Version = '4.0.0'; $value.CoreVersion = '4.0.0' }
     { param($value) $value.Profile = 'unknown' }
     { param($value) $value.LayoutManifest.releaseProfile = 'base' }
+    { param($value) $value.LayoutManifest.defaultProfile = 'azure-iot' }
+    { param($value) $value.LayoutManifest.PSObject.Properties.Remove('defaultProfile') }
     { param($value) $value.LayoutManifest.schemaVersion = 1 }
     { param($value) $value.LayoutManifest.PSObject.Properties.Remove('releaseProfile') }
 )) {
