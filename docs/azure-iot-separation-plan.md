@@ -271,10 +271,11 @@ not automated hardware evidence.
 ### Step 5-7 Validation
 
 Evidence is retained under `C:\Users\yuwag\AppData\Local\az3166-p57` and
-`/tmp/az3166-p57-packages`. The package comparison used immutable Git tree
+`/tmp/az3166-p57-packages`. Early staging checks used immutable Git tree
 `7c4540630852b9bfa93f1ad5b181824c0cf28885`, created through a temporary index
-without committing or changing the caller's index. Subsequent test/documentation
-edits are not part of that snapshot's identity.
+without committing or changing the caller's index. The test totals below record
+that implementation checkpoint, not the latest PR head. Current-head validation
+and package hashes are retained by each PR CI run.
 
 | Gate | Local result |
 | --- | --- |
@@ -286,16 +287,29 @@ edits are not part of that snapshot's identity.
 | Workflow validation | Both workflows pass actionlint; all 21 embedded PowerShell blocks parse |
 | Historical release | Canonical 2.0.2 remains 5,497,641 bytes with SHA-256 `5914d3e7b988fdc50b00ff241b7ac191fd6fb9bdc234b4a3f86c51ed0d5e9677` |
 
-Windows ARM binutils and Linux GNU binutils produced identical snapshot ZIPs:
+After ownership consolidation, the initial committed-package checkpoint
+`6485030614d5af1d763e5ec8d63776a108ae54c1` produced the following identical ZIPs
+on Windows and Linux. These supersede the earlier uncommitted-snapshot values;
+they are historical evidence for that exact commit, not current release hashes.
 
 | Profile | Bytes | SHA-256 |
 | --- | ---: | --- |
-| Base | 4,961,532 | `50dbef32d5f0f656b0bd09072bc43cb416b948c283d126b13b66155a2ba33d85` |
-| Azure IoT | 5,501,725 | `0d7f75b53658d3fc5b95ddf637c8dcb7cafcf6ae4ea799ffa00061c93d6ec2b9` |
+| Base | 4,961,532 | `dbe37aa0a2c809c5e29b7a450a64234348d246cf5b80c8e0ca9e2b0f3a218fa6` |
+| Azure IoT | 5,501,726 | `681db48663a2ca1d2ad249651a863d97a8afe866598e38ae19a03609085aab81` |
 
-The 540,193-byte ZIP difference is measured download size, not a claimed firmware
-saving. The publish/index handoff has not been executed. Hardware
+The 540,194-byte ZIP difference at commit `6485030` is measured download size,
+not a claimed firmware saving. Hashes change with the embedded source revision;
+read current package values from the CI run for the requested commit. The
+publish/index handoff has not been executed. Hardware
 and firmware-equivalence review remain release prerequisites.
+
+Review follow-up: URL-encoded form parsing now rejects over-limit values instead
+of accepting truncated credentials. The configuration regression uses the real
+parser with both connection-string and certificate options enabled, and checks
+exact-length, oversized plain, and oversized percent-encoded values. The new
+rejection assertion fails against the pre-fix parser and passes under sanitizers
+with the fix. No general HTTP parser or live configuration-security audit is
+claimed by this targeted correction.
 
 ### Final Ownership Validation
 

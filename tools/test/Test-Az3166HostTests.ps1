@@ -39,6 +39,7 @@ try {
                 Name = "$provider-configuration-test"
                 Arguments = @(
                     '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
+                    '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections'
                     if ($provider -eq 'base') { '-DAZ3166_TEST_BASE' }
                     '-I', "$platform/system/mbed-os"
                     '-I', "$platform/system/az3166-driver/mico/include"

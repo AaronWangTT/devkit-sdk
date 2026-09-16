@@ -102,7 +102,8 @@ The HTTP client carries its unchanged third-party
 license. Its installed `cores/arduino/httpclient/http_parser` path is unchanged,
 and exact content pins preserve its vendor warning classification. The
 Core-hosted HTTP server now delegates optional cloud settings to a build-selected
-provider; its separate parsing implementation is unchanged. See the
+provider; its separate form parser rejects oversized URL-encoded values instead
+of silently truncating credentials. See the
 [Azure IoT separation plan](docs/azure-iot-separation-plan.md) for the validated
 base/full boundaries. Base configuration keeps Wi-Fi settings but no Azure
 commands, credential fields, or cloud writes. The empty provider is selected

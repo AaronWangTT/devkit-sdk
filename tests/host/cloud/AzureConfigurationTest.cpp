@@ -63,7 +63,10 @@ static const int kNoErr = 0;
 static const int kParamErr = -1;
 static const int kNotFoundErr = -2;
 static const int kNoSpaceErr = -3;
+static const int kInProgressErr = -4;
+static const int kGeneralErr = -5;
 #include "../../../src/extensions/http-server/helper.c"
+#include "../../../src/extensions/http-server/http_parse.c"
 
 static int readField(void *context, const char *name, char *value, size_t capacity)
 {
@@ -78,6 +81,11 @@ static int readMultipartField(void *context, const char *name, char *value, size
 {
     char boundary[] = "----test-boundary";
     return httpd_get_tag_from_multipart_form(static_cast<char *>(context), boundary, name, value, capacity);
+}
+
+static int readUrlEncodedField(void *context, const char *name, char *value, size_t capacity)
+{
+    return httpd_get_tag_from_post_data(static_cast<char *>(context), name, value, capacity - 1);
 }
 #endif
 
@@ -140,6 +148,26 @@ int main(void)
     multipartForm.context = &multipart[0];
     assert(ReadConfigurationSettings(1, &multipartForm, &settings) != 0);
     FreeConfigurationSettings(settings);
+
+    std::string urlEncoded = "DeviceConnectionString=" + std::string(AZ_IOT_HUB_MAX_LEN - 1, 'x') +
+        "&certificate=test-certificate&end=1";
+    ConfigurationForm urlForm = {&urlEncoded[0], readUrlEncodedField};
+    assert(ReadConfigurationSettings(3, &urlForm, &settings) == 0);
+    assert(SaveConfigurationSettings(settings, page, sizeof(page)) > 0);
+    assert(stored[AZ_IOT_HUB_ZONE_IDX].size() == AZ_IOT_HUB_MAX_LEN);
+    FreeConfigurationSettings(settings);
+    stored.clear();
+    urlEncoded.insert(urlEncoded.find("&certificate="), 1, 'x');
+    urlForm.context = &urlEncoded[0];
+    assert(ReadConfigurationSettings(3, &urlForm, &settings) != 0);
+    FreeConfigurationSettings(settings);
+    assert(stored.empty());
+    urlEncoded = "DeviceConnectionString=%78" + std::string(AZ_IOT_HUB_MAX_LEN - 1, 'x') +
+        "&certificate=test-certificate&end=1";
+    urlForm.context = &urlEncoded[0];
+    assert(ReadConfigurationSettings(3, &urlForm, &settings) != 0);
+    FreeConfigurationSettings(settings);
+    assert(stored.empty());
 
     stored.clear();
     assert(getIoTHubConnectionString() == NULL);
