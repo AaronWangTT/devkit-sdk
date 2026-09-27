@@ -20,6 +20,7 @@ unsigned long testMillis = 4000;
 int serviceCallbacks = 0;
 unsigned short lastServicePort = 0;
 bool failNextMalloc = false;
+MDNS* callbackMdns = NULL;
 
 extern "C" void *__real_malloc(size_t size);
 
@@ -133,6 +134,15 @@ void ignoreService(
 
 void ignoreName(const char *, IPAddress)
 {
+}
+
+void stopDiscoveryFromCallback(
+    const char *, MDNSServiceProtocol_t, const char *,
+    IPAddress, unsigned short port, const char *)
+{
+    ++serviceCallbacks;
+    lastServicePort = port;
+    callbackMdns->stopDiscoveringService();
 }
 
 void append16(std::vector<uint8_t> &packet, uint16_t value)
@@ -440,7 +450,8 @@ bool preservesFullCompressionOffsets()
     PacketTransport transport;
     MDNS mdns(transport, false);
     REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
-    mdns.setServiceFoundCallback(ignoreService);
+    callbackMdns = &mdns;
+    mdns.setServiceFoundCallback(stopDiscoveryFromCallback);
     REQUIRE(mdns.startDiscoveringService("_http", MDNSServiceTCP, 1000) == 1);
     serviceCallbacks = 0;
     lastServicePort = 0;
@@ -494,6 +505,8 @@ bool preservesFullCompressionOffsets()
 
     REQUIRE(serviceCallbacks == 1);
     REQUIRE(lastServicePort == 80);
+    REQUIRE(mdns.isDiscoveringService() == 0);
+    callbackMdns = NULL;
     return true;
 }
 

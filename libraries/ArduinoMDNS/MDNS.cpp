@@ -1094,11 +1094,19 @@ MDNSError_t MDNS::_processMDNSQuery()
          
          // deliver the services discovered in this packet
          if (NULL != this->_resolveNames[1]) {
-            char* typeName = (char*)this->_resolveNames[1];
-            char* p = (char*)this->_resolveNames[1];
-            while(*p && *p != '.')
-               p++;
-            *p = '\0';
+            char typeName[64];
+            size_t typeLength = 0;
+            while (this->_resolveNames[1][typeLength] &&
+                   this->_resolveNames[1][typeLength] != '.')
+               typeLength++;
+            if (0 == typeLength || typeLength >= sizeof(typeName)) {
+               statusCode = MDNSInvalidArgument;
+               goto errorReturn;
+            }
+            memcpy(typeName, this->_resolveNames[1], typeLength);
+            typeName[typeLength] = '\0';
+            MDNSServiceFoundCallback callback = this->_serviceFoundCallback;
+            MDNSServiceProtocol_t protocol = this->_resolveServiceProto;
             
             for (i=0; i<MDNS_MAX_SERVICES_PER_PACKET; i++)
                if (ptrNames[i]) {
@@ -1120,16 +1128,15 @@ MDNSError_t MDNS::_processMDNSQuery()
                   // if we can't find a matching IP, we try to use the first one we found.
                   if (NULL == ipAddr) ipAddr = fallbackIpAddr;
                
-                  if (ipAddr && ptrPorts[i] != 0 && this->_serviceFoundCallback) {
-                     this->_serviceFoundCallback(typeName,
-                                                this->_resolveServiceProto,
-                                                (const char*)ptrNames[i],
-                                                IPAddress((const byte*)ipAddr),
-                                                (unsigned short)ptrPorts[i],
-                                                (const char*)servTxt[i]);
+                  if (ipAddr && ptrPorts[i] != 0 && callback) {
+                     callback(typeName,
+                              protocol,
+                              (const char*)ptrNames[i],
+                              IPAddress((const byte*)ipAddr),
+                              (unsigned short)ptrPorts[i],
+                              (const char*)servTxt[i]);
                   }
                }
-            *p = '.';
          }
    
    }
