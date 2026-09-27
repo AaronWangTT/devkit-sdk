@@ -313,6 +313,21 @@ bool rejectsOversizedIncomingPacket()
     REQUIRE(fakeSocket.receiveCalls == 1);
     uint8_t byte = 0;
     REQUIRE(udp.read(&byte, 1) == 0);
+    REQUIRE(udp.failed());
+    return true;
+}
+
+bool receiveFailureSetsFailure()
+{
+    resetFake();
+    AZ3166MulticastUDP udp;
+    udp.setLocalIPv4Address(0xc000020a);
+    REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
+    fakeSocket.incoming = std::vector<uint8_t>{0x01};
+    fakeSocket.receiveResult = -1;
+
+    REQUIRE(udp.parsePacket() == 0);
+    REQUIRE(udp.failed());
     return true;
 }
 
@@ -331,6 +346,7 @@ int main()
         {"overflow rejects datagram", overflowRejectsDatagramAndSetsFailure},
         {"receives packet and sender", receivesOnePacketAndReportsSender},
         {"rejects oversized incoming packet", rejectsOversizedIncomingPacket},
+        {"receive failure sets failure", receiveFailureSetsFailure},
     };
 
     int failures = 0;

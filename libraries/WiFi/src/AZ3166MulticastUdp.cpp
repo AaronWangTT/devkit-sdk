@@ -190,6 +190,7 @@ int AZ3166MulticastUDP::parsePacket()
         reinterpret_cast<sockaddr *>(&remote), &remoteSize);
     if (received <= 0 || pending > sizeof(receiveBuffer_))
     {
+        failed_ = true;
         return 0;
     }
 

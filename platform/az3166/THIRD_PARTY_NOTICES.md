@@ -15,16 +15,21 @@ ArduinoMDNS provides the mDNS and DNS-SD protocol implementation bundled under
 - Maintained tag: `1.1.0`
 - Maintained commit: `f6806819281a2395fd72894f5479a096e56446b2`
 - Upstream source: <https://github.com/arduino-libraries/ArduinoMDNS>
-- License: GNU Lesser General Public License version 3 or later
+- Distributed license: GNU Lesser General Public License version 3 or later
 - License text: `libraries/ArduinoMDNS/LICENSE.txt`
 - Source and provenance: `libraries/ArduinoMDNS/` and
   `libraries/ArduinoMDNS/UPSTREAM.md`
 
-The protocol sources, public headers, utility sources, metadata, README, and
-license are distributed from the maintained 1.1.0 archive without source
-changes. Generic examples for other Arduino networking stacks are omitted.
-devkit-sdk adds the `AZ3166RegisteringService` example and supplies the separate
-Apache-2.0-licensed `AZ3166MulticastUDP` transport used by that example.
+The bundled source is based on the maintained 1.1.0 archive. devkit-sdk guards
+empty service-record slots during removal, makes byte-order selection explicit
+for AZ3166, clarifies the transport requirements, and adds the
+`AZ3166RegisteringService` example. Generic examples for other Arduino
+networking stacks are omitted. The separate `AZ3166MulticastUDP` transport used
+by the example is Apache-2.0 licensed.
+
+Some original source headers offer LGPL version 2.1 or later, while the protocol
+sources offer LGPL version 3 or later. This package distributes their combined
+work under LGPL version 3 or later and includes that complete license text.
 
 Recipients may replace or modify ArduinoMDNS under the terms of the included
 LGPL. The complete library source required to rebuild the bundled Arduino

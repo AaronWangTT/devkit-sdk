@@ -14,10 +14,11 @@ Release 1.1.0 is maintained for
 [AaronWangTT/HomeTemperature](https://github.com/AaronWangTT/HomeTemperature).
 It adds bounded packet handling, send-error reporting, reusable responder
 lifecycle methods, and a borrowed transport abstraction for platforms without
-the Arduino `UDP` base class. Existing sketches that pass an `EthernetUDP` or
-`WiFiUDP` instance to `MDNS` remain source-compatible. Custom transports can
-pass `false` as the second constructor argument to skip the legacy WIZnet boot
-delay.
+the Arduino `UDP` base class. Existing sketches remain source-compatible when
+their `EthernetUDP` or `WiFiUDP` transport implements `beginMulticast()` and the
+other operations listed below. The AZ3166 Core's legacy `WiFiUDP` does not
+provide that API; use `AZ3166MulticastUDP` instead. Custom transports can pass
+`false` as the second constructor argument to skip the legacy WIZnet boot delay.
 
 ## Requirements
 

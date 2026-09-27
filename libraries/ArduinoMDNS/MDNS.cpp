@@ -1300,7 +1300,8 @@ void MDNS::removeServiceRecord(const char* name, uint16_t port,
 {
    int i;
    for (i=0; i<NumMDNSServiceRecords; i++)
-      if (port == this->_serviceRecords[i]->port &&
+      if (NULL != this->_serviceRecords[i] &&
+          port == this->_serviceRecords[i]->port &&
           proto == this->_serviceRecords[i]->proto &&
           (NULL == name || 0 == strcmp((char*)this->_serviceRecords[i]->name, name))) {
              this->_removeServiceRecord(i);

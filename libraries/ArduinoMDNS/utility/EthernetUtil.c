@@ -25,9 +25,20 @@
 uint16_t ethutil_swaps(uint16_t i);
 uint32_t ethutil_swapl(uint32_t l);
 
+#if defined(TARGET_RT_LITTLE_ENDIAN) || \
+    (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || \
+    (defined(SYSTEM_ENDIAN) && defined(_ENDIAN_LITTLE_) && \
+     SYSTEM_ENDIAN == _ENDIAN_LITTLE_)
+#define ETHERNET_UTIL_LITTLE_ENDIAN 1
+#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define ETHERNET_UTIL_LITTLE_ENDIAN 0
+#else
+#error "ArduinoMDNS cannot determine the target byte order"
+#endif
+
 extern uint16_t ethutil_htons(unsigned short hostshort)
 {
-#if ( SYSTEM_ENDIAN == _ENDIAN_LITTLE_ )
+#if ETHERNET_UTIL_LITTLE_ENDIAN
 	return ethutil_swaps(hostshort);
 #else
 	return hostshort;
@@ -36,7 +47,7 @@ extern uint16_t ethutil_htons(unsigned short hostshort)
 
 extern uint32_t ethutil_htonl(unsigned long hostlong)
 {
-#if ( SYSTEM_ENDIAN == _ENDIAN_LITTLE_ )
+#if ETHERNET_UTIL_LITTLE_ENDIAN
 	return ethutil_swapl(hostlong);
 #else
 	return hostlong;
@@ -45,7 +56,7 @@ extern uint32_t ethutil_htonl(unsigned long hostlong)
 
 extern uint16_t ethutil_ntohs(unsigned short netshort)
 {
-#if ( SYSTEM_ENDIAN == _ENDIAN_LITTLE_ )	
+#if ETHERNET_UTIL_LITTLE_ENDIAN
 	return ethutil_swaps(netshort);
 #else
 	return netshort;
@@ -54,7 +65,7 @@ extern uint16_t ethutil_ntohs(unsigned short netshort)
 
 extern uint32_t ethutil_ntohl(unsigned long netlong)
 {
-#if ( SYSTEM_ENDIAN == _ENDIAN_LITTLE_ )
+#if ETHERNET_UTIL_LITTLE_ENDIAN
 	return ethutil_swapl(netlong);
 #else
 	return netlong;
@@ -81,5 +92,7 @@ uint32_t ethutil_swapl(uint32_t l)
 	ret |= ((l >> 24) & 0xFF);
 	return ret;
 }
+
+#undef ETHERNET_UTIL_LITTLE_ENDIAN
 
 #endif // __ETHERNET_UTIL_BONJOUR__
