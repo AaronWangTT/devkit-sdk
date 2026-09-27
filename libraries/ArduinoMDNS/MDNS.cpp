@@ -748,9 +748,14 @@ MDNSError_t MDNS::_processMDNSQuery()
          
          uint16_t ptrOffsets[MDNS_MAX_SERVICES_PER_PACKET];
          uint16_t ptrPorts[MDNS_MAX_SERVICES_PER_PACKET];
-         uint8_t ptrIPs[MDNS_MAX_SERVICES_PER_PACKET];
-         uint8_t servIPs[MDNS_MAX_SERVICES_PER_PACKET][5];
-         memset(servIPs, 0, sizeof(uint8_t)*MDNS_MAX_SERVICES_PER_PACKET*5);
+         uint16_t ptrTargetOffsets[MDNS_MAX_SERVICES_PER_PACKET];
+         uint16_t servIPOffsets[MDNS_MAX_SERVICES_PER_PACKET];
+         uint8_t servIPs[MDNS_MAX_SERVICES_PER_PACKET][4];
+         memset(ptrOffsets, 0, sizeof(ptrOffsets));
+         memset(ptrPorts, 0, sizeof(ptrPorts));
+         memset(ptrTargetOffsets, 0, sizeof(ptrTargetOffsets));
+         memset(servIPOffsets, 0, sizeof(servIPOffsets));
+         memset(servIPs, 0, sizeof(servIPs));
          
          const uint8_t* ptrNamesCmp[MDNS_MAX_SERVICES_PER_PACKET];
          int ptrLensCmp[MDNS_MAX_SERVICES_PER_PACKET];
@@ -760,10 +765,10 @@ MDNSError_t MDNS::_processMDNSQuery()
          memset(ptrNames, 0, sizeof(uint8_t*)*MDNS_MAX_SERVICES_PER_PACKET);
          
          const uint8_t* servNames[2];
-         uint8_t servNamePos[2];
+         uint16_t servNamePos[2];
          int servLens[2];
          uint8_t servMatches[2];
-         uint8_t firstNamePtrByte = 0;
+         uint16_t firstNamePtrOffset = 0;
          uint8_t partMatched[2];
          uint8_t lastWasCompressed[2];
          uint8_t servWasCompressed[2];
@@ -794,7 +799,7 @@ MDNSError_t MDNS::_processMDNSQuery()
             partMatched[0] = partMatched[1] = 0;
             lastWasCompressed[0] = lastWasCompressed[1] = 0;
             servWasCompressed[0] = servWasCompressed[1] = 0;
-            firstNamePtrByte = 0;
+            firstNamePtrOffset = 0;
             tLen = 0;
                         
             do {
@@ -814,9 +819,11 @@ MDNSError_t MDNS::_processMDNSQuery()
                   }
             	   memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,1);
                   offset += 1;
+                  uint16_t compressedOffset =
+                     (static_cast<uint16_t>(rLen & 0x3f) << 8) | buf[0];
 
                   for (j=0; j<2; j++) {
-                     if (servNamePos[j] && servNamePos[j] != buf[0])
+                     if (servNamePos[j] && servNamePos[j] != compressedOffset)
                         servMatches[j] = 0;
                      else
                         servWasCompressed[j] = 1;
@@ -826,8 +833,8 @@ MDNSError_t MDNS::_processMDNSQuery()
                
                   tLen += 1;
                   
-                  if (0 == firstNamePtrByte)
-                     firstNamePtrByte = buf[0];
+                  if (0 == firstNamePtrOffset)
+                     firstNamePtrOffset = compressedOffset;
                } else if (rLen > 0) {
                   if (rLen > 63 || !packetHasBytes(offset, rLen, udp_len)) {
                      statusCode = MDNSInvalidArgument;
@@ -838,8 +845,8 @@ MDNSError_t MDNS::_processMDNSQuery()
                   else {
                      int tr = rLen, ir;
                      
-                     if (0 == firstNamePtrByte)
-                        firstNamePtrByte = offset-1; // -1, since we already read length (1 byte)
+                     if (0 == firstNamePtrOffset)
+                        firstNamePtrOffset = offset-1; // -1, since we already read length (1 byte)
                
                      while (tr > 0) {
                         ir = (tr > (int)sizeof(DNSHeader_t)) ? sizeof(DNSHeader_t) : tr;
@@ -978,20 +985,24 @@ MDNSError_t MDNS::_processMDNSQuery()
                   if (recordType == 0x21) {
                      for (j=0; j<MDNS_MAX_SERVICES_PER_PACKET; j++) {
                         if (ptrNames[j] &&
-                              ((firstNamePtrByte && firstNamePtrByte == ptrOffsets[j]) ||
+                              ((firstNamePtrOffset && firstNamePtrOffset == ptrOffsets[j]) ||
                               (0 == ptrLensCmp[j] && ptrNamesMatches[j]))) {
                            // we have found the matching SRV location packet to a previous SRV domain
 
-                           if (dataLen >= 8) {
+                           if (dataLen < 8) {
+                              statusCode = MDNSInvalidArgument;
+                              goto errorReturn;
+                           }
 
-                        	   memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,8);
-                              ptrPorts[j] = ethutil_ntohs(*(uint16_t*)&buf[4]);
-                              
-                              if (buf[6] > 128) { // target is a compressed name
-                                 ptrIPs[j] = buf[7];
-                              } else { // target is uncompressed
-                                 ptrIPs[j] = offset+6;
-                              }
+                       	   memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,8);
+                           ptrPorts[j] = ethutil_ntohs(*(uint16_t*)&buf[4]);
+                           
+                           if ((buf[6] & 0xc0) == 0xc0) {
+                              ptrTargetOffsets[j] =
+                                 (static_cast<uint16_t>(buf[6] & 0x3f) << 8) |
+                                 buf[7];
+                           } else {
+                              ptrTargetOffsets[j] = offset+6;
                            }
                            offset += dataLen;
                            packetHandled = 1;
@@ -1002,7 +1013,7 @@ MDNSError_t MDNS::_processMDNSQuery()
                  } else if (recordType == 0x10) { // txt record
                      for (j=0; j<MDNS_MAX_SERVICES_PER_PACKET; j++) {
                         if (ptrNames[j] &&
-                              ((firstNamePtrByte && firstNamePtrByte == ptrOffsets[j]) ||
+                              ((firstNamePtrOffset && firstNamePtrOffset == ptrOffsets[j]) ||
                               (0 == ptrLensCmp[j] && ptrNamesMatches[j]))) {
 
                            // if there's a content to this txt record, save it for delivery
@@ -1024,11 +1035,12 @@ MDNSError_t MDNS::_processMDNSQuery()
                      }
                   } else if (recordType == 0x01) { // A record (IPv4 address)
                      for (j=0; j<MDNS_MAX_SERVICES_PER_PACKET; j++) {
-                        if (0 == servIPs[j][0]) {
-                           servIPs[j][0] = firstNamePtrByte ? firstNamePtrByte : 255;
+                        if (0 == servIPOffsets[j]) {
+                           servIPOffsets[j] =
+                              firstNamePtrOffset ? firstNamePtrOffset : UINT16_MAX;
 
                            if (4 == dataLen) {
-                        	  memcpy((uint8_t*)&servIPs[j][1], (uint16_t*)(ptr+offset) ,4);
+                        	  memcpy((uint8_t*)servIPs[j], (uint16_t*)(ptr+offset) ,4);
                            }
                            offset += dataLen;
                            packetHandled = 1;
@@ -1060,20 +1072,21 @@ MDNSError_t MDNS::_processMDNSQuery()
                   const uint8_t* fallbackIpAddr = NULL;
 
                   for (j=0; j<MDNS_MAX_SERVICES_PER_PACKET; j++) {
-                     if (servIPs[j][0] == ptrIPs[i] || servIPs[j][0] == 255) {
+                     if (servIPOffsets[j] == ptrTargetOffsets[i] ||
+                         servIPOffsets[j] == UINT16_MAX) {
                         // the || part is such a hack, but it will work as long as there's only
                         // one A record per mDNS packet. fucking DNS name compression.                     
-                        ipAddr = &servIPs[j][1];
+                        ipAddr = servIPs[j];
                         
                         break;
-                     } else if (NULL == fallbackIpAddr && 0 != servIPs[j][0])
-                        fallbackIpAddr = &servIPs[j][1];
+                     } else if (NULL == fallbackIpAddr && 0 != servIPOffsets[j])
+                        fallbackIpAddr = servIPs[j];
                   }
                
                   // if we can't find a matching IP, we try to use the first one we found.
                   if (NULL == ipAddr) ipAddr = fallbackIpAddr;
                
-                  if (ipAddr && this->_serviceFoundCallback) {
+                  if (ipAddr && ptrPorts[i] != 0 && this->_serviceFoundCallback) {
                      this->_serviceFoundCallback(typeName,
                                                 this->_resolveServiceProto,
                                                 (const char*)ptrNames[i],

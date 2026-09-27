@@ -8,6 +8,8 @@
 #include <ArduinoMDNS.h>
 
 unsigned long testMillis = 4000;
+int serviceCallbacks = 0;
+unsigned short lastServicePort = 0;
 
 unsigned long millis()
 {
@@ -101,18 +103,47 @@ public:
 
 void ignoreService(
     const char *, MDNSServiceProtocol_t, const char *,
-    IPAddress, unsigned short, const char *)
+    IPAddress, unsigned short port, const char *)
 {
+    ++serviceCallbacks;
+    lastServicePort = port;
 }
 
-void writeHeader(std::vector<uint8_t> &packet, uint16_t answers)
+void append16(std::vector<uint8_t> &packet, uint16_t value)
+{
+    packet.push_back(static_cast<uint8_t>(value >> 8));
+    packet.push_back(static_cast<uint8_t>(value));
+}
+
+void append32(std::vector<uint8_t> &packet, uint32_t value)
+{
+    packet.push_back(static_cast<uint8_t>(value >> 24));
+    packet.push_back(static_cast<uint8_t>(value >> 16));
+    packet.push_back(static_cast<uint8_t>(value >> 8));
+    packet.push_back(static_cast<uint8_t>(value));
+}
+
+void appendPointer(std::vector<uint8_t> &packet, uint16_t offset)
+{
+    packet.push_back(static_cast<uint8_t>(0xc0 | ((offset >> 8) & 0x3f)));
+    packet.push_back(static_cast<uint8_t>(offset));
+}
+
+void writeHeader(
+    std::vector<uint8_t> &packet,
+    uint16_t questions,
+    uint16_t answers,
+    uint16_t additional = 0)
 {
     const uint8_t header[] = {
         0x00, 0x00, 0x80, 0x00,
-        0x00, 0x00,
+        static_cast<uint8_t>(questions >> 8),
+        static_cast<uint8_t>(questions),
         static_cast<uint8_t>(answers >> 8),
         static_cast<uint8_t>(answers),
-        0x00, 0x00, 0x00, 0x00
+        0x00, 0x00,
+        static_cast<uint8_t>(additional >> 8),
+        static_cast<uint8_t>(additional)
     };
     packet.assign(header, header + sizeof(header));
 }
@@ -137,7 +168,7 @@ bool truncatedResponseNameIsRejected()
     int sendsBeforeMalformedPacket = transport.sends;
 
     std::vector<uint8_t> packet;
-    writeHeader(packet, 1);
+    writeHeader(packet, 0, 1);
     packet.push_back(5);
     packet.push_back('a');
     transport.queue(packet.data(), packet.size());
@@ -156,7 +187,7 @@ bool undersizedPtrRecordIsRejected()
     REQUIRE(mdns.startDiscoveringService("_http", MDNSServiceTCP, 1000) == 1);
 
     std::vector<uint8_t> packet;
-    writeHeader(packet, 1);
+    writeHeader(packet, 0, 1);
     const uint8_t record[] = {
         0xc0, 0x0c,
         0x00, 0x0c,
@@ -172,6 +203,103 @@ bool undersizedPtrRecordIsRejected()
     return true;
 }
 
+bool undersizedSrvRecordIsRejected()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
+    mdns.setServiceFoundCallback(ignoreService);
+    REQUIRE(mdns.startDiscoveringService("_http", MDNSServiceTCP, 1000) == 1);
+    serviceCallbacks = 0;
+
+    std::vector<uint8_t> packet;
+    writeHeader(packet, 0, 1, 1);
+    packet[11] = 1;
+    const uint8_t ptrRecord[] = {
+        0xc0, 0x0c,
+        0x00, 0x0c, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x78,
+        0x00, 0x06,
+        0x03, 'f', 'o', 'o', 0xc0, 0x0c
+    };
+    packet.insert(packet.end(), ptrRecord, ptrRecord + sizeof(ptrRecord));
+    const uint8_t srvRecord[] = {
+        0xc0, 0x18,
+        0x00, 0x21, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x78,
+        0x00, 0x07,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x00
+    };
+    packet.insert(packet.end(), srvRecord, srvRecord + sizeof(srvRecord));
+    transport.queue(packet.data(), packet.size());
+    mdns.run();
+
+    REQUIRE(serviceCallbacks == 0);
+    return true;
+}
+
+bool preservesFullCompressionOffsets()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
+    mdns.setServiceFoundCallback(ignoreService);
+    REQUIRE(mdns.startDiscoveringService("_http", MDNSServiceTCP, 1000) == 1);
+    serviceCallbacks = 0;
+    lastServicePort = 0;
+
+    std::vector<uint8_t> packet;
+    writeHeader(packet, 1, 1, 2);
+    for (int label = 0; label < 4; ++label) {
+        packet.push_back(63);
+        packet.insert(packet.end(), 63, static_cast<uint8_t>('a' + label));
+    }
+    packet.push_back(0);
+    append16(packet, 1);
+    append16(packet, 1);
+
+    appendPointer(packet, 12);
+    append16(packet, 12);
+    append16(packet, 1);
+    append32(packet, 120);
+    append16(packet, 6);
+    uint16_t ptrNameOffset = static_cast<uint16_t>(packet.size());
+    packet.push_back(3);
+    packet.push_back('f');
+    packet.push_back('o');
+    packet.push_back('o');
+    appendPointer(packet, 12);
+    REQUIRE(ptrNameOffset > 255);
+
+    appendPointer(packet, ptrNameOffset);
+    append16(packet, 33);
+    append16(packet, 1);
+    append32(packet, 120);
+    append16(packet, 8);
+    append16(packet, 0);
+    append16(packet, 0);
+    append16(packet, 80);
+    const uint16_t targetOffset = 0x0123;
+    appendPointer(packet, targetOffset);
+
+    appendPointer(packet, targetOffset);
+    append16(packet, 1);
+    append16(packet, 1);
+    append32(packet, 120);
+    append16(packet, 4);
+    packet.push_back(192);
+    packet.push_back(0);
+    packet.push_back(2);
+    packet.push_back(55);
+
+    transport.queue(packet.data(), packet.size());
+    mdns.run();
+
+    REQUIRE(serviceCallbacks == 1);
+    REQUIRE(lastServicePort == 80);
+    return true;
+}
+
 struct TestCase {
     const char *name;
     bool (*run)();
@@ -183,6 +311,8 @@ int main()
         {"removing missing service record is safe", removingMissingServiceRecordIsSafe},
         {"truncated response name is rejected", truncatedResponseNameIsRejected},
         {"undersized PTR record is rejected", undersizedPtrRecordIsRejected},
+        {"undersized SRV record is rejected", undersizedSrvRecordIsRejected},
+        {"preserves full compression offsets", preservesFullCompressionOffsets},
     };
 
     int failures = 0;
