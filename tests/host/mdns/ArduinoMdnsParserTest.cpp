@@ -21,6 +21,7 @@ int serviceCallbacks = 0;
 unsigned short lastServicePort = 0;
 bool failNextMalloc = false;
 MDNS* callbackMdns = NULL;
+int nameCallbacks = 0;
 
 extern "C" void *__real_malloc(size_t size);
 
@@ -136,6 +137,12 @@ void ignoreName(const char *, IPAddress)
 {
 }
 
+void restartNameFromCallback(const char *, IPAddress)
+{
+    ++nameCallbacks;
+    callbackMdns->resolveName("replacement", 1000);
+}
+
 void stopDiscoveryFromCallback(
     const char *, MDNSServiceProtocol_t, const char *,
     IPAddress, unsigned short port, const char *)
@@ -143,6 +150,14 @@ void stopDiscoveryFromCallback(
     ++serviceCallbacks;
     lastServicePort = port;
     callbackMdns->stopDiscoveringService();
+}
+
+void restartServiceFromCallback(
+    const char *, MDNSServiceProtocol_t, const char *,
+    IPAddress, unsigned short, const char *)
+{
+    ++serviceCallbacks;
+    callbackMdns->startDiscoveringService("_ssh", MDNSServiceTCP, 1000);
 }
 
 void append16(std::vector<uint8_t> &packet, uint16_t value)
@@ -316,6 +331,34 @@ bool failedInitialQueriesReleaseState()
     REQUIRE(mdns.isResolvingName() == 0);
     REQUIRE(mdns.startDiscoveringService("_http", MDNSServiceTCP, 0) == 0);
     REQUIRE(mdns.isDiscoveringService() == 0);
+    return true;
+}
+
+bool timeoutCallbacksPreserveReplacementQueries()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
+    callbackMdns = &mdns;
+
+    nameCallbacks = 0;
+    mdns.setNameResolvedCallback(restartNameFromCallback);
+    REQUIRE(mdns.resolveName("first", 1) == 1);
+    testMillis += 2;
+    mdns.run();
+    REQUIRE(nameCallbacks == 1);
+    REQUIRE(mdns.isResolvingName() == 1);
+    mdns.cancelResolveName();
+
+    serviceCallbacks = 0;
+    mdns.setServiceFoundCallback(restartServiceFromCallback);
+    REQUIRE(mdns.startDiscoveringService("_http", MDNSServiceTCP, 1) == 1);
+    testMillis += 2;
+    mdns.run();
+    REQUIRE(serviceCallbacks == 1);
+    REQUIRE(mdns.isDiscoveringService() == 1);
+    mdns.stopDiscoveringService();
+    callbackMdns = NULL;
     return true;
 }
 
@@ -543,6 +586,7 @@ int main()
         {"service TXT uses DNS character-string encoding", serviceTxtUsesDnsCharacterStringEncoding},
         {"failed registration releases service slot", failedRegistrationReleasesServiceSlot},
         {"failed initial queries release state", failedInitialQueriesReleaseState},
+        {"timeout callbacks preserve replacement queries", timeoutCallbacksPreserveReplacementQueries},
         {"service query uses four-byte trailer", serviceQueryUsesFourByteTrailer},
         {"truncated response name is rejected", truncatedResponseNameIsRejected},
         {"undersized PTR record is rejected", undersizedPtrRecordIsRejected},

@@ -1203,25 +1203,20 @@ void MDNS::run()
             if (i == 0)
                this->_finishedResolvingName((char*)this->_resolveNames[0], NULL);
             else if (i == 1) {
-               if (this->_serviceFoundCallback) {
-                  char* typeName = (char*)this->_resolveNames[1];
-                  char* p = (char*)this->_resolveNames[1];
-                  while(*p && *p != '.')
-                     p++;
-                  *p = '\0';
-               
-                  this->_serviceFoundCallback(typeName,
-                                              this->_resolveServiceProto,
-                                              NULL,
-                                              IPAddress(),
-                                              0,
-                                              NULL);
-               }
-            }
-               
-            if (NULL != this->_resolveNames[i]) {
-               my_free(this->_resolveNames[i]);
-               this->_resolveNames[i] = NULL;
+               uint8_t* expiredName = this->_resolveNames[1];
+               this->_resolveNames[1] = NULL;
+               MDNSServiceFoundCallback callback = this->_serviceFoundCallback;
+               MDNSServiceProtocol_t protocol = this->_resolveServiceProto;
+               char typeName[64];
+               size_t typeLength = 0;
+               while (expiredName[typeLength] && expiredName[typeLength] != '.')
+                  typeLength++;
+               memcpy(typeName, expiredName, typeLength);
+               typeName[typeLength] = '\0';
+               my_free(expiredName);
+
+               if (callback)
+                  callback(typeName, protocol, NULL, IPAddress(), 0, NULL);
             }
          }
       }
@@ -1582,19 +1577,22 @@ const uint8_t* MDNS::_postfixForProtocol(MDNSServiceProtocol_t proto)
 }
 
 void MDNS::_finishedResolvingName(char* name, const byte ipAddr[4])
-{   
-   if (NULL != this->_nameFoundCallback) {
+{
+   uint8_t* completedName = this->_resolveNames[0];
+   this->_resolveNames[0] = NULL;
+   MDNSNameFoundCallback callback = this->_nameFoundCallback;
+
+   if (NULL != callback) {
       if (NULL != name) {
          uint8_t* n = this->_findFirstDotFromRight((const uint8_t*)name);
          *(n-1) = '\0';
       }
          
-      this->_nameFoundCallback(
+      callback(
          (const char*)name, 
          (NULL != ipAddr) ? IPAddress(ipAddr) : IPAddress()
       );
    }
 
-   my_free(this->_resolveNames[0]);
-   this->_resolveNames[0] = NULL;
+   my_free(completedName);
 }
