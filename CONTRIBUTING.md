@@ -67,7 +67,7 @@ libraries under `libraries`. Archived tooling is documented in
 or safe to run against production services.
 
 Install the pinned AZ3166 toolchain and validate both profiles from the repository
-root using PowerShell 7 or later: 16 base sketches and 19 full sketches. Both
+root using PowerShell 7 or later: 14 base sketches and 17 full sketches. Both
 include SensorStatus and VoiceRecord; full additionally checks the two cloud
 examples and the Azure DPS link probe.
 
@@ -189,4 +189,3 @@ _This code of conduct is based on the [template][template] established by the [T
 [group]: http://todogroup.org/
 [version]: http://contributor-covenant.org/version/1/4/
 [git]: https://git-scm.com/
-

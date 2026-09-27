@@ -6,7 +6,12 @@ The `maintenance` branch is maintained for
 [AaronWangTT/HomeTemperature](https://github.com/AaronWangTT/HomeTemperature)
 from Microsoft's final 2.0.0 release. Core 2.0.2 carries forward the corrected
 `dtostrf()` formatting and opt-in SDK telemetry behavior from 2.0.1, and fixes
-the version returned by `getDevkitVersion()`.
+the version returned by `getDevkitVersion()`. Core 3.0.0 changes the default
+package to the Azure-independent `base` profile and adds the separate
+`AZ3166MulticastUDP` transport used by multicast protocols such as mDNS.
+The Core does not depend on, bundle, or install ArduinoMDNS. Applications that
+need an mDNS responder choose and pin that dependency independently;
+HomeTemperature currently supplies its own ArduinoMDNS 1.1.0 dependency.
 
 The fork's `master` branch preserves Microsoft's archived upstream history and
 does not receive HomeTemperature maintenance changes. Submit maintained Core
@@ -36,8 +41,9 @@ and hashes, and reject a base-profile request. Working-tree changes are not
 included by `-Revision HEAD`; use staging for uncommitted source validation.
 
 A release tag on `maintenance` must match the runtime version and record its
-one intended `releaseProfile` in the package layout. Profile-based publication
-requires an approved next-major version. The manual `Core release` workflow
+one intended `releaseProfile` in the package layout. Core 3.0.0 is the approved
+next-major version for the profile-based package. The manual `Core release`
+workflow
 requires the matching profile and explicit hardware/firmware-review confirmation,
 runs both-profile CI at the resolved tag commit, and compares the selected
 artifact with CI before publication. It publishes only that profile for that
@@ -48,7 +54,8 @@ Board Manager index update; the workflow does not edit that index or consumer
 repositories. Azure users must pin an Azure-enabled version: upgrading to a newer
 base release removes Azure support. See the
 [separation and release plan](docs/azure-iot-separation-plan.md) for acceptance
-limits and the release process. No new major release has been published yet.
+limits and the release process. The 3.0.0 source version is prepared, but no
+3.0.0 tag, release artifact, or Board Manager index entry has been published yet.
 
 Core package CI continues to run automatically for pull requests and pushes to
 `maintenance`. Its uploaded files are short-lived workflow artifacts for
@@ -124,7 +131,7 @@ the ARM-only vendor libraries or the real JSON parser. The corresponding checks
 also run during releases when the tagged revision contains those harnesses.
 
 On Windows, [Test-Az3166Sketches.ps1](tools/test/Test-Az3166Sketches.ps1) compiles
-16 base sketches and 19 full sketches using the same production staging code.
+14 base sketches and 17 full sketches using the same production staging code.
 Both include SensorStatus and VoiceRecord so Sensors and Audio coverage does not
 depend on cloud examples. Full also includes the two cloud examples and the
 [Azure DPS link probe](tests/host/package/fixtures/AzureDpsLinkProbe/AzureDpsLinkProbe.ino).
