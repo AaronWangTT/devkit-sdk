@@ -8,6 +8,7 @@
 
 WiFi	KEYWORD1	WiFi
 WiFiUdp	KEYWORD1	WiFiUDPConstructor
+AZ3166MulticastUDP	KEYWORD1
 
 #######################################
 # Datatypes (KEYWORD1)
@@ -48,12 +49,14 @@ WiFiServer	KEYWORD2	WiFiServer
 WiFiUDP		KEYWORD2	WiFiUDPConstructor
 beginPacket	KEYWORD2
 endPacket	KEYWORD2
+beginMulticast	KEYWORD2
 parsePacket	KEYWORD2
 remoteIP	KEYWORD2
 remotePort	KEYWORD2
+setLocalIPv4Address	KEYWORD2
+failed	KEYWORD2
 
 
 #######################################
 # Constants (LITERAL1)
 #######################################
-
