@@ -21,6 +21,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Set-Content -LiteralPath $LogPath -Value ''
+trap {
+    $_ | Out-String | Out-File -LiteralPath $LogPath -Append
+    exit 1
+}
 
 function Invoke-PktMon {
     param([string[]]$Arguments)
@@ -31,11 +35,24 @@ function Invoke-PktMon {
     }
 }
 
+function Stop-PktMonIfRunning {
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & pktmon stop 2>&1 | Out-File -LiteralPath $LogPath -Append
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+}
+
 foreach ($path in @($EtlPath, $PcapPath)) {
     Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
 }
 
+$started = $false
 try {
+    Stop-PktMonIfRunning
     Invoke-PktMon @('filter', 'remove')
     Invoke-PktMon @(
         'filter', 'add', 'mDNS',
@@ -46,6 +63,7 @@ try {
     Invoke-PktMon @(
         'start', '--capture', '--pkt-size', '0', '--file-name', $EtlPath
     )
+    $started = $true
     Start-Sleep -Seconds 1
     & $PythonExecutable $ProbeScript `
         --local $LocalAddress --board $BoardAddress --send-only
@@ -54,7 +72,9 @@ try {
     }
 }
 finally {
-    & pktmon stop 2>&1 | Out-File -LiteralPath $LogPath -Append
+    if ($started) {
+        Stop-PktMonIfRunning
+    }
 }
 
 Invoke-PktMon @('etl2pcap', $EtlPath, '--out', $PcapPath)

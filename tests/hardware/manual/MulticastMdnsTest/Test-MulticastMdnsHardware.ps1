@@ -29,6 +29,7 @@ $stage = Join-Path $root 'sketchbook/hardware/AZ3166Checkout/stm32f4'
 $build = Join-Path $root 'build'
 $configuration = Join-Path $root 'arduino-cli.yaml'
 $captureScript = Join-Path $PSScriptRoot 'Capture-MdnsTtl.ps1'
+$passed = $false
 
 if (-not $ArduinoDataDirectory) {
     $ArduinoDataDirectory = if ($env:LOCALAPPDATA) {
@@ -192,7 +193,13 @@ try {
     }
 
     Write-Host "AZ3166 multicast mDNS hardware validation passed."
+    $passed = $true
 }
 finally {
-    Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    if ($passed) {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    else {
+        Write-Warning "Retained failed hardware evidence at $root"
+    }
 }
