@@ -104,6 +104,18 @@ try {
             RunArguments = @()
             Sanitize = $true
         }
+        @{
+            Name = 'ota-staging-test'
+            Arguments = @(
+                '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
+                '-I', "$platform/libraries/OTA/src"
+                "$repositoryRoot/tests/host/ota/OTAStagingTest.cpp"
+                if ($IsWindows) { '-DOTA_STAGING_SKIP_OPENSSL_KAT' }
+                else { '-lcrypto' }
+            )
+            RunArguments = @()
+            Sanitize = $true
+        }
         if ($layout.Profile -eq 'azure-iot') { @{
             Name = 'iot-client-test'
             Arguments = @(

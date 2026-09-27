@@ -15,6 +15,10 @@ extern "C"
 /**
 * @brief    Download new firmware from given url.
 *
+* @deprecated This legacy compatibility API downloads an unsigned raw image
+*             directly to the OTA partition. New applications should transport
+*             a signed package through OTAStagingBegin/WritePackage/Finish.
+*
 * @param    [in] url                 The url to download firmware from.
 *           [out] crc16Checksum      Return the CRC-16 (xmodem) checksum of the downloaded firmware
 *           [in] ssl_ca_pem          Certificate of given url.

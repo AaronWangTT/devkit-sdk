@@ -21,6 +21,14 @@
 #define USE_MBED_TLS                                           // defined by library:devkit-sdk-core
 #define OLED_I2C_PORT                               MICO_I2C_1 // defined by library:devkit-sdk-core
 #define MBEDTLS_SHA256_C                                       // defined by library:devkit-sdk-core
+#define MBEDTLS_ASN1_PARSE_C // defined by library:devkit-sdk-core
+#define MBEDTLS_BIGNUM_C // defined by library:devkit-sdk-core
+#define MBEDTLS_ECDSA_C // defined by library:devkit-sdk-core
+#define MBEDTLS_ECP_C // defined by library:devkit-sdk-core
+#define MBEDTLS_ECP_DP_SECP256R1_ENABLED // defined by library:devkit-sdk-core
+#define MBEDTLS_OID_C // defined by library:devkit-sdk-core
+#define MBEDTLS_PK_C // defined by library:devkit-sdk-core
+#define MBEDTLS_PK_PARSE_C // defined by library:devkit-sdk-core
 #define MBEDTLS_MD5_C                                          // defined by library:devkit-sdk-core
 #define LWIP_TIMEVAL_PRIVATE                        0          // defined by library:devkit-sdk-core
 #define HSM_TYPE_SYMM_KEY                                      // defined by library:devkit-sdk-core
