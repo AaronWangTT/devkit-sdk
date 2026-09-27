@@ -280,6 +280,7 @@ bool overflowRejectsDatagramAndSetsFailure()
 
     REQUIRE(udp.beginPacket(IPAddress(224, 0, 0, 251), 5353) == 1);
     REQUIRE(udp.write(payload.data(), payload.size()) == 0);
+    REQUIRE(udp.failed());
     REQUIRE(udp.endPacket() == 0);
     REQUIRE(fakeSocket.sendCalls == 0);
     REQUIRE(udp.failed());

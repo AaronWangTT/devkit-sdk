@@ -142,6 +142,7 @@ size_t AZ3166MulticastUDP::write(const uint8_t *buffer, size_t size)
         size > sizeof(sendBuffer_) - sendLength_)
     {
         overflow_ = true;
+        failed_ = true;
         return 0;
     }
     memcpy(sendBuffer_ + sendLength_, buffer, size);
