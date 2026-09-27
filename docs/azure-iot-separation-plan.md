@@ -240,7 +240,7 @@ production target checks pass locally.
 ### 6. Profile-Specific Validation And CI
 
 [The shared sketch driver](../tools/test/Test-Az3166Sketches.ps1) now selects the
-production profile and its explicit inventory: 13 base sketches and 16 full
+production profile and its explicit inventory: 14 base sketches and 17 full
 sketches. Both include SensorStatus and the existing VoiceRecord example. Audio
 coverage must not depend on the Azure-only VoiceToTwitter example. Full adds the
 two cloud examples and the explicit IoT Hub/DPS probe.

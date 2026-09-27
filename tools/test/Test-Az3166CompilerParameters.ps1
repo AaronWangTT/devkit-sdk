@@ -104,7 +104,7 @@ try {
             Copy-Item -LiteralPath (Join-Path $checkout "platform/az3166/$propertyFile") -Destination (Join-Path $phaseDirectory $propertyFile)
         }
         $sketches = @(Get-ChildItem -LiteralPath $phaseDirectory -Directory -Force | Sort-Object Name -CaseSensitive)
-        if ($sketches.Count -ne 16) { throw "Expected the 16-sketch baseline, found $($sketches.Count)." }
+        if ($sketches.Count -ne 14) { throw "Expected the 14-sketch baseline, found $($sketches.Count)." }
         $captures[$phase] = @($sketches | ForEach-Object { Export-Az3166CompilerEvidence -Directory $_.FullName })
     }
     $comparisons = @(
@@ -128,7 +128,7 @@ try {
     $report | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $root 'comparison.json') -Encoding utf8
     $comparisons | ForEach-Object { Write-Host "$($_.sketch): equal=$($_.passed)" }
     if (-not $report.passed) { throw "Compiler normalization equivalence failed; inspect $root/comparison.json" }
-    Write-Host 'PASS all 16 command sequences, binaries, complete ELFs, section sizes/program headers, and complete maps are identical.'
+    Write-Host 'PASS all 14 command sequences, binaries, complete ELFs, section sizes/program headers, and complete maps are identical.'
 }
 finally {
     [Environment]::CurrentDirectory = $previousDirectory
