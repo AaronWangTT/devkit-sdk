@@ -91,6 +91,19 @@ try {
             RunArguments = @()
             Sanitize = $true
         }
+        @{
+            Name = 'multicast-udp-test'
+            Arguments = @(
+                '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
+                '-I', "$repositoryRoot/tests/host/wifi/stubs"
+                '-I', "$platform/cores/arduino"
+                '-I', "$platform/cores/arduino/system"
+                '-I', "$platform/libraries/WiFi/src"
+                "$repositoryRoot/tests/host/wifi/AZ3166MulticastUdpTest.cpp"
+            )
+            RunArguments = @()
+            Sanitize = $true
+        }
         if ($layout.Profile -eq 'azure-iot') { @{
             Name = 'iot-client-test'
             Arguments = @(

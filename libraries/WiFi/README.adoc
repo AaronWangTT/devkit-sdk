@@ -5,6 +5,27 @@ With the Arduino WiFi Shield, this library allows an Arduino board to connect to
 For more information about this library please visit us at
 http://www.arduino.cc/en/Reference/WiFi
 
+== Multicast UDP ==
+
+`AZ3166MulticastUDP` provides bounded, nonblocking IPv4 multicast for protocols
+that require packet-oriented sends and receives. It is separate from
+`WiFiUDP`; existing `WiFiUDP` behavior and memory use are unchanged.
+
+Set the active station IPv4 address with `setLocalIPv4Address()` before calling
+`beginMulticast()`. The transport joins the requested group on that interface
+and configures unicast and multicast TTL 255 for link-local discovery traffic.
+One or more `write()` calls append to a single outgoing datagram, which
+`endPacket()` sends with one `sendto()` call.
+
+Each instance reserves a 512-byte transmit buffer and a 1536-byte receive
+buffer. Oversized outgoing messages are rejected without sending a partial
+datagram. `parsePacket()` stages one incoming datagram, `read()` stays within
+that datagram, and `flush()` discards the staged receive state. The
+implementation performs no per-packet allocation.
+
+`failed()` remains true after a receive, send, or outbound-overflow failure
+until `stop()` or a new `beginMulticast()` attempt resets the transport.
+
 == License ==
 
 Copyright (c) 2011-2014 Arduino LLC. All right reserved.

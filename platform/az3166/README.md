@@ -4,6 +4,17 @@ This SDK is used to develop and prototype Internet of Things (IoT) solutions lev
 
 With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) with [Arduino Extension](https://marketplace.visualstudio.com) to rapidly build a full-fledged IoT application that integrates multiple services like Azure IoT Hub, Logic Apps and Cognitive Services.
 
+## Bundled ArduinoMDNS
+
+This Board Package includes ArduinoMDNS 1.1.0 as a separate Arduino library.
+It provides mDNS and DNS-SD protocol handling and can use the WiFi library's
+`AZ3166MulticastUDP` transport. No separate ArduinoMDNS installation is needed.
+
+ArduinoMDNS is licensed under the GNU Lesser General Public License version 3
+or later. Its complete source and license are installed under
+`libraries/ArduinoMDNS`. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+for copyright, provenance, modification, and source-availability information.
+
 ## Contributing
 
 There are a couple of ways you can contribute to this repo:
