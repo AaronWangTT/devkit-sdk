@@ -21,7 +21,7 @@ void setup()
 
   if (!mdns.begin(localIP, "az3166") ||
       !mdns.addServiceRecord(
-          "az3166._http", 80, MDNSServiceTCP, "path=/")) {
+          "az3166._http", 80, MDNSServiceTCP, "\x06" "path=/")) {
     Serial.println("Unable to start mDNS");
     while (true);
   }

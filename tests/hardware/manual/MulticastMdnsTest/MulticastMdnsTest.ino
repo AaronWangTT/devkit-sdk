@@ -17,7 +17,7 @@ bool startDiscovery()
   return mdns.begin(deviceIP, "az3166-mdns-test") &&
       mdns.addServiceRecord(
           "az3166-mdns-test._http", 8080, MDNSServiceTCP,
-          "path=/hardware-validation");
+          "\x19" "path=/hardware-validation");
 }
 
 void setup()
