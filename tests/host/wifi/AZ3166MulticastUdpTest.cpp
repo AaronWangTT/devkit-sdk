@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -53,6 +54,7 @@ struct FakeSocket {
         closeCalls = 0;
         sendCalls = 0;
         receiveCalls = 0;
+        fionreadCalls = 0;
         boundPort = 0;
         nonblocking = false;
         pendingOverride = 0;
@@ -84,6 +86,7 @@ struct FakeSocket {
     int closeCalls;
     int sendCalls;
     int receiveCalls;
+    int fionreadCalls;
     uint16_t boundPort;
     bool nonblocking;
     unsigned long pendingOverride;
@@ -134,6 +137,7 @@ int lwip_ioctl(int, long command, void *argument)
         fakeSocket.nonblocking =
             *static_cast<unsigned long *>(argument) != 0;
     } else if (command == FIONREAD) {
+        ++fakeSocket.fionreadCalls;
         *static_cast<unsigned long *>(argument) =
             fakeSocket.pendingOverride != 0
                 ? fakeSocket.pendingOverride
@@ -159,6 +163,10 @@ int lwip_recvfrom(
     sockaddr *address, socklen_t *)
 {
     ++fakeSocket.receiveCalls;
+    if (fakeSocket.incoming.empty()) {
+        errno = LWIP_EWOULDBLOCK;
+        return -1;
+    }
     sockaddr_in *remote = reinterpret_cast<sockaddr_in *>(address);
     std::memset(remote, 0, sizeof(*remote));
     remote->sin_port = htons(fakeSocket.incomingPort);
@@ -304,6 +312,33 @@ bool receivesOnePacketAndReportsSender()
     return true;
 }
 
+bool queuedByteTotalDoesNotRejectNextDatagram()
+{
+    resetFake();
+    AZ3166MulticastUDP udp;
+    udp.setLocalIPv4Address(0xc000020a);
+    REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
+    fakeSocket.pendingOverride = AZ3166_MULTICAST_UDP_RX_CAPACITY + 100;
+    fakeSocket.incoming = std::vector<uint8_t>{1, 2, 3, 4};
+
+    REQUIRE(udp.parsePacket() == 4);
+    REQUIRE(!udp.failed());
+    REQUIRE(fakeSocket.fionreadCalls == 0);
+    return true;
+}
+
+bool noPacketIsNotAFailure()
+{
+    resetFake();
+    AZ3166MulticastUDP udp;
+    udp.setLocalIPv4Address(0xc000020a);
+    REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
+
+    REQUIRE(udp.parsePacket() == 0);
+    REQUIRE(!udp.failed());
+    return true;
+}
+
 bool rejectsOversizedIncomingPacket()
 {
     resetFake();
@@ -329,6 +364,7 @@ bool receiveFailureSetsFailure()
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
     fakeSocket.incoming = std::vector<uint8_t>{0x01};
     fakeSocket.receiveResult = -1;
+    errno = 5;
 
     REQUIRE(udp.parsePacket() == 0);
     REQUIRE(udp.failed());
@@ -349,6 +385,8 @@ int main()
         {"multiple writes produce one datagram", multipleWritesProduceOneDatagram},
         {"overflow rejects datagram", overflowRejectsDatagramAndSetsFailure},
         {"receives packet and sender", receivesOnePacketAndReportsSender},
+        {"queued byte total does not reject datagram", queuedByteTotalDoesNotRejectNextDatagram},
+        {"no packet is not a failure", noPacketIsNotAFailure},
         {"rejects oversized incoming packet", rejectsOversizedIncomingPacket},
         {"receive failure sets failure", receiveFailureSetsFailure},
     };

@@ -182,23 +182,24 @@ int AZ3166MulticastUDP::parsePacket()
         return 0;
     }
 
-    unsigned long pending = 0;
-    if (lwip_ioctl(socket_, FIONREAD, &pending) != 0)
-    {
-        failed_ = true;
-        return 0;
-    }
-    if (pending == 0)
-    {
-        return 0;
-    }
-
     sockaddr_in remote = {};
     socklen_t remoteSize = sizeof(remote);
     int received = lwip_recvfrom(
         socket_, receiveBuffer_, sizeof(receiveBuffer_), MSG_DONTWAIT,
         reinterpret_cast<sockaddr *>(&remote), &remoteSize);
-    if (received <= 0 || pending > sizeof(receiveBuffer_))
+    if (received < 0)
+    {
+        if (errno != LWIP_EWOULDBLOCK)
+        {
+            failed_ = true;
+        }
+        return 0;
+    }
+    if (received == 0)
+    {
+        return 0;
+    }
+    if (received > AZ3166_MULTICAST_UDP_RX_CAPACITY)
     {
         failed_ = true;
         return 0;

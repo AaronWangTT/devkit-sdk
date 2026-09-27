@@ -16,6 +16,8 @@
     "tests/hardware/UnitTest",
     "tests/hardware/manual/HttpTest",
     "tests/host/package/fixtures/AzureDpsLinkProbe",
+    "libraries/ArduinoMDNS/examples/AZ3166RegisteringService",
+    "libraries/WiFi/examples/AZ3166MulticastUDP",
     "libraries/Sensors/examples/SensorStatus",
     "libraries/Audio/examples/VoiceRecord"
   ],
