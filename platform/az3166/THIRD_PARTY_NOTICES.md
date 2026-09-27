@@ -20,11 +20,12 @@ ArduinoMDNS provides the mDNS and DNS-SD protocol implementation bundled under
 - Source and provenance: `libraries/ArduinoMDNS/` and
   `libraries/ArduinoMDNS/UPSTREAM.md`
 
-The bundled source is based on the maintained 1.1.1 archive. devkit-sdk
-clarifies the transport requirements and adds the `AZ3166RegisteringService`
-example. Generic examples for other Arduino networking stacks are omitted. The
-separate `AZ3166MulticastUDP` transport used by the example is Apache-2.0
-licensed.
+The bundled source is based on the maintained 1.1.1 archive. devkit-sdk guards
+empty service-record slots during removal, makes byte-order selection explicit
+for AZ3166, clarifies the transport requirements, and adds the
+`AZ3166RegisteringService` example. Generic examples for other Arduino
+networking stacks are omitted. The separate `AZ3166MulticastUDP` transport used
+by the example is Apache-2.0 licensed.
 
 Some original source headers offer LGPL version 2.1 or later, while the protocol
 sources offer LGPL version 3 or later. This package distributes their combined
