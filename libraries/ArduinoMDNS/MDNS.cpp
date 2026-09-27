@@ -238,6 +238,8 @@ int MDNS::_initQuery(uint8_t idx, const char* name, unsigned long timeout)
                                              (idx == 0) ? MDNSPacketTypeNameQuery :
                                                           MDNSPacketTypeServiceQuery,
                                              0));
+      if (!statusCode)
+         this->_cancelQuery(idx);
    } else
       my_free((void*)name);
    
@@ -639,24 +641,22 @@ MDNSError_t MDNS::_processMDNSQuery()
       int offset = sizeof(DNSHeader_t);
       uint8_t* buf = (uint8_t*)dnsHeader;
       int rLen = 0, tLen = 0;
+      uint16_t servNamePos[NumMDNSServiceRecords+2] = {};
 
       // read over the query section 
       for (i=0; i<qCnt; i++) {         
          // construct service name data structures for comparison
          const uint8_t* servNames[NumMDNSServiceRecords+2];
          int servLens[NumMDNSServiceRecords+2];
-         uint8_t servNamePos[NumMDNSServiceRecords+2];
          uint8_t servMatches[NumMDNSServiceRecords+2];
          
          // first entry is our own MDNS name, the rest are our services
          servNames[0] = (const uint8_t*)this->_name;
-         servNamePos[0] = 0;
          servLens[0] = strlen((char*)this->_name);
          servMatches[0] = 1;
          
          // second entry is our own the general DNS-SD service
          servNames[1] = (const uint8_t*)DNS_SD_SERVICE;
-         servNamePos[1] = 0;
          servLens[1] = strlen((char*)DNS_SD_SERVICE);
          servMatches[1] = 1;
                   
@@ -665,12 +665,10 @@ MDNSError_t MDNS::_processMDNSQuery()
                servNames[j] = this->_serviceRecords[j-2]->servName;
                servLens[j] = strlen((char*)servNames[j]);
                servMatches[j] = 1;
-               servNamePos[j] = 0;
             } else {
                servNames[j] = NULL;
                servLens[j] = 0;
                servMatches[j] = 0;
-               servNamePos[j] = 0;
             }
    
          tLen = 0;
@@ -697,10 +695,19 @@ MDNSError_t MDNS::_processMDNSQuery()
 
             	memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,1);
             	offset += 1;
+               uint16_t compressedOffset =
+                  (static_cast<uint16_t>(rLen & 0x3f) << 8) | buf[0];
+               if (compressedOffset >= static_cast<uint16_t>(offset - 2)) {
+                  statusCode = MDNSInvalidArgument;
+                  goto errorReturn;
+               }
                
                for (j=0; j<NumMDNSServiceRecords+2; j++) {
-                  if (servNamePos[j] && servNamePos[j] != buf[0]) {
+                  if (0 == servNamePos[j] ||
+                      servNamePos[j] != compressedOffset) {
                      servMatches[j] = 0;
+                  } else {
+                     servLens[j] = 0;
                   }
                }
                

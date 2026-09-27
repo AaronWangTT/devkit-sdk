@@ -131,6 +131,10 @@ void ignoreService(
     lastServicePort = port;
 }
 
+void ignoreName(const char *, IPAddress)
+{
+}
+
 void append16(std::vector<uint8_t> &packet, uint16_t value)
 {
     packet.push_back(static_cast<uint8_t>(value >> 8));
@@ -289,6 +293,66 @@ bool failedRegistrationReleasesServiceSlot()
     return true;
 }
 
+bool failedInitialQueriesReleaseState()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
+    mdns.setNameResolvedCallback(ignoreName);
+    mdns.setServiceFoundCallback(ignoreService);
+    transport.allowSend = false;
+
+    REQUIRE(mdns.resolveName("device", 0) == 0);
+    REQUIRE(mdns.isResolvingName() == 0);
+    REQUIRE(mdns.startDiscoveringService("_http", MDNSServiceTCP, 0) == 0);
+    REQUIRE(mdns.isDiscoveringService() == 0);
+    return true;
+}
+
+bool compressedQueryUsesFullPersistentOffset()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
+
+    const uint8_t addressQuery[] = {
+        0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+        6, 'a', 'z', '3', '1', '6', '6',
+        5, 'l', 'o', 'c', 'a', 'l', 0,
+        0, 1, 0, 1
+    };
+    transport.queue(addressQuery, sizeof(addressQuery));
+    mdns.run();
+    REQUIRE(transport.sends == 1);
+
+    PacketTransport compressedTransport;
+    MDNS compressedMdns(compressedTransport, false);
+    REQUIRE(compressedMdns.begin(
+        IPAddress(192, 0, 2, 10), "az3166") == 1);
+    std::vector<uint8_t> packet;
+    writeHeader(packet, 2, 0);
+    packet[2] = 0;
+    const uint8_t firstQuestion[] = {
+        0x06, 'a', 'z', '3', '1', '6', '6',
+        0x05, 'l', 'o', 'c', 'a', 'l',
+        0x00,
+        0x00, 0x02,
+        0x00, 0x01
+    };
+    packet.insert(
+        packet.end(), firstQuestion,
+        firstQuestion + sizeof(firstQuestion));
+    appendPointer(packet, 12);
+    append16(packet, 1);
+    append16(packet, 1);
+    compressedTransport.queue(packet.data(), packet.size());
+    int sendsBeforeQuery = compressedTransport.sends;
+    compressedMdns.run();
+
+    REQUIRE(compressedTransport.sends == sendsBeforeQuery + 1);
+    return true;
+}
+
 bool truncatedResponseNameIsRejected()
 {
     PacketTransport transport;
@@ -441,12 +505,14 @@ struct TestCase {
 int main()
 {
     const TestCase tests[] = {
+        {"compressed query uses persistent offset", compressedQueryUsesFullPersistentOffset},
         {"removing missing service record is safe", removingMissingServiceRecordIsSafe},
         {"failed name replacement preserves object", failedNameReplacementPreservesObject},
         {"invalid service names are rejected", invalidServiceNamesAreRejected},
         {"invalid DNS names are rejected", invalidDnsNamesAreRejected},
         {"service TXT uses DNS character-string encoding", serviceTxtUsesDnsCharacterStringEncoding},
         {"failed registration releases service slot", failedRegistrationReleasesServiceSlot},
+        {"failed initial queries release state", failedInitialQueriesReleaseState},
         {"truncated response name is rejected", truncatedResponseNameIsRejected},
         {"undersized PTR record is rejected", undersizedPtrRecordIsRejected},
         {"undersized SRV record is rejected", undersizedSrvRecordIsRejected},
