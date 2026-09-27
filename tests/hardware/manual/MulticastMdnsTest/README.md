@@ -18,6 +18,8 @@ steps. Run the PowerShell entry point below explicitly for hardware validation.
 - Install Python 3 and make `python` available on `PATH`.
 - Run from an account that can approve a Windows UAC prompt. PktMon requires
   elevation only while capturing UDP port 5353.
+- The TTL step takes exclusive ownership of the system PktMon session and
+  stops any stale capture before installing its UDP/5353 filter.
 
 ## Run
 
