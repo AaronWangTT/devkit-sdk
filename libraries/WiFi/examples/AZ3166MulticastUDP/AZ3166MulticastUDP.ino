@@ -30,6 +30,11 @@ void loop()
 {
   int packetSize = udp.parsePacket();
   if (packetSize <= 0) {
+    if (udp.failed()) {
+      Serial.println("Multicast receive failed");
+      udp.stop();
+      while (true);
+    }
     delay(20);
     return;
   }
@@ -51,5 +56,7 @@ void loop()
       udp.write((const unsigned char *)reply, sizeof(reply) - 1) != sizeof(reply) - 1 ||
       !udp.endPacket()) {
     Serial.println("Unable to send multicast reply");
+    udp.stop();
+    while (true);
   }
 }
