@@ -17,11 +17,7 @@ void setup()
   }
 
   IPAddress localIP = WiFi.localIP();
-  uint32_t localAddress = (static_cast<uint32_t>(localIP[0]) << 24) |
-      (static_cast<uint32_t>(localIP[1]) << 16) |
-      (static_cast<uint32_t>(localIP[2]) << 8) |
-      static_cast<uint32_t>(localIP[3]);
-  udp.setLocalIPv4Address(localAddress);
+  udp.setLocalIPv4Address(localIP);
   if (!udp.beginMulticast(multicastGroup, multicastPort)) {
     Serial.println("Unable to join multicast group");
     while (true);

@@ -216,7 +216,7 @@ bool configuresValidatedMulticastSocket()
 {
     resetFake();
     AZ3166MulticastUDP udp;
-    udp.setLocalIPv4Address(0xc000020a);
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
 
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
     REQUIRE(fakeSocket.socketCalls == 1);
@@ -235,7 +235,7 @@ bool configurationFailureClosesSocket()
 {
     resetFake();
     AZ3166MulticastUDP udp;
-    udp.setLocalIPv4Address(0xc000020a);
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
     fakeSocket.failedOption = IP_ADD_MEMBERSHIP;
 
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 0);
@@ -248,7 +248,7 @@ bool multipleWritesProduceOneDatagram()
 {
     resetFake();
     AZ3166MulticastUDP udp;
-    udp.setLocalIPv4Address(0xc000020a);
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
     const uint8_t first[] = {1, 2};
     const uint8_t second[] = {3, 4, 5};
@@ -273,7 +273,7 @@ bool overflowRejectsDatagramAndSetsFailure()
 {
     resetFake();
     AZ3166MulticastUDP udp;
-    udp.setLocalIPv4Address(0xc000020a);
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
     std::vector<uint8_t> payload(
         AZ3166_MULTICAST_UDP_TX_CAPACITY + 1, 0x5a);
@@ -292,7 +292,7 @@ bool receivesOnePacketAndReportsSender()
 {
     resetFake();
     AZ3166MulticastUDP udp;
-    udp.setLocalIPv4Address(0xc000020a);
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
     fakeSocket.incoming = std::vector<uint8_t>{'m', 'D', 'N', 'S'};
     fakeSocket.incomingAddress = makeNetworkAddress(192, 0, 2, 44);
@@ -316,7 +316,7 @@ bool queuedByteTotalDoesNotRejectNextDatagram()
 {
     resetFake();
     AZ3166MulticastUDP udp;
-    udp.setLocalIPv4Address(0xc000020a);
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
     fakeSocket.pendingOverride = AZ3166_MULTICAST_UDP_RX_CAPACITY + 100;
     fakeSocket.incoming = std::vector<uint8_t>{1, 2, 3, 4};
@@ -331,7 +331,7 @@ bool noPacketIsNotAFailure()
 {
     resetFake();
     AZ3166MulticastUDP udp;
-    udp.setLocalIPv4Address(0xc000020a);
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
 
     REQUIRE(udp.parsePacket() == 0);
@@ -343,7 +343,7 @@ bool rejectsOversizedIncomingPacket()
 {
     resetFake();
     AZ3166MulticastUDP udp;
-    udp.setLocalIPv4Address(0xc000020a);
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
     fakeSocket.incoming = std::vector<uint8_t>(
         AZ3166_MULTICAST_UDP_RX_CAPACITY + 1, 0x5a);
@@ -360,7 +360,7 @@ bool receiveFailureSetsFailure()
 {
     resetFake();
     AZ3166MulticastUDP udp;
-    udp.setLocalIPv4Address(0xc000020a);
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
     REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
     fakeSocket.incoming = std::vector<uint8_t>{0x01};
     fakeSocket.receiveResult = -1;

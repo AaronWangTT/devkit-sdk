@@ -204,6 +204,7 @@ bool truncatedResponseNameIsRejected()
     REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
     mdns.setServiceFoundCallback(ignoreService);
     REQUIRE(mdns.startDiscoveringService("_http", MDNSServiceTCP, 1000) == 1);
+    serviceCallbacks = 0;
     int sendsBeforeMalformedPacket = transport.sends;
 
     std::vector<uint8_t> packet;
@@ -239,6 +240,7 @@ bool undersizedPtrRecordIsRejected()
     transport.queue(packet.data(), packet.size());
     mdns.run();
 
+    REQUIRE(serviceCallbacks == 0);
     return true;
 }
 

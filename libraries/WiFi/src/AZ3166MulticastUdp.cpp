@@ -28,11 +28,16 @@ uint32_t networkAddress(IPAddress address)
     return htonl(value);
 }
 
+bool isZeroAddress(IPAddress address)
+{
+    return address[0] == 0 && address[1] == 0 &&
+        address[2] == 0 && address[3] == 0;
+}
+
 }
 
 AZ3166MulticastUDP::AZ3166MulticastUDP()
     : socket_(-1),
-      localAddress_(0),
       destinationPort_(0),
       remotePort_(0),
       receiveLength_(0),
@@ -49,7 +54,7 @@ AZ3166MulticastUDP::~AZ3166MulticastUDP()
     stop();
 }
 
-void AZ3166MulticastUDP::setLocalIPv4Address(uint32_t address)
+void AZ3166MulticastUDP::setLocalIPv4Address(IPAddress address)
 {
     localAddress_ = address;
 }
@@ -62,7 +67,7 @@ bool AZ3166MulticastUDP::failed() const
 uint8_t AZ3166MulticastUDP::beginMulticast(IPAddress address, uint16_t port)
 {
     stop();
-    if (localAddress_ == 0 || port == 0)
+    if (isZeroAddress(localAddress_) || port == 0)
     {
         return 0;
     }
@@ -79,7 +84,7 @@ uint8_t AZ3166MulticastUDP::beginMulticast(IPAddress address, uint16_t port)
     local.sin_port = htons(port);
     ip_mreq membership = {};
     membership.imr_multiaddr.s_addr = networkAddress(address);
-    membership.imr_interface.s_addr = htonl(localAddress_);
+    membership.imr_interface.s_addr = networkAddress(localAddress_);
     int reuse = 1;
     int unicastTtl = 255;
     unsigned char multicastTtl = 255;

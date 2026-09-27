@@ -28,7 +28,7 @@ public:
     AZ3166MulticastUDP();
     ~AZ3166MulticastUDP();
 
-    void setLocalIPv4Address(uint32_t address);
+    void setLocalIPv4Address(IPAddress address);
     bool failed() const;
 
     uint8_t beginMulticast(IPAddress address, uint16_t port);
@@ -47,7 +47,7 @@ private:
     AZ3166MulticastUDP &operator=(const AZ3166MulticastUDP &) = delete;
 
     int socket_;
-    uint32_t localAddress_;
+    IPAddress localAddress_;
     IPAddress destination_;
     IPAddress remoteAddress_;
     uint16_t destinationPort_;
