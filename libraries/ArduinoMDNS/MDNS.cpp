@@ -1205,16 +1205,17 @@ int MDNS::setName(const char* name)
 {
    if (NULL == name)
       return 0;
-         
-   if (this->_name != NULL)
-      my_free(this->_name);
-   
-   this->_name = (uint8_t*)my_malloc(strlen(name) + 7);
-   if (NULL == this->_name)
+
+   uint8_t* replacement = (uint8_t*)my_malloc(strlen(name) + 7);
+   if (NULL == replacement)
       return 0;
    
-   strcpy((char*)this->_name, name);
-   strcpy((char*)this->_name+strlen(name), MDNS_TLD);
+   strcpy((char*)replacement, name);
+   strcpy((char*)replacement+strlen(name), MDNS_TLD);
+
+   if (this->_name != NULL)
+      my_free(this->_name);
+   this->_name = replacement;
    
    return 1;
 }

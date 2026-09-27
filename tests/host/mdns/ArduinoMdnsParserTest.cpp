@@ -10,6 +10,18 @@
 unsigned long testMillis = 4000;
 int serviceCallbacks = 0;
 unsigned short lastServicePort = 0;
+bool failNextMalloc = false;
+
+extern "C" void *__real_malloc(size_t size);
+
+extern "C" void *__wrap_malloc(size_t size)
+{
+    if (failNextMalloc) {
+        failNextMalloc = false;
+        return NULL;
+    }
+    return __real_malloc(size);
+}
 
 unsigned long millis()
 {
@@ -155,6 +167,18 @@ bool removingMissingServiceRecordIsSafe()
 
     mdns.removeServiceRecord(80, MDNSServiceTCP);
     mdns.removeServiceRecord("missing._http", 80, MDNSServiceTCP);
+    return true;
+}
+
+bool failedNameReplacementPreservesObject()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.setName("first") == 1);
+
+    failNextMalloc = true;
+    REQUIRE(mdns.setName("replacement") == 0);
+    REQUIRE(mdns.setName("working") == 1);
     return true;
 }
 
@@ -309,6 +333,7 @@ int main()
 {
     const TestCase tests[] = {
         {"removing missing service record is safe", removingMissingServiceRecordIsSafe},
+        {"failed name replacement preserves object", failedNameReplacementPreservesObject},
         {"truncated response name is rejected", truncatedResponseNameIsRejected},
         {"undersized PTR record is rejected", undersizedPtrRecordIsRejected},
         {"undersized SRV record is rejected", undersizedSrvRecordIsRejected},

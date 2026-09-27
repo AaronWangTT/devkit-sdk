@@ -126,6 +126,7 @@ try {
                 '-I', "$platform/libraries/ArduinoMDNS"
                 "$repositoryRoot/tests/host/mdns/ArduinoMdnsParserTest.cpp"
                 "$platform/libraries/ArduinoMDNS/MDNS.cpp"
+                '-Wl,--wrap=malloc'
             )
             SupportArguments = @(
                 '-x', 'c', '-std=c99', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
