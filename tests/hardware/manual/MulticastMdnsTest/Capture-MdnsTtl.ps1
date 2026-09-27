@@ -13,7 +13,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ProbeScript,
     [Parameter(Mandatory = $true)]
-    [string]$LogPath
+    [string]$LogPath,
+    [Parameter(Mandatory = $true)]
+    [string]$PythonExecutable
 )
 
 Set-StrictMode -Version Latest
@@ -43,7 +45,7 @@ try {
         'start', '--capture', '--pkt-size', '0', '--file-name', $EtlPath
     )
     Start-Sleep -Seconds 1
-    & python $ProbeScript `
+    & $PythonExecutable $ProbeScript `
         --local $LocalAddress --board $BoardAddress --send-only
     if ($LASTEXITCODE -ne 0) {
         throw "mDNS probe failed with exit code $LASTEXITCODE."

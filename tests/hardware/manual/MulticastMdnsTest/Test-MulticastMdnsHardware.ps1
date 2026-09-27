@@ -40,6 +40,10 @@ if (-not $ArduinoDataDirectory) {
 }
 
 $arduino = @(Get-Command $ArduinoCli -CommandType Application -ErrorAction Stop)[0].Source
+$python = @(Get-Command python -CommandType Application -ErrorAction Stop)[0].Source
+if ((& $python --version 2>&1 | Out-String) -notmatch '^Python 3\.') {
+    throw 'Python 3 is required for mDNS packet validation.'
+}
 . (Join-Path $repositoryRoot 'tools/build/Az3166Build.Common.ps1')
 $lock = Get-Az3166BuildLock
 $toolRoot = Join-Path $ArduinoDataDirectory "packages/AZ3166/tools"
@@ -83,13 +87,31 @@ function Wait-ForSerialMarker {
 function Get-CandidateLocalAddress {
     param([string]$BoardAddress)
 
-    $octets = $BoardAddress.Split('.')
-    $prefix = "$($octets[0]).$($octets[1]).$($octets[2])."
+    $boardBytes = [Net.IPAddress]::Parse($BoardAddress).GetAddressBytes()
     return @(
         Get-NetIPAddress -AddressFamily IPv4 |
             Where-Object {
-                $_.IPAddress.StartsWith($prefix) -and
-                $_.AddressState -eq 'Preferred'
+                if ($_.AddressState -ne 'Preferred') {
+                    return $false
+                }
+                $candidateBytes = [Net.IPAddress]::Parse(
+                    $_.IPAddress
+                ).GetAddressBytes()
+                $remaining = [int]$_.PrefixLength
+                for ($index = 0; $index -lt 4; $index++) {
+                    $bits = [Math]::Min(8, [Math]::Max(0, $remaining))
+                    if ($bits -gt 0) {
+                        $mask = (0xff -shl (8 - $bits)) -band 0xff
+                        if (
+                            ($candidateBytes[$index] -band $mask) -ne
+                            ($boardBytes[$index] -band $mask)
+                        ) {
+                            return $false
+                        }
+                    }
+                    $remaining -= $bits
+                }
+                return $true
             } |
             Select-Object -ExpandProperty IPAddress -Unique
     )
@@ -132,7 +154,7 @@ try {
         -Seconds 90
     $localAddress = $null
     foreach ($candidate in Get-CandidateLocalAddress $boardAddress) {
-        & python $probe --local $candidate --board $boardAddress
+        & $python $probe --local $candidate --board $boardAddress
         if ($LASTEXITCODE -eq 0) {
             $localAddress = $candidate
             break
@@ -154,7 +176,8 @@ try {
             '-EtlPath', "`"$etl`"",
             '-PcapPath', "`"$pcap`"",
             '-ProbeScript', "`"$probe`"",
-            '-LogPath', "`"$log`""
+            '-LogPath', "`"$log`"",
+            '-PythonExecutable', "`"$python`""
         )
         $capture = Start-Process powershell.exe -Verb RunAs `
             -ArgumentList $arguments -Wait -PassThru
@@ -162,7 +185,7 @@ try {
             Get-Content -LiteralPath $log -ErrorAction SilentlyContinue
             throw "Elevated PktMon capture failed: $($capture.ExitCode)"
         }
-        & python $probe --board $boardAddress --pcap $pcap
+        & $python $probe --board $boardAddress --pcap $pcap
         if ($LASTEXITCODE -ne 0) {
             throw 'Captured mDNS TTL validation failed.'
         }

@@ -9,8 +9,8 @@ GROUP = "224.0.0.251"
 PORT = 5353
 HOSTNAME = "az3166-mdns-test.local"
 SERVICE = "_http._tcp.local"
-INSTANCE = b"az3166-mdns-test"
 TXT = b"path=/hardware-validation"
+INSTANCE_NAME = "az3166-mdns-test._http._tcp.local"
 
 
 def encode_name(name):
@@ -54,7 +54,107 @@ def drain(sock):
             return
 
 
-def wait_for_response(sock, board, expected, timeout=8):
+def decode_name(packet, offset):
+    labels = []
+    consumed = 0
+    cursor = offset
+    jumped = False
+    visited = set()
+    while True:
+        if cursor >= len(packet) or cursor in visited:
+            raise ValueError("Invalid or cyclic DNS name")
+        visited.add(cursor)
+        length = packet[cursor]
+        if length & 0xC0 == 0xC0:
+            if cursor + 1 >= len(packet):
+                raise ValueError("Truncated DNS compression pointer")
+            if not jumped:
+                consumed += 2
+            cursor = ((length & 0x3F) << 8) | packet[cursor + 1]
+            jumped = True
+            continue
+        if length & 0xC0:
+            raise ValueError("Invalid DNS label type")
+        cursor += 1
+        if not jumped:
+            consumed += 1
+        if length == 0:
+            return ".".join(labels).lower(), consumed
+        if length > 63 or cursor + length > len(packet):
+            raise ValueError("Invalid DNS label length")
+        labels.append(packet[cursor:cursor + length].decode("ascii"))
+        cursor += length
+        if not jumped:
+            consumed += length
+
+
+def parse_message(packet):
+    if len(packet) < 12:
+        raise ValueError("Truncated DNS header")
+    _, flags, question_count, answer_count, authority_count, additional_count = (
+        struct.unpack("!HHHHHH", packet[:12])
+    )
+    offset = 12
+    for _ in range(question_count):
+        _, consumed = decode_name(packet, offset)
+        offset += consumed
+        if offset + 4 > len(packet):
+            raise ValueError("Truncated DNS question")
+        offset += 4
+
+    records = []
+    for _ in range(answer_count + authority_count + additional_count):
+        owner, consumed = decode_name(packet, offset)
+        offset += consumed
+        if offset + 10 > len(packet):
+            raise ValueError("Truncated DNS record header")
+        record_type, record_class, ttl, data_length = struct.unpack(
+            "!HHIH", packet[offset:offset + 10]
+        )
+        offset += 10
+        data_offset = offset
+        data_end = data_offset + data_length
+        if data_end > len(packet):
+            raise ValueError("Truncated DNS record data")
+        record = {
+            "owner": owner,
+            "type": record_type,
+            "class": record_class,
+            "ttl": ttl,
+            "data": packet[data_offset:data_end],
+        }
+        if record_type == 1 and data_length == 4:
+            record["address"] = socket.inet_ntoa(record["data"])
+        elif record_type == 12:
+            record["target"], consumed = decode_name(packet, data_offset)
+            if consumed > data_length:
+                raise ValueError("PTR target exceeds RDATA")
+        elif record_type == 33:
+            if data_length < 6:
+                raise ValueError("Truncated SRV record")
+            _, _, record["port"] = struct.unpack(
+                "!HHH", packet[data_offset:data_offset + 6]
+            )
+            record["target"], consumed = decode_name(packet, data_offset + 6)
+            if 6 + consumed > data_length:
+                raise ValueError("SRV target exceeds RDATA")
+        elif record_type == 16:
+            strings = []
+            cursor = data_offset
+            while cursor < data_end:
+                length = packet[cursor]
+                cursor += 1
+                if cursor + length > data_end:
+                    raise ValueError("TXT character-string exceeds RDATA")
+                strings.append(packet[cursor:cursor + length])
+                cursor += length
+            record["strings"] = strings
+        records.append(record)
+        offset = data_end
+    return flags, records
+
+
+def wait_for_response(sock, board, predicate, timeout=8):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -63,9 +163,12 @@ def wait_for_response(sock, board, expected, timeout=8):
             continue
         if source[0] != board or len(data) < 12:
             continue
-        flags = struct.unpack("!H", data[2:4])[0]
-        if flags & 0x8000 and all(value in data for value in expected):
-            return data
+        try:
+            flags, records = parse_message(data)
+        except (UnicodeDecodeError, ValueError):
+            continue
+        if flags & 0x8000 and predicate(records):
+            return data, records
     raise RuntimeError("No matching mDNS response was received")
 
 
@@ -83,23 +186,51 @@ def probe(local_address, board, send_only):
             time.sleep(3)
             return
 
-        address = wait_for_response(
+        address, _ = wait_for_response(
             sock,
             board,
-            [socket.inet_aton(board)],
+            lambda records: any(
+                record["owner"] == HOSTNAME
+                and record["type"] == 1
+                and record.get("address") == board
+                for record in records
+            ),
         )
         drain(sock)
         for _ in range(3):
             sock.sendto(service_query, (GROUP, PORT))
             time.sleep(0.15)
-        service = wait_for_response(
+        service, records = wait_for_response(
             sock,
             board,
-            [INSTANCE, TXT, struct.pack("!H", 8080), socket.inet_aton(board)],
+            lambda items: (
+                any(
+                    item["owner"] == SERVICE
+                    and item["type"] == 12
+                    and item.get("target") == INSTANCE_NAME
+                    for item in items
+                )
+                and any(
+                    item["owner"] == INSTANCE_NAME
+                    and item["type"] == 33
+                    and item.get("port") == 8080
+                    and item.get("target") == HOSTNAME
+                    for item in items
+                )
+                and any(
+                    item["owner"] == INSTANCE_NAME
+                    and item["type"] == 16
+                    and TXT in item.get("strings", [])
+                    for item in items
+                )
+                and any(
+                    item["owner"] == HOSTNAME
+                    and item["type"] == 1
+                    and item.get("address") == board
+                    for item in items
+                )
+            ),
         )
-        txt_offset = service.index(TXT)
-        if service[txt_offset - 1] != len(TXT):
-            raise RuntimeError("TXT character-string length is invalid")
         _, flags, questions, answers, authority, additional = struct.unpack(
             "!HHHHHH", service[:12]
         )
@@ -164,19 +295,80 @@ def verify_ttl(path, board):
     print(f"MDNS_TTL_255_HARDWARE_PASS packets={len(matches)}")
 
 
+def make_record(owner, record_type, data):
+    return (
+        encode_name(owner)
+        + struct.pack("!HHIH", record_type, 1, 120, len(data))
+        + data
+    )
+
+
+def self_test():
+    board = "192.0.2.10"
+    service_data = (
+        make_record(SERVICE, 12, encode_name(INSTANCE_NAME))
+        + make_record(
+            INSTANCE_NAME,
+            33,
+            struct.pack("!HHH", 0, 0, 8080) + encode_name(HOSTNAME),
+        )
+        + make_record(INSTANCE_NAME, 16, bytes([len(TXT)]) + TXT)
+        + make_record(HOSTNAME, 1, socket.inet_aton(board))
+    )
+    packet = struct.pack("!HHHHHH", 0, 0x8400, 0, 4, 0, 0) + service_data
+    flags, records = parse_message(packet)
+    if flags != 0x8400 or len(records) != 4:
+        raise RuntimeError("DNS parser self-test header mismatch")
+    if not any(
+        item["owner"] == SERVICE
+        and item["type"] == 12
+        and item.get("target") == INSTANCE_NAME
+        for item in records
+    ):
+        raise RuntimeError("DNS parser self-test PTR mismatch")
+    if not any(
+        item["owner"] == INSTANCE_NAME
+        and item["type"] == 33
+        and item.get("port") == 8080
+        and item.get("target") == HOSTNAME
+        for item in records
+    ):
+        raise RuntimeError("DNS parser self-test SRV mismatch")
+    if not any(
+        item["owner"] == INSTANCE_NAME
+        and item["type"] == 16
+        and TXT in item.get("strings", [])
+        for item in records
+    ):
+        raise RuntimeError("DNS parser self-test TXT mismatch")
+    if not any(
+        item["owner"] == HOSTNAME
+        and item["type"] == 1
+        and item.get("address") == board
+        for item in records
+    ):
+        raise RuntimeError("DNS parser self-test A mismatch")
+    print("MDNS_PROBE_SELF_TEST_PASS")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--local")
-    parser.add_argument("--board", required=True)
+    parser.add_argument("--board")
     parser.add_argument("--send-only", action="store_true")
     parser.add_argument("--pcap")
+    parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
-    if args.pcap:
+    if args.self_test:
+        self_test()
+    elif args.pcap and args.board:
         verify_ttl(args.pcap, args.board)
-    elif args.local:
+    elif args.local and args.board:
         probe(args.local, args.board, args.send_only)
     else:
-        parser.error("--local is required unless --pcap is used")
+        parser.error(
+            "--board plus --local or --pcap is required unless --self-test is used"
+        )
 
 
 if __name__ == "__main__":

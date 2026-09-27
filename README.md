@@ -129,7 +129,7 @@ the ARM-only vendor libraries or the real JSON parser. The corresponding checks
 also run during releases when the tagged revision contains those harnesses.
 
 On Windows, [Test-Az3166Sketches.ps1](tools/test/Test-Az3166Sketches.ps1) compiles
-13 base sketches and 16 full sketches using the same production staging code.
+16 base sketches and 19 full sketches using the same production staging code.
 Both include SensorStatus and VoiceRecord so Sensors and Audio coverage does not
 depend on cloud examples. Full also includes the two cloud examples and the
 [Azure DPS link probe](tests/host/package/fixtures/AzureDpsLinkProbe/AzureDpsLinkProbe.ino).

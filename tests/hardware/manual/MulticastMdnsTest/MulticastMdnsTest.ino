@@ -76,7 +76,7 @@ void loop()
 
   if (millis() - lastHeartbeat >= 2000) {
     lastHeartbeat = millis();
-    Serial.print("HW_MDNS:READY IP=");
+    Serial.print(rejoined ? "HW_MDNS:REJOIN_READY IP=" : "HW_MDNS:READY IP=");
     Serial.println(deviceIP);
   }
   delay(20);

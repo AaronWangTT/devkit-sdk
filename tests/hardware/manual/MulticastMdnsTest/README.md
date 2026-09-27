@@ -15,6 +15,7 @@ steps. Run the PowerShell entry point below explicitly for hardware validation.
 - Disable VPN software that may redirect or block multicast traffic.
 - Install the pinned build tools with
   `tools/build/Install-Az3166BuildTools.ps1`.
+- Install Python 3 and make `python` available on `PATH`.
 - Run from an account that can approve a Windows UAC prompt. PktMon requires
   elevation only while capturing UDP port 5353.
 
@@ -41,6 +42,7 @@ The runner requires all of the following:
 - responder startup;
 - Wi-Fi disconnect/reconnect and multicast rejoin;
 - A, PTR, SRV, TXT, service port, and IPv4 response content;
+- parsed owner names and PTR/SRV targets rather than raw byte matches;
 - DNS-SD TXT character-string length;
 - IPv4 TTL 255 on captured board mDNS responses.
 
