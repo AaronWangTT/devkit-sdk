@@ -25,6 +25,8 @@ struct FakePlatform
     std::vector<uint8_t> flash;
     OTAStagingBootTable boot;
     OTAStagingBootTable persisted;
+    OTAStagingPartition applicationPartition;
+    OTAStagingPartition otaPartition;
     uint32_t now;
     int eraseCalls;
     int writeCalls;
@@ -56,6 +58,10 @@ struct FakePlatform
         flash.assign(PartitionSize, 0xA5);
         memset(&boot, 0x3C, sizeof(boot));
         persisted = boot;
+        applicationPartition.start = ApplicationStart;
+        applicationPartition.length = PartitionSize;
+        otaPartition.start = OtaStart;
+        otaPartition.length = PartitionSize;
         now = 0;
         eraseCalls = 0;
         writeCalls = 0;
@@ -100,15 +106,13 @@ void check(bool condition, const char *expression, int line)
 
 int getApplicationPartition(OTAStagingPartition *partition)
 {
-    partition->start = ApplicationStart;
-    partition->length = PartitionSize;
+    *partition = fake.applicationPartition;
     return 0;
 }
 
 int getOtaPartition(OTAStagingPartition *partition)
 {
-    partition->start = OtaStart;
-    partition->length = PartitionSize;
+    *partition = fake.otaPartition;
     return 0;
 }
 
@@ -444,7 +448,7 @@ void testArbitraryChunkingAndActivation()
         CHECK(fake.persisted.length == PayloadSize);
         CHECK(fake.persisted.crc16 == info.crc16);
         CHECK(fake.persisted.type == 'A');
-        CHECK(fake.persisted.upgradeType == 'U');
+        CHECK(fake.persisted.upgradeType == 'u');
         CHECK(OTAStagingActivate(info.sessionGeneration, info.sha256) == OTA_ERROR_INVALID_STATE);
     }
 }
@@ -489,6 +493,13 @@ void testBoundsVectorsAndStreamErrors()
 
     reset();
     write32(package, 16, PartitionSize + 1);
+    CHECK(beginPackage(package) == OTA_OK);
+    CHECK(stream(package) == OTA_ERROR_IMAGE_BOUNDS);
+    CHECK(fake.eraseCalls == 0);
+
+    package = validPackage();
+    reset();
+    fake.otaPartition.start = UINT32_MAX - PartitionSize + 1;
     CHECK(beginPackage(package) == OTA_OK);
     CHECK(stream(package) == OTA_ERROR_IMAGE_BOUNDS);
     CHECK(fake.eraseCalls == 0);

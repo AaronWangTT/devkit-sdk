@@ -392,7 +392,8 @@ OTAStagingError validateHeader()
         session.metadata.applicationAddress != session.applicationPartition.start ||
         session.metadata.applicationCapacity != session.applicationPartition.length ||
         session.applicationPartition.start >
-            UINT32_MAX - session.applicationPartition.length)
+            UINT32_MAX - session.applicationPartition.length ||
+        session.otaPartition.start > UINT32_MAX - session.otaPartition.length)
     {
         return OTA_ERROR_IMAGE_BOUNDS;
     }
@@ -864,7 +865,7 @@ OTAStagingError OTAStagingActivate(
     candidate.startAddress = session.otaPartition.start;
     candidate.length = session.payloadSize;
     candidate.type = 'A';
-    candidate.upgradeType = 'U';
+    candidate.upgradeType = 'u';
     candidate.crc16 = session.ready.crc16;
 
     started = platform->timeMs();
