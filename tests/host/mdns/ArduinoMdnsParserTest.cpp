@@ -46,7 +46,7 @@ class PacketTransport {
 public:
     PacketTransport()
         : offset(0), sender(192, 0, 2, 20), senderPort(5353),
-          sends(0), open(false) {}
+          sends(0), open(false), allowSend(true) {}
 
     uint8_t beginMulticast(IPAddress, uint16_t) {
         open = true;
@@ -71,7 +71,7 @@ public:
 
     int endPacket() {
         ++sends;
-        return 1;
+        return allowSend ? 1 : 0;
     }
 
     int parsePacket() {
@@ -111,6 +111,7 @@ public:
     uint16_t senderPort;
     int sends;
     bool open;
+    bool allowSend;
 };
 
 #define REQUIRE(condition) \
@@ -265,6 +266,26 @@ bool serviceTxtUsesDnsCharacterStringEncoding()
     REQUIRE(mdns.addServiceRecord(
         "other._http", 80, MDNSServiceTCP, oversized.data()) == 0);
     REQUIRE(transport.sends == sendsBeforeOversizedText);
+    return true;
+}
+
+bool failedRegistrationReleasesServiceSlot()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
+    transport.allowSend = false;
+    REQUIRE(mdns.addServiceRecord(
+        "failed._http", 80, MDNSServiceTCP) == 0);
+
+    transport.allowSend = true;
+    const char* names[] = {
+        "one._http", "two._http", "three._http", "four._http",
+        "five._http", "six._http", "seven._http", "eight._http"
+    };
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i) {
+        REQUIRE(mdns.addServiceRecord(names[i], 80, MDNSServiceTCP) == 1);
+    }
     return true;
 }
 
@@ -425,6 +446,7 @@ int main()
         {"invalid service names are rejected", invalidServiceNamesAreRejected},
         {"invalid DNS names are rejected", invalidDnsNamesAreRejected},
         {"service TXT uses DNS character-string encoding", serviceTxtUsesDnsCharacterStringEncoding},
+        {"failed registration releases service slot", failedRegistrationReleasesServiceSlot},
         {"truncated response name is rejected", truncatedResponseNameIsRejected},
         {"undersized PTR record is rejected", undersizedPtrRecordIsRejected},
         {"undersized SRV record is rejected", undersizedSrvRecordIsRejected},

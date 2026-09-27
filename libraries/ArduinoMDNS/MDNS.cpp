@@ -1315,6 +1315,10 @@ int MDNS::addServiceRecord(const char* name, uint16_t port,
                               
                status = (MDNSSuccess ==
                            this->_sendMDNSMessage(0, 0, (int)MDNSPacketTypeServiceRecord, i));
+               if (!status) {
+                  this->_serviceRecords[i] = NULL;
+                  goto errorReturn;
+               }
                
                break;
             }
