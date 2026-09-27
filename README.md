@@ -14,6 +14,8 @@ fixes, packaging changes, and release preparation through pull requests to
 `maintenance`. Core package CI validates the runtime version API, verifies
 repeatable base and Azure-enabled package builds on Windows and Ubuntu, and
 requires both hosts to produce byte-for-byte identical archives per profile.
+Windows compiles the base and Azure-enabled sketch inventories in separate
+parallel jobs while retaining profile-specific build evidence.
 For a committed profile-aware revision, run the package check with PowerShell 7
 and GNU `ar`/`nm` on PATH (or pass their paths using `-Ar` and `-Nm`):
 

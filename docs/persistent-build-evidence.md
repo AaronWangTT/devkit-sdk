@@ -76,12 +76,13 @@ sketches are still attempted, and the driver reports aggregate failure.
 
 ## CI And Tests
 
-The [Core package workflow](../.github/workflows/core-package-ci.yml) uploads the
-complete `build-evidence-windows` artifact with `if: always()` and 30-day
-retention. It includes normal builds and a `failure-fixtures` directory. The
-job summary lists statuses and the log, size, and firmware paths for each
-sketch. GitHub provides an archive URL, not individual file URLs: summary links
-download that archive and their labels identify files within it. Downloaded
+The [Core package workflow](../.github/workflows/core-package-ci.yml) uploads
+separate `build-evidence-base` and `build-evidence-azure-iot` artifacts with
+`if: always()` and 30-day retention. Each contains its profile build directory;
+the base artifact also contains `failure-fixtures`. Each profile job summary
+lists statuses and the log, size, and firmware paths for its sketches. GitHub
+provides an archive URL, not individual file URLs: summary links download that
+profile's archive and their labels identify files within it. Downloaded
 `summary.md` files use relative links to the individual evidence files.
 
 Run the network-free process, parser, and summary contracts on either host:

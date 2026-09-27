@@ -173,25 +173,76 @@ jobs:
               -ExpectedVersion '${{ steps.package.outputs.version }}'
           }
 
-      - name: Compile Arduino test sketches
-        if: runner.os == 'Windows'
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AZ3166-${{ steps.package.outputs.version }}-${{ matrix.artifact_suffix }}
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
+
+  sketches:
+    name: Compile Arduino sketches (${{ matrix.profile }})
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - base
+          - azure-iot
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.revision || github.sha }}
+
+      - name: Read pinned build configuration
+        id: build-lock
         shell: pwsh
         run: |
-          $failures = @()
-          foreach ($profile in @('base', 'azure-iot')) {
-            try {
-              ./tools/test/Test-Az3166Sketches.ps1 -Profile $profile `
-                -ArduinoCli '${{ steps.build-tools.outputs.arduino_cli }}' `
-                -ArduinoDataDirectory '${{ steps.build-tools.outputs.arduino_data }}' `
-                -ArduinoUnitDirectory '${{ steps.build-tools.outputs.arduino_unit }}' `
-                -OutputDirectory (Join-Path $env:RUNNER_TEMP "az3166-build-evidence/$profile")
-            }
-            catch { $failures += "$profile`: $($_.Exception.Message)" }
+          . ./tools/build/Az3166Build.Common.ps1
+          $lock = Get-Az3166BuildLock
+          Export-Az3166BuildLockGitHubOutput `
+            -Lock $lock -Path $env:GITHUB_OUTPUT
+
+      - name: Cache AZ3166 toolchain downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/az3166-downloads
+          key: az3166-build-downloads-${{ hashFiles('tools/build/az3166-build-lock.json', 'tools/build/Install-Az3166BuildTools.ps1', 'tools/build/Az3166Build.Common.ps1', 'tools/package/Az3166PackageLayout.ps1', 'tools/package/Az3166PackageProfiles.ps1') }}-windows
+
+      - name: Install pinned AZ3166 test toolchain
+        id: build-tools
+        shell: pwsh
+        run: |
+          $arguments = @{
+            Root = Join-Path $env:RUNNER_TEMP '${{ steps.build-lock.outputs.short_toolchain_root_name }}'
+            DownloadCache = Join-Path $env:RUNNER_TEMP "az3166-downloads"
           }
-          if ($failures.Count) { throw ($failures -join "`n") }
+          $tools = & ./tools/build/Install-Az3166BuildTools.ps1 @arguments
+          $second = & ./tools/build/Install-Az3166BuildTools.ps1 @arguments -Offline
+          $null = & ./tools/build/Install-Az3166BuildTools.ps1 @arguments -VerifyOnly
+          if ($second.Changed) {
+            throw "The second toolchain setup modified the installation."
+          }
+          "arduino_cli=$($tools.ArduinoCliPath)" >> $env:GITHUB_OUTPUT
+          "arduino_data=$($tools.ArduinoDataDirectory)" >> $env:GITHUB_OUTPUT
+          "arduino_unit=$($tools.ArduinoUnitDirectory)" >> $env:GITHUB_OUTPUT
+
+      - name: Compile Arduino test sketches
+        shell: pwsh
+        run: |
+          ./tools/test/Test-Az3166Sketches.ps1 `
+            -Profile '${{ matrix.profile }}' `
+            -ArduinoCli '${{ steps.build-tools.outputs.arduino_cli }}' `
+            -ArduinoDataDirectory '${{ steps.build-tools.outputs.arduino_data }}' `
+            -ArduinoUnitDirectory '${{ steps.build-tools.outputs.arduino_unit }}' `
+            -OutputDirectory (Join-Path $env:RUNNER_TEMP 'az3166-build-evidence/${{ matrix.profile }}')
 
       - name: Validate failed-build evidence
-        if: always() && runner.os == 'Windows' && steps.build-tools.outcome == 'success'
+        if: always() && matrix.profile == 'base' && steps.build-tools.outcome == 'success'
         shell: pwsh
         run: |
           ./tests/host/build/BuildEvidenceTest.ps1 `
@@ -201,24 +252,28 @@ jobs:
             -OutputDirectory (Join-Path $env:RUNNER_TEMP 'az3166-build-evidence/failure-fixtures')
 
       - name: Upload complete build evidence
-        if: always() && runner.os == 'Windows'
+        if: always() && steps.build-tools.outcome == 'success'
         id: build-evidence
         uses: actions/upload-artifact@v4
         with:
-          name: build-evidence-${{ matrix.artifact_suffix }}
+          name: build-evidence-${{ matrix.profile }}
           path: ${{ runner.temp }}/az3166-build-evidence
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 30
 
       - name: Summarize sketch build evidence
-        if: always() && runner.os == 'Windows' && steps.build-evidence.outputs.artifact-url != ''
+        if: always() && steps.build-evidence.outputs.artifact-url != ''
         shell: pwsh
         env:
           BUILD_EVIDENCE_URL: ${{ steps.build-evidence.outputs.artifact-url }}
         run: |
           . ./tools/test/Az3166BuildEvidence.ps1
-          foreach ($profile in @('base', 'azure-iot', 'failure-fixtures')) {
+          $profiles = @('${{ matrix.profile }}')
+          if ('${{ matrix.profile }}' -eq 'base') {
+            $profiles += 'failure-fixtures'
+          }
+          foreach ($profile in $profiles) {
             $directory = Join-Path $env:RUNNER_TEMP "az3166-build-evidence/$profile"
             "### $profile" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
             Get-Az3166EvidenceSummary -OutputDirectory $directory `
@@ -227,21 +282,16 @@ jobs:
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
             $warningSummary = Join-Path $directory 'warning-summary.md'
             if (Test-Path -LiteralPath $warningSummary) {
-              Get-Content -LiteralPath $warningSummary | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+              Get-Content -LiteralPath $warningSummary |
+                Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
             }
           }
 
-      - name: Upload verified package
-        uses: actions/upload-artifact@v4
-        with:
-          name: AZ3166-${{ steps.package.outputs.version }}-${{ matrix.artifact_suffix }}
-          path: ${{ steps.package.outputs.path }}
-          if-no-files-found: error
-          retention-days: 14
-
   compare:
     name: Compare Core packages
-    needs: verify
+    needs:
+      - verify
+      - sketches
     runs-on: ubuntu-24.04
 
     steps:

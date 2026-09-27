@@ -189,6 +189,7 @@ Assert-BuildConfigurationTest (-not $workflow.Contains('arduino/setup-arduino-cl
 Assert-BuildConfigurationTest ($workflow.Contains("foreach (`$profile in @('base', 'azure-iot'))") -and
     $workflow.Contains('-Profile $profile') -and $workflow.Contains('AzureArchiveTest.ps1') -and
     $workflow.Contains('workflow_call:') -and $workflow.Contains('inputs.revision || github.sha')) 'CI must validate both profiles and support exact-revision release gates.'
+Assert-BuildConfigurationTest ($workflow -match '(?ms)^  compare:\r?\n.*?^    needs:\r?\n      - verify\r?\n      - sketches\r?\n    runs-on:') 'The package comparison gate must depend on both package and sketch validation jobs.'
 Assert-BuildConfigurationTest ($workflow.Contains('steps.build-lock.outputs.short_toolchain_root_name')) 'Core package CI does not use the locked short toolchain-root name.'
 $selection = [regex]::Match($workflow, '(?ms)^      - name: Select Linux archive tools\r?\n.*?        run: \|\r?\n(?<script>(?:          [^\r\n]*\r?\n)+)').Groups['script'].Value
 Assert-BuildConfigurationTest (-not [string]::IsNullOrWhiteSpace($selection)) 'The Linux archive-tool selection block was not found.'
@@ -244,6 +245,7 @@ $declaredRunners = @([regex]::Matches($workflow, '(?m)^\s+(?:runner|runs-on):\s+
     $_.Groups[1].Value
 })
 $expectedRunners = @(
+    $lock.hostPrerequisites.windows.runner
     $lock.hostPrerequisites.windows.runner
     $lock.hostPrerequisites.linux.runner
     $lock.hostPrerequisites.linux.runner
