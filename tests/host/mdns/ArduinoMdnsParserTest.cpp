@@ -3,9 +3,17 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <type_traits>
 #include <vector>
 
 #include <ArduinoMDNS.h>
+
+static_assert(
+    !std::is_copy_constructible<MDNS>::value,
+    "MDNS must not copy owned allocations or its borrowed transport");
+static_assert(
+    !std::is_copy_assignable<MDNS>::value,
+    "MDNS must not copy owned allocations or its borrowed transport");
 
 unsigned long testMillis = 4000;
 int serviceCallbacks = 0;
