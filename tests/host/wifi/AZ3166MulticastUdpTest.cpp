@@ -289,6 +289,34 @@ bool overflowRejectsDatagramAndSetsFailure()
     return true;
 }
 
+bool sendFailuresLatchAndCannotRetransmit()
+{
+    resetFake();
+    AZ3166MulticastUDP udp;
+    udp.setLocalIPv4Address(IPAddress(192, 0, 2, 10));
+    REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
+    const uint8_t payload[] = {1, 2};
+
+    REQUIRE(udp.beginPacket(IPAddress(224, 0, 0, 251), 5353) == 1);
+    REQUIRE(udp.write(payload, sizeof(payload)) == sizeof(payload));
+    fakeSocket.sendResult = 1;
+    REQUIRE(udp.endPacket() == 0);
+    REQUIRE(udp.failed());
+    REQUIRE(fakeSocket.sendCalls == 1);
+    REQUIRE(udp.endPacket() == 0);
+    REQUIRE(fakeSocket.sendCalls == 1);
+
+    udp.stop();
+    REQUIRE(udp.beginMulticast(IPAddress(224, 0, 0, 251), 5353) == 1);
+    REQUIRE(udp.beginPacket(IPAddress(224, 0, 0, 251), 5353) == 1);
+    REQUIRE(udp.write(payload, sizeof(payload)) == sizeof(payload));
+    fakeSocket.sendResult = -1;
+    REQUIRE(udp.endPacket() == 0);
+    REQUIRE(udp.failed());
+    REQUIRE(fakeSocket.sendCalls == 2);
+    return true;
+}
+
 bool receivesOnePacketAndReportsSender()
 {
     resetFake();
@@ -385,6 +413,7 @@ int main()
         {"configuration failure closes socket", configurationFailureClosesSocket},
         {"multiple writes produce one datagram", multipleWritesProduceOneDatagram},
         {"overflow rejects datagram", overflowRejectsDatagramAndSetsFailure},
+        {"send failures latch and cannot retransmit", sendFailuresLatchAndCannotRetransmit},
         {"receives packet and sender", receivesOnePacketAndReportsSender},
         {"queued byte total does not reject datagram", queuedByteTotalDoesNotRejectNextDatagram},
         {"no packet is not a failure", noPacketIsNotAFailure},
