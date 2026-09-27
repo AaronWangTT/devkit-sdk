@@ -20,6 +20,10 @@ other operations listed below. The AZ3166 Core's legacy `WiFiUDP` does not
 provide that API; use `AZ3166MulticastUDP` instead. Custom transports can pass
 `false` as the second constructor argument to skip the legacy WIZnet boot delay.
 
+The AZ3166 Board Package identifies its downstream build as
+`1.1.0-az3166.1`; see `UPSTREAM.md` for the maintained tag and downstream
+changes.
+
 ## Requirements
 
 Any Arduino core and networking library that provides a UDP-compatible object

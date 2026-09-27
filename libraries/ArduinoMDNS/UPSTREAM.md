@@ -1,6 +1,6 @@
 # ArduinoMDNS provenance
 
-This directory contains the maintained ArduinoMDNS 1.1.0 library from:
+This directory contains ArduinoMDNS `1.1.0-az3166.1`, based on:
 
 - Source: <https://github.com/AaronWangTT/ArduinoMDNS>
 - Tag: `1.1.0`

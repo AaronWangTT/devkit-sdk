@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -210,8 +211,35 @@ bool invalidServiceNamesAreRejected()
     REQUIRE(mdns.addServiceRecord("http", 80, MDNSServiceTCP) == 0);
     REQUIRE(mdns.addServiceRecord(".http", 80, MDNSServiceTCP) == 0);
     REQUIRE(mdns.addServiceRecord("http.", 80, MDNSServiceTCP) == 0);
+    REQUIRE(mdns.addServiceRecord(
+        "device._http", 80, static_cast<MDNSServiceProtocol_t>(99)) == 0);
     REQUIRE(transport.sends == sendsBeforeInvalidNames);
     REQUIRE(mdns.addServiceRecord("device._http", 80, MDNSServiceTCP) == 1);
+    return true;
+}
+
+bool invalidDnsNamesAreRejected()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    std::string oversizedLabel(64, 'a');
+    std::string oversizedName;
+    for (int i = 0; i < 4; ++i) {
+        if (!oversizedName.empty()) {
+            oversizedName += '.';
+        }
+        oversizedName += std::string(63, static_cast<char>('a' + i));
+    }
+
+    REQUIRE(mdns.setName(NULL) == 0);
+    REQUIRE(mdns.setName("") == 0);
+    REQUIRE(mdns.setName(oversizedLabel.c_str()) == 0);
+    REQUIRE(mdns.setName(oversizedName.c_str()) == 0);
+    REQUIRE(mdns.resolveName(NULL, 1000) == 0);
+    mdns.setServiceFoundCallback(ignoreService);
+    REQUIRE(mdns.startDiscoveringService(NULL, MDNSServiceTCP, 1000) == 0);
+    REQUIRE(mdns.startDiscoveringService(
+        oversizedLabel.c_str(), MDNSServiceTCP, 1000) == 0);
     return true;
 }
 
@@ -395,6 +423,7 @@ int main()
         {"removing missing service record is safe", removingMissingServiceRecordIsSafe},
         {"failed name replacement preserves object", failedNameReplacementPreservesObject},
         {"invalid service names are rejected", invalidServiceNamesAreRejected},
+        {"invalid DNS names are rejected", invalidDnsNamesAreRejected},
         {"service TXT uses DNS character-string encoding", serviceTxtUsesDnsCharacterStringEncoding},
         {"truncated response name is rejected", truncatedResponseNameIsRejected},
         {"undersized PTR record is rejected", undersizedPtrRecordIsRejected},

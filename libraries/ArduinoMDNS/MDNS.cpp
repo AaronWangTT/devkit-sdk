@@ -89,6 +89,28 @@ static bool packetHasBytes(int offset, size_t count, uint16_t packetLength)
       count <= packetLength - static_cast<size_t>(offset);
 }
 
+static bool validDNSName(const char* name, size_t suffixLength)
+{
+   if (NULL == name || '\0' == name[0])
+      return false;
+
+   size_t nameLength = strlen(name);
+   if (nameLength + suffixLength > 253)
+      return false;
+
+   size_t labelLength = 0;
+   for (size_t i=0; i<nameLength; i++) {
+      if ('.' == name[i]) {
+         if (0 == labelLength)
+            return false;
+         labelLength = 0;
+      } else if (++labelLength > 63) {
+         return false;
+      }
+   }
+   return labelLength > 0;
+}
+
 // for some reason, I get data corruption issues with normal malloc() on arduino 0017
 void* my_malloc(unsigned s)
 {
@@ -236,6 +258,9 @@ void MDNS::_cancelQuery(uint8_t idx)
 int MDNS::resolveName(const char* name, unsigned long timeout)
 {   
    this->cancelResolveName();
+
+   if (!validDNSName(name, strlen(MDNS_TLD)))
+      return 0;
    
    char* n = (char*)my_malloc(strlen(name) + 7);
    if (NULL == n)
@@ -275,6 +300,11 @@ int MDNS::startDiscoveringService(const char* serviceName,
                                                   unsigned long timeout)
 {   
    this->stopDiscoveringService();
+
+   const uint8_t* srv_type = this->_postfixForProtocol(proto);
+   if (NULL == srv_type ||
+       !validDNSName(serviceName, strlen((const char*)srv_type)))
+      return 0;
    
    char* n = (char*)my_malloc(strlen(serviceName) + 13);
    if (NULL == n)
@@ -282,9 +312,7 @@ int MDNS::startDiscoveringService(const char* serviceName,
    
    strcpy(n, serviceName);   
          
-   const uint8_t* srv_type = this->_postfixForProtocol(proto);
-   if (srv_type)
-      strcat(n, (const char*)srv_type);
+   strcat(n, (const char*)srv_type);
    
    this->_resolveServiceProto = proto;
    
@@ -1202,7 +1230,7 @@ void MDNS::run()
 // 0 otherwise
 int MDNS::setName(const char* name)
 {
-   if (NULL == name)
+   if (!validDNSName(name, strlen(MDNS_TLD)))
       return 0;
 
    uint8_t* replacement = (uint8_t*)my_malloc(strlen(name) + 7);
@@ -1241,11 +1269,14 @@ int MDNS::addServiceRecord(const char* name, uint16_t port,
    int i, status = 0;
    MDNSServiceRecord_t* record = NULL;
    const char* separator = NULL;
+   const uint8_t* srv_type = this->_postfixForProtocol(proto);
       
    if (NULL != name)
       separator = strrchr(name, '.');
 
-   if (NULL != separator && separator != name && '\0' != separator[1] &&
+   if (NULL != srv_type &&
+       NULL != separator && separator != name && '\0' != separator[1] &&
+       validDNSName(name, strlen((const char*)srv_type)) &&
        (NULL == textContent || strlen(textContent) <= 255) &&
        0 != port && (MDNSServiceTCP == proto || MDNSServiceUDP == proto)) {
       for (i=0; i < NumMDNSServiceRecords; i++) {
@@ -1277,9 +1308,7 @@ int MDNS::addServiceRecord(const char* name, uint16_t port,
                if (record->servName) {
                   strcpy((char*)record->servName, (const char*)s);
 
-                  const uint8_t* srv_type = this->_postfixForProtocol(proto);
-                  if (srv_type)
-                     strcat((char*)record->servName, (const char*)srv_type);
+                  strcat((char*)record->servName, (const char*)srv_type);
                }
 
                this->_serviceRecords[i] = record;

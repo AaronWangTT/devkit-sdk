@@ -52,7 +52,7 @@ Core package CI continues to run automatically for pull requests and pushes to
 `maintenance`. Its uploaded files are short-lived workflow artifacts for
 comparison, not published Core releases.
 
-The board package includes maintained ArduinoMDNS 1.1.0 as a separate Arduino
+The board package includes ArduinoMDNS 1.1.0-az3166.1 as a separate Arduino
 library, together with its LGPLv3 license and source. AZ3166 sketches can pair
 it with the WiFi library's `AZ3166MulticastUDP` transport without installing an
 additional library. The installed package exposes its copyright, provenance,
