@@ -244,16 +244,12 @@ def probe(local_address, board, send_only):
         sock.close()
 
 
-def iter_pcapng_packets(path):
-    data = Path(path).read_bytes()
+def iter_pcapng_data(data):
     offset = 0
     byte_order = "<"
     while offset + 12 <= len(data):
-        block_type = struct.unpack_from(byte_order + "I", data, offset)[0]
-        block_length = struct.unpack_from(byte_order + "I", data, offset + 4)[0]
-        if block_length < 12 or offset + block_length > len(data):
-            raise RuntimeError("Invalid PCAPNG block length")
-        if block_type == 0x0A0D0D0A:
+        raw_type = data[offset:offset + 4]
+        if raw_type == b"\x0a\x0d\x0d\x0a":
             magic = data[offset + 8:offset + 12]
             if magic == b"\x1a\x2b\x3c\x4d":
                 byte_order = ">"
@@ -261,6 +257,19 @@ def iter_pcapng_packets(path):
                 byte_order = "<"
             else:
                 raise RuntimeError("Invalid PCAPNG byte-order magic")
+            block_type = 0x0A0D0D0A
+        else:
+            block_type = struct.unpack_from(byte_order + "I", data, offset)[0]
+        block_length = struct.unpack_from(byte_order + "I", data, offset + 4)[0]
+        if block_length < 12 or offset + block_length > len(data):
+            raise RuntimeError("Invalid PCAPNG block length")
+        trailing_length = struct.unpack_from(
+            byte_order + "I", data, offset + block_length - 4
+        )[0]
+        if trailing_length != block_length:
+            raise RuntimeError("Mismatched PCAPNG block lengths")
+        if block_type == 0x0A0D0D0A:
+            pass
         elif block_type == 6 and block_length >= 32:
             captured_length = struct.unpack_from(
                 byte_order + "I", data, offset + 20
@@ -268,6 +277,10 @@ def iter_pcapng_packets(path):
             packet_start = offset + 28
             yield data[packet_start:packet_start + captured_length]
         offset += block_length
+
+
+def iter_pcapng_packets(path):
+    yield from iter_pcapng_data(Path(path).read_bytes())
 
 
 def verify_ttl(path, board):
@@ -348,6 +361,31 @@ def self_test():
         for item in records
     ):
         raise RuntimeError("DNS parser self-test A mismatch")
+
+    payload = b"abc"
+    padding = b"\0"
+    for byte_order, magic in (("<", b"\x4d\x3c\x2b\x1a"), (">", b"\x1a\x2b\x3c\x4d")):
+        section_length = 28
+        section = (
+            b"\x0a\x0d\x0d\x0a"
+            + struct.pack(byte_order + "I", section_length)
+            + magic
+            + struct.pack(byte_order + "HHqI", 1, 0, -1, section_length)
+        )
+        packet_length = 36
+        packet = (
+            struct.pack(
+                byte_order + "IIIIIII",
+                6, packet_length, 0, 0, 0, len(payload), len(payload),
+            )
+            + payload
+            + padding
+            + struct.pack(byte_order + "I", packet_length)
+        )
+        if list(iter_pcapng_data(section + packet)) != [payload]:
+            raise RuntimeError(
+                f"PCAPNG parser self-test failed for byte order {byte_order}"
+            )
     print("MDNS_PROBE_SELF_TEST_PASS")
 
 

@@ -131,7 +131,7 @@ try {
     } | ConvertTo-Json -Depth 3 |
         Set-Content -LiteralPath $configuration -Encoding utf8
 
-    $fqbn = 'AZ3166Checkout:stm32f4:MXCHIP_AZ3166'
+    $fqbn = $lock.arduino.fqbn
     & $arduino --config-file $configuration --no-color compile `
         --fqbn $fqbn --build-path $build --warnings all $sketch
     if ($LASTEXITCODE -ne 0) {

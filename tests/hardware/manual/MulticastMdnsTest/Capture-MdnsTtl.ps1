@@ -39,7 +39,9 @@ try {
     Invoke-PktMon @('filter', 'remove')
     Invoke-PktMon @(
         'filter', 'add', 'mDNS',
-        '-i', $BoardAddress, '-t', 'UDP', '-p', '5353'
+        '--ip-address', $BoardAddress,
+        '--transport-protocol', 'UDP',
+        '--port', '5353'
     )
     Invoke-PktMon @(
         'start', '--capture', '--pkt-size', '0', '--file-name', $EtlPath
