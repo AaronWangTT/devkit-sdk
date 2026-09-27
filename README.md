@@ -9,10 +9,9 @@ from Microsoft's final 2.0.0 release. Core 2.0.2 carries forward the corrected
 the version returned by `getDevkitVersion()`. Core 3.0.0 changes the default
 package to the Azure-independent `base` profile and adds the separate
 `AZ3166MulticastUDP` transport used by multicast protocols such as mDNS.
-ArduinoMDNS itself is no longer bundled or installed by the Core. Applications
-that need an mDNS responder must acquire and pin it separately; the maintained
-[ArduinoMDNS 1.1.0 release](https://github.com/AaronWangTT/ArduinoMDNS/releases/tag/1.1.0)
-is the version validated with `AZ3166MulticastUDP`.
+The Core does not depend on, bundle, or install ArduinoMDNS. Applications that
+need an mDNS responder choose and pin that dependency independently;
+HomeTemperature currently supplies its own ArduinoMDNS 1.1.0 dependency.
 
 The fork's `master` branch preserves Microsoft's archived upstream history and
 does not receive HomeTemperature maintenance changes. Submit maintained Core
