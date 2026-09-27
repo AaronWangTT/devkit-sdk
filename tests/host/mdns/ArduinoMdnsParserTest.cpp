@@ -518,9 +518,13 @@ bool preservesFullCompressionOffsets()
 
     std::vector<uint8_t> packet;
     writeHeader(packet, 1, 1, 2);
+    packet.push_back(3);
+    packet.push_back('f');
+    packet.push_back('o');
+    packet.push_back('o');
     for (int label = 0; label < 4; ++label) {
-        packet.push_back(63);
-        packet.insert(packet.end(), 63, static_cast<uint8_t>('a' + label));
+        packet.push_back(61);
+        packet.insert(packet.end(), 61, static_cast<uint8_t>('a' + label));
     }
     packet.push_back(0);
     append16(packet, 1);
@@ -530,16 +534,12 @@ bool preservesFullCompressionOffsets()
     append16(packet, 12);
     append16(packet, 1);
     append32(packet, 120);
-    append16(packet, 6);
+    append16(packet, 2);
     uint16_t ptrNameOffset = static_cast<uint16_t>(packet.size());
-    packet.push_back(3);
-    packet.push_back('f');
-    packet.push_back('o');
-    packet.push_back('o');
     appendPointer(packet, 12);
     REQUIRE(ptrNameOffset > 255);
 
-    appendPointer(packet, ptrNameOffset);
+    appendPointer(packet, 12);
     append16(packet, 33);
     append16(packet, 1);
     append32(packet, 120);
@@ -566,6 +566,17 @@ bool preservesFullCompressionOffsets()
     REQUIRE(serviceCallbacks == 1);
     REQUIRE(lastServicePort == 80);
     REQUIRE(mdns.isDiscoveringService() == 0);
+
+    callbackMdns = &mdns;
+    mdns.setServiceFoundCallback(stopDiscoveryFromCallback);
+    REQUIRE(mdns.startDiscoveringService("_http", MDNSServiceTCP, 1000) == 1);
+    serviceCallbacks = 0;
+    packet[packet.size() - 6] = 0;
+    packet[packet.size() - 5] = 3;
+    packet.pop_back();
+    transport.queue(packet.data(), packet.size());
+    mdns.run();
+    REQUIRE(serviceCallbacks == 0);
     callbackMdns = NULL;
     return true;
 }

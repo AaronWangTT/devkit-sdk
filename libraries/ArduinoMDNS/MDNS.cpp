@@ -138,6 +138,40 @@ void my_free(void* ptr)
 #endif
 }
 
+static bool readServiceInstance(
+   const uint8_t* packet, uint16_t packetLength, uint16_t offset,
+   uint8_t** instance, uint16_t* nameOffset)
+{
+   if (!packetHasBytes(offset, 1, packetLength))
+      return false;
+
+   uint16_t sourceOffset = offset;
+   uint8_t labelLength = packet[offset];
+   if ((labelLength & 0xc0) == 0xc0) {
+      if (!packetHasBytes(offset, 2, packetLength))
+         return false;
+      sourceOffset =
+         (static_cast<uint16_t>(labelLength & 0x3f) << 8) |
+         packet[offset + 1];
+      if (!packetHasBytes(sourceOffset, 1, packetLength))
+         return false;
+      labelLength = packet[sourceOffset];
+   }
+
+   if (0 == labelLength || labelLength > 63 ||
+       !packetHasBytes(sourceOffset + 1, labelLength, packetLength))
+      return false;
+
+   uint8_t* value = (uint8_t*)my_malloc(labelLength + 1);
+   if (NULL == value)
+      return false;
+   memcpy(value, packet + sourceOffset + 1, labelLength);
+   value[labelLength] = '\0';
+   *instance = value;
+   *nameOffset = sourceOffset;
+   return true;
+}
+
 void MDNS::_initialize()
 {
    memset(&this->_mdnsData, 0, sizeof(MDNSDataInternal_t));
@@ -981,31 +1015,20 @@ MDNSError_t MDNS::_processMDNSQuery()
                               
                               this->_finishedResolvingName((char*)this->_resolveNames[0],
                                                            (const byte*)buf);
-                           } else if (1 == j && dataLen >= 3) {
+                           } else if (1 == j && dataLen >= 2) {
                               uint8_t k;
                               for (k=0; k<MDNS_MAX_SERVICES_PER_PACKET; k++)
                                  if (NULL == ptrNames[k])
                                     break;
                            
                               if (k < MDNS_MAX_SERVICES_PER_PACKET) {
-                                 int l = dataLen - 2; // -2: data compression of service postfix
-                              
-                                 uint8_t* ptrName = (uint8_t*)my_malloc(l);
-                              
-                                 if (ptrName) {
-
-                                	 memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,1);
-                                	 memcpy((uint8_t*)ptrName, (uint16_t*)(ptr+offset+1) ,l-1);
-                                 
-                                    if (buf[0] < l-1)
-                                       ptrName[buf[0]] = '\0'; // this catches uncompressed names
-                                    else
-                                       ptrName[l-1] = '\0';
-                                    
-                                    ptrNames[k] = ptrName;
-                                    ptrOffsets[k] = (uint16_t)(offset);
- 
+                                 if (readServiceInstance(
+                                        udpBuffer, udp_len, offset,
+                                        &ptrNames[k], &ptrOffsets[k])) {
                                     checkAARecords = 1;
+                                 } else {
+                                    statusCode = MDNSInvalidArgument;
+                                    goto errorReturn;
                                  }
                               }
                            }
@@ -1068,14 +1091,16 @@ MDNSError_t MDNS::_processMDNSQuery()
                         }
                      }
                   } else if (recordType == 0x01) { // A record (IPv4 address)
+                     if (4 != dataLen) {
+                        statusCode = MDNSInvalidArgument;
+                        goto errorReturn;
+                     }
                      for (j=0; j<MDNS_MAX_SERVICES_PER_PACKET; j++) {
                         if (0 == servIPOffsets[j]) {
                            servIPOffsets[j] =
                               firstNamePtrOffset ? firstNamePtrOffset : UINT16_MAX;
 
-                           if (4 == dataLen) {
-                        	  memcpy((uint8_t*)servIPs[j], (uint16_t*)(ptr+offset) ,4);
-                           }
+                       	  memcpy((uint8_t*)servIPs[j], (uint16_t*)(ptr+offset) ,4);
                            offset += dataLen;
                            packetHandled = 1;
                            
