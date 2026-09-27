@@ -40,7 +40,6 @@ $sketchRoots = @(
     (Join-Path $repositoryRoot "examples")
     (Join-Path $repositoryRoot "tests/hardware")
     (Join-Path $repositoryRoot "tests/host/package/fixtures/AzureDpsLinkProbe")
-    (Join-Path $repositoryRoot "libraries/ArduinoMDNS/examples/AZ3166RegisteringService")
     (Join-Path $repositoryRoot "libraries/WiFi/examples/AZ3166MulticastUDP")
     (Join-Path $repositoryRoot "libraries/Sensors/examples/SensorStatus")
     (Join-Path $repositoryRoot "libraries/Audio/examples/VoiceRecord")

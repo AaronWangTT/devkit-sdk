@@ -140,7 +140,6 @@ function Assert-Az3166WarningPolicy {
         if (($sketch -cnotmatch '^(examples|tests/hardware)/[A-Za-z0-9_/-]+$' -and
             $sketch -cnotin @(
                 'tests/host/package/fixtures/AzureDpsLinkProbe',
-                'libraries/ArduinoMDNS/examples/AZ3166RegisteringService',
                 'libraries/WiFi/examples/AZ3166MulticastUDP',
                 'libraries/Sensors/examples/SensorStatus',
                 'libraries/Audio/examples/VoiceRecord'
@@ -149,15 +148,13 @@ function Assert-Az3166WarningPolicy {
         }
     }
     if ($Policy.PSObject.Properties['azureSketches']) {
-        if ($sketches.Count -ne 19 -or -not $sketches.Contains('libraries/Sensors/examples/SensorStatus') -or
+        if ($sketches.Count -ne 17 -or -not $sketches.Contains('libraries/Sensors/examples/SensorStatus') -or
             -not $sketches.Contains('libraries/Audio/examples/VoiceRecord') -or
-            -not $sketches.Contains('libraries/ArduinoMDNS/examples/AZ3166RegisteringService') -or
             -not $sketches.Contains('libraries/WiFi/examples/AZ3166MulticastUDP') -or
-            -not $sketches.Contains('tests/hardware/manual/MulticastMdnsTest') -or
             $Policy.azureSketches -isnot [array] -or $Policy.azureSketches.Count -ne 3 -or
             @($Policy.azureSketches | Select-Object -Unique).Count -ne 3 -or
             @($Policy.azureSketches | Where-Object { -not $sketches.Contains($_) }).Count -gt 0) {
-            throw 'Profile warning policy requires the 19-sketch inventory and three explicit Azure sketches.'
+            throw 'Profile warning policy requires the 17-sketch inventory and three explicit Azure sketches.'
         }
     }
     elseif ($sketches.Count -notin @(13, 14)) {

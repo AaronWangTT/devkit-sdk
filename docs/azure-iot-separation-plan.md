@@ -240,7 +240,7 @@ production target checks pass locally.
 ### 6. Profile-Specific Validation And CI
 
 [The shared sketch driver](../tools/test/Test-Az3166Sketches.ps1) now selects the
-production profile and its explicit inventory: 13 base sketches and 16 full
+production profile and its explicit inventory: 14 base sketches and 17 full
 sketches. Both include SensorStatus and the existing VoiceRecord example. Audio
 coverage must not depend on the Azure-only VoiceToTwitter example. Full adds the
 two cloud examples and the explicit IoT Hub/DPS probe.
@@ -298,9 +298,9 @@ not automated hardware evidence.
 Evidence is retained under `C:\Users\yuwag\AppData\Local\az3166-p57` and
 `/tmp/az3166-p57-packages`. Early staging checks used immutable Git tree
 `7c4540630852b9bfa93f1ad5b181824c0cf28885`, created through a temporary index
-without committing or changing the caller's index. The test totals below record
-that implementation checkpoint, not the latest PR head. Current-head validation
-and package hashes are retained by each PR CI run.
+without committing or changing the caller's index. The historical test totals
+below record that implementation checkpoint, not the latest PR head.
+Current-head validation and package hashes are retained by each PR CI run.
 
 | Gate | Local result |
 | --- | --- |
@@ -357,7 +357,7 @@ base files and 885 full-profile files, including generated archives and profile
 metadata. Only source ownership and its diagnostic/test references change.
 Neutral configuration and telemetry interfaces/stubs remain outside AzureIoT.
 
-Final local checks after the move:
+Historical local checks captured immediately after the move:
 
 - 16 layout contracts, archive/immutable-packaging, release, compiler-parameter,
 	build-configuration, warning, and build-evidence contracts pass.
@@ -386,7 +386,7 @@ release review. Evidence: `az3166-azure-work/archive-verify-aa71de13` beneath th
 Windows local application-data directory. Publication remains gated on that
 review and physical acceptance.
 
-## Step 1-4 Evidence
+## Step 1-4 Evidence (Historical)
 
 Local validation used portable PowerShell 7 on Linux and the existing verified
 Windows Arduino CLI 1.5.1/GCC 5.4.1 installation. A disposable Windows-local
@@ -400,7 +400,7 @@ under `C:\Users\yuwag\AppData\Local\az3166-azure-work`.
 | Configuration regression | Fixed storage zones, credential helper failure/cache behavior, maximum-length real multipart parsing, oversize/missing fields, write failures, private CLI metadata, and no-op base behavior pass |
 | Archive contracts | Eight tests pass, including reproducibility, duplicate occurrences, changed hash/count, unknown/unsafe identity, incorrect classification, and output protection |
 | Package/build contracts | 11 package-layout and 15 build-configuration tests pass; warning-policy and build-evidence contracts pass |
-| Current full build/warning gate | Original 13 sketches plus explicit Azure DPS probe pass; 0 first-party warnings, 43 allowed occurrences, no stale allowances |
+| Step 1-4 full build/warning gate | Original 13 sketches plus explicit Azure DPS probe pass; 0 first-party warnings, 43 allowed occurrences, no stale allowances |
 | Split base matrix | All 11 non-cloud baseline sketches plus SensorStatus pass with zero Azure-only symbols in every ELF and no SDK headers/library/configuration implementation present |
 | Split full matrix | All 13 baseline sketches plus SensorStatus and the IoT Hub/DPS probe pass; direct SDK, HTTP cloud example, wrapper, and DPS paths link |
 | Final focused validation | IoT Hub/DPS and VoiceToTwitter repeat successfully after public-header and multipart-capacity corrections; standalone C Azure/timer headers and base telemetry compile |
