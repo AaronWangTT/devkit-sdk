@@ -67,7 +67,7 @@ libraries under `libraries`. Archived tooling is documented in
 or safe to run against production services.
 
 Install the pinned AZ3166 toolchain and validate both profiles from the repository
-root using PowerShell 7 or later: 13 base sketches and 16 full sketches. Both
+root using PowerShell 7 or later: 16 base sketches and 19 full sketches. Both
 include SensorStatus and VoiceRecord; full additionally checks the two cloud
 examples and the Azure DPS link probe.
 
@@ -86,9 +86,11 @@ foreach ($profile in @('base', 'azure-iot')) {
 The toolchain root must not exceed 70 characters. Native host-test commands and
 pinned toolchain setup are maintained in the [CI workflow](.github/workflows/core-package-ci.yml).
 Use a fresh sketch output directory for each run. Successful and failed builds
-retain complete evidence; CI uploads it even after failure for 30 days. See
-[persistent build evidence](docs/persistent-build-evidence.md) for artifact names,
-failure-retention tests, and findings deferred beyond PR 3.
+retain complete evidence; CI uploads `build-evidence-base` and
+`build-evidence-azure-iot` even after failure for 30 days. The base artifact
+also contains `failure-fixtures`. See
+[persistent build evidence](docs/persistent-build-evidence.md) for artifact
+layout, failure-retention tests, and findings deferred beyond PR 3.
 The driver enforces the [first-party warning policy](docs/first-party-warning-policy.md):
 first-party and unclassified warnings fail, and complete inventories also reject
 stale historical allowances. Raw diagnostics and count-by-rule reports remain
@@ -187,5 +189,4 @@ _This code of conduct is based on the [template][template] established by the [T
 [group]: http://todogroup.org/
 [version]: http://contributor-covenant.org/version/1/4/
 [git]: https://git-scm.com/
-
 

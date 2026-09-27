@@ -167,7 +167,10 @@ Total                 492
     $upload = @($workflow -split '\r?\n      - name:' | Where-Object { $_.Contains('id: build-evidence') })
     Assert-EvidenceTest ($upload.Count -eq 1 -and $upload[0].Contains('if: always()') -and $upload[0].Contains('retention-days: 30')) 'CI must always upload build evidence with review retention.'
     Assert-EvidenceTest ($upload[0].Contains('path: ${{ runner.temp }}/az3166-build-evidence')) 'CI does not upload the complete evidence directory.'
+    Assert-EvidenceTest ($upload[0].Contains('name: build-evidence-${{ matrix.profile }}')) 'CI does not publish profile-specific evidence artifacts.'
     Assert-EvidenceTest ($workflow.Contains('Validate failed-build evidence') -and $workflow.Contains('Get-Az3166EvidenceSummary')) 'CI is missing failed-build validation or the evidence summary.'
+    Assert-EvidenceTest ($workflow.Contains("matrix.profile == 'base'") -and
+        $workflow.Contains("`$profiles += 'failure-fixtures'")) 'CI must retain failed-build fixtures only with the base evidence.'
     Write-Host 'PASS CI retains complete build evidence on failure and publishes a linked summary'
 
     $driver = Join-Path $repositoryRoot 'tools/test/Test-Az3166Sketches.ps1'
