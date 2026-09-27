@@ -6,7 +6,7 @@ With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) 
 
 ## Bundled ArduinoMDNS
 
-This Board Package includes ArduinoMDNS 1.1.0-az3166.1 as a separate Arduino library.
+This Board Package includes ArduinoMDNS 1.1.1-az3166.1 as a separate Arduino library.
 It provides mDNS and DNS-SD protocol handling and can use the WiFi library's
 `AZ3166MulticastUDP` transport. No separate ArduinoMDNS installation is needed.
 
