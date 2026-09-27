@@ -141,6 +141,16 @@ void appendPointer(std::vector<uint8_t> &packet, uint16_t offset)
     packet.push_back(static_cast<uint8_t>(offset));
 }
 
+bool containsBytes(
+    const std::vector<uint8_t> &buffer,
+    const uint8_t *expected,
+    size_t expectedSize)
+{
+    return std::search(
+        buffer.begin(), buffer.end(),
+        expected, expected + expectedSize) != buffer.end();
+}
+
 void writeHeader(
     std::vector<uint8_t> &packet,
     uint16_t questions,
@@ -194,6 +204,31 @@ bool invalidServiceNamesAreRejected()
     REQUIRE(mdns.addServiceRecord("http.", 80, MDNSServiceTCP) == 0);
     REQUIRE(transport.sends == sendsBeforeInvalidNames);
     REQUIRE(mdns.addServiceRecord("device._http", 80, MDNSServiceTCP) == 1);
+    return true;
+}
+
+bool serviceTxtUsesDnsCharacterStringEncoding()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
+    REQUIRE(mdns.addServiceRecord(
+        "device._http", 80, MDNSServiceTCP, "path=/") == 1);
+
+    const uint8_t expected[] = {
+        0x00, 0x10, 0x80, 0x01,
+        0x00, 0x00, 0x00, 0x78,
+        0x00, 0x07, 0x06,
+        'p', 'a', 't', 'h', '=', '/'
+    };
+    REQUIRE(containsBytes(transport.output, expected, sizeof(expected)));
+
+    std::vector<char> oversized(257, 'x');
+    oversized[256] = '\0';
+    int sendsBeforeOversizedText = transport.sends;
+    REQUIRE(mdns.addServiceRecord(
+        "other._http", 80, MDNSServiceTCP, oversized.data()) == 0);
+    REQUIRE(transport.sends == sendsBeforeOversizedText);
     return true;
 }
 
@@ -352,6 +387,7 @@ int main()
         {"removing missing service record is safe", removingMissingServiceRecordIsSafe},
         {"failed name replacement preserves object", failedNameReplacementPreservesObject},
         {"invalid service names are rejected", invalidServiceNamesAreRejected},
+        {"service TXT uses DNS character-string encoding", serviceTxtUsesDnsCharacterStringEncoding},
         {"truncated response name is rejected", truncatedResponseNameIsRejected},
         {"undersized PTR record is rejected", undersizedPtrRecordIsRejected},
         {"undersized SRV record is rejected", undersizedSrvRecordIsRejected},

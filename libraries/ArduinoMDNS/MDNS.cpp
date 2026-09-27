@@ -422,20 +422,19 @@ MDNSError_t MDNS::_sendMDNSMessage(uint32_t /*peerAddress*/, uint32_t xid, int t
          this->_udp->write((uint8_t*)buf,8);
          ptr += 8;
          
-         // data length && text
-         if (NULL == this->_serviceRecords[serviceRecord]->textContent) {
-            buf[0] = 0x00;
-            buf[1] = 0x01;
-            buf[2] = 0x00;
-
-            this->_udp->write((uint8_t*)buf,3);
-            ptr += 3;
-         } else {
-            int slen = strlen((char*)this->_serviceRecords[serviceRecord]->textContent);
-            *((uint16_t*)buf) = ethutil_htons(slen);
-            this->_udp->write((uint8_t*)buf,2);
-            ptr += 2;
-
+         // data length, character-string length, and text
+         size_t slen = NULL == this->_serviceRecords[serviceRecord]->textContent
+            ? 0
+            : strlen((char*)this->_serviceRecords[serviceRecord]->textContent);
+         if (slen > 255) {
+            statusCode = MDNSInvalidArgument;
+            goto errorReturn;
+         }
+         *((uint16_t*)buf) = ethutil_htons(slen + 1);
+         buf[2] = static_cast<uint8_t>(slen);
+         this->_udp->write((uint8_t*)buf,3);
+         ptr += 3;
+         if (slen > 0) {
             this->_udp->write((uint8_t*)this->_serviceRecords[serviceRecord]->textContent,slen);
             ptr += slen;
          }
@@ -1247,6 +1246,7 @@ int MDNS::addServiceRecord(const char* name, uint16_t port,
       separator = strrchr(name, '.');
 
    if (NULL != separator && separator != name && '\0' != separator[1] &&
+       (NULL == textContent || strlen(textContent) <= 255) &&
        0 != port && (MDNSServiceTCP == proto || MDNSServiceUDP == proto)) {
       for (i=0; i < NumMDNSServiceRecords; i++) {
          if (NULL == this->_serviceRecords[i]) {
