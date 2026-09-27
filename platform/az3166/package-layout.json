@@ -93,7 +93,6 @@
     { "source": "vendor/mbed-memory-status", "destination": "system/utilities" },
     { "source": "libraries/Audio", "destination": "libraries/Audio" },
     { "source": "libraries/AudioV2", "destination": "libraries/AudioV2" },
-    { "source": "libraries/ArduinoMDNS", "destination": "libraries/ArduinoMDNS" },
     { "source": "libraries/AzureIoT/README.md", "destination": "libraries/AzureIoT/README.md", "profiles": ["azure-iot"] },
     { "source": "libraries/AzureIoT/library.properties", "destination": "libraries/AzureIoT/library.properties", "profiles": ["azure-iot"] },
     { "source": "libraries/AzureIoT/keywords.txt", "destination": "libraries/AzureIoT/keywords.txt", "profiles": ["azure-iot"] },

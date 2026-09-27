@@ -54,13 +54,6 @@ Core package CI continues to run automatically for pull requests and pushes to
 `maintenance`. Its uploaded files are short-lived workflow artifacts for
 comparison, not published Core releases.
 
-The board package includes ArduinoMDNS 1.1.1-az3166.1 as a separate Arduino
-library, together with its LGPLv3 license and source. AZ3166 sketches can pair
-it with the WiFi library's `AZ3166MulticastUDP` transport without installing an
-additional library. The installed package exposes its copyright, provenance,
-modification, and source-availability information through
-[THIRD_PARTY_NOTICES.md](platform/az3166/THIRD_PARTY_NOTICES.md).
-
 This SDK is used to develop and prototype Internet of Things (IoT) solutions leveraging Microsoft Azure services and the **MXChip IoT DevKit** (a.k.a **DevKit**) which is an Arduino compatible board with rich peripherals and sensors.
 
 With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) with [Arduino Extension](https://marketplace.visualstudio.com) to rapidly build a full-fledged IoT application that integrates multiple services like Azure IoT Hub, Logic Apps and Cognitive Services.
@@ -74,10 +67,10 @@ With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) 
 | [src/extensions](src/extensions) | Core-hosted networking, HTTP, time, configuration, telemetry, and display services. |
 | [vendor](vendor) | Imported dependency bundles, headers, licenses, and prebuilt archives. |
 | [platform/az3166](platform/az3166) | Arduino metadata and the source-to-package map. |
-| [libraries](libraries) | Arduino library packages, including the bundled ArduinoMDNS protocol implementation. |
+| [libraries](libraries) | Arduino library packages for board features and cloud integrations. |
 | [examples](examples) | Standalone cloud, board, SPI, and I2C demonstration projects. |
 | [tests/host](tests/host) | Runtime-version, WiFiUDP, and legacy IoT-client host tests. |
-| [tests/hardware](tests/hardware) | Compile-gated device suites and manual HTTP/NTP and multicast mDNS hardware tests. |
+| [tests/hardware](tests/hardware) | Compile-gated device suites and manual HTTP/NTP hardware tests. |
 | [tools/test](tools/test) | Shared host-test and sketch compilation drivers. |
 | [tools/package](tools/package) | Validated staging, deterministic package builder, and verifier. |
 | [tools/provisioning](tools/provisioning) | Historical DICE enrollment utility; its build and runtime are not validated by maintained CI. |

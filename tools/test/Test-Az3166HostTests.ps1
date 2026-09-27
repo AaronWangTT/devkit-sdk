@@ -104,38 +104,6 @@ try {
             RunArguments = @()
             Sanitize = $true
         }
-        @{
-            Name = 'arduinomdns-utility-test'
-            Arguments = @(
-                '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
-                "$repositoryRoot/tests/host/wifi/ArduinoMdnsUtilityTest.cpp"
-            )
-            SupportArguments = @(
-                '-x', 'c', '-std=c99', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
-                '-I', "$platform/libraries/ArduinoMDNS"
-                '-c', "$platform/libraries/ArduinoMDNS/utility/EthernetUtil.c"
-            )
-            RunArguments = @()
-            Sanitize = $true
-        }
-        @{
-            Name = 'arduinomdns-parser-test'
-            Arguments = @(
-                '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
-                '-I', "$repositoryRoot/tests/host/mdns/stubs"
-                '-I', "$platform/libraries/ArduinoMDNS"
-                "$repositoryRoot/tests/host/mdns/ArduinoMdnsParserTest.cpp"
-                "$platform/libraries/ArduinoMDNS/MDNS.cpp"
-                '-Wl,--wrap=malloc'
-            )
-            SupportArguments = @(
-                '-x', 'c', '-std=c99', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
-                '-I', "$platform/libraries/ArduinoMDNS"
-                '-c', "$platform/libraries/ArduinoMDNS/utility/EthernetUtil.c"
-            )
-            RunArguments = @()
-            Sanitize = $true
-        }
         if ($layout.Profile -eq 'azure-iot') { @{
             Name = 'iot-client-test'
             Arguments = @(
