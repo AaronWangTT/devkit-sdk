@@ -24,9 +24,10 @@ request `azure-iot` explicitly for a complete Azure-enabled board package.
 Neither profile ships the original monolithic archive. It remains an immutable
 repository input to the deterministic splitter.
 
-The runtime version is prepared as 3.0.0 for the approved next-major release.
-No release tag, external index edit, or release publication is included;
-the release workflow still requires exact-tag validation and hardware approval.
+Core 3.0.0 published the first base-profile package. The runtime version is now
+prepared as 3.1.0 for the signed streaming OTA staging API. Release publication
+still requires exact-tag validation and hardware approval; the external Board
+Manager index remains a separate reviewed update.
 
 Hosted validation and review results belong to the pull request for the exact
 committed head. The local evidence below is a separate validation checkpoint.
@@ -443,4 +444,5 @@ must pass. Use `-Sketch` only for focused iteration, not release acceptance.
 No physical-board tests, live cloud operations, external index updates, or
 releases were performed. Packaging consumes committed revisions; use staging
 to validate uncommitted changes. Historical package generation remains unchanged.
-The 3.0.0 production default-profile switch is prepared but not published.
+The 3.0.0 production default-profile switch is published; subsequent 3.x
+releases retain the same profile and immutable-release contract.
