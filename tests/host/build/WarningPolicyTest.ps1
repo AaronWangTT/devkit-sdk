@@ -20,7 +20,7 @@ function Assert-WarningPolicyTest {
 
 $basePolicy = Get-Az3166WarningPolicy -BuildLock $lock -Profile base
 $fullPolicy = Get-Az3166WarningPolicy -BuildLock $lock -Profile azure-iot
-Assert-WarningPolicyTest ($basePolicy.inventorySketches.Count -eq 15 -and $fullPolicy.inventorySketches.Count -eq 18) 'Profile test inventories are incorrect.'
+Assert-WarningPolicyTest ($basePolicy.inventorySketches.Count -eq 16 -and $fullPolicy.inventorySketches.Count -eq 19) 'Profile test inventories are incorrect.'
 Assert-WarningPolicyTest ('azure-enum-type-limits' -cnotin $basePolicy.allowances.id -and
     'azure-enum-type-limits' -cin $fullPolicy.allowances.id) 'Azure allowances leaked into base policy or vanished from full policy.'
 Write-Host 'PASS explicit base/full sketch inventories and scoped Azure warning allowance'

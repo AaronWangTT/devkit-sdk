@@ -75,7 +75,7 @@ With this SDK, you can use [Visual Studio Code](https://code.visualstudio.com/) 
 | [libraries](libraries) | Arduino library packages, including the bundled ArduinoMDNS protocol implementation. |
 | [examples](examples) | Standalone cloud, board, SPI, and I2C demonstration projects. |
 | [tests/host](tests/host) | Runtime-version, WiFiUDP, and legacy IoT-client host tests. |
-| [tests/hardware](tests/hardware) | ArduinoUnit device suite and the manual HTTP/NTP stress test. |
+| [tests/hardware](tests/hardware) | Compile-gated device suites and manual HTTP/NTP and multicast mDNS hardware tests. |
 | [tools/test](tools/test) | Shared host-test and sketch compilation drivers. |
 | [tools/package](tools/package) | Validated staging, deterministic package builder, and verifier. |
 | [tools/provisioning](tools/provisioning) | Historical DICE enrollment utility; its build and runtime are not validated by maintained CI. |
