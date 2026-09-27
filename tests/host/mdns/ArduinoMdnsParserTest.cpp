@@ -319,6 +319,23 @@ bool failedInitialQueriesReleaseState()
     return true;
 }
 
+bool serviceQueryUsesFourByteTrailer()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
+    mdns.setServiceFoundCallback(ignoreService);
+
+    REQUIRE(mdns.startDiscoveringService(
+        "_http", MDNSServiceTCP, 1000) == 1);
+    REQUIRE(transport.output.size() == 34);
+    const uint8_t expectedTrailer[] = {0x00, 0x0c, 0x00, 0x01};
+    REQUIRE(std::equal(
+        expectedTrailer, expectedTrailer + sizeof(expectedTrailer),
+        transport.output.end() - sizeof(expectedTrailer)));
+    return true;
+}
+
 bool compressedQueryUsesFullPersistentOffset()
 {
     PacketTransport transport;
@@ -526,6 +543,7 @@ int main()
         {"service TXT uses DNS character-string encoding", serviceTxtUsesDnsCharacterStringEncoding},
         {"failed registration releases service slot", failedRegistrationReleasesServiceSlot},
         {"failed initial queries release state", failedInitialQueriesReleaseState},
+        {"service query uses four-byte trailer", serviceQueryUsesFourByteTrailer},
         {"truncated response name is rejected", truncatedResponseNameIsRejected},
         {"undersized PTR record is rejected", undersizedPtrRecordIsRejected},
         {"undersized SRV record is rejected", undersizedSrvRecordIsRejected},
