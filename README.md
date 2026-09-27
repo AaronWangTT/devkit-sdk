@@ -12,6 +12,11 @@ package to the Azure-independent `base` profile and adds the separate
 The Core does not depend on, bundle, or install ArduinoMDNS. Applications that
 need an mDNS responder choose and pin that dependency independently;
 HomeTemperature currently supplies its own ArduinoMDNS 1.1.0 dependency.
+Core 3.1.0 adds the transport-independent signed-package OTA staging engine.
+It authenticates package metadata before erase, performs bounded streaming
+writes and complete Flash read-back verification, and binds activation to the
+verified in-memory session. HomeTemperature HTTP and UI integration remain
+separate application work.
 
 The fork's `master` branch preserves Microsoft's archived upstream history and
 does not receive HomeTemperature maintenance changes. Submit maintained Core
@@ -41,8 +46,7 @@ and hashes, and reject a base-profile request. Working-tree changes are not
 included by `-Revision HEAD`; use staging for uncommitted source validation.
 
 A release tag on `maintenance` must match the runtime version and record its
-one intended `releaseProfile` in the package layout. Core 3.0.0 is the approved
-next-major version for the profile-based package. The manual `Core release`
+one intended `releaseProfile` in the package layout. The manual `Core release`
 workflow
 requires the matching profile and explicit hardware/firmware-review confirmation,
 runs both-profile CI at the resolved tag commit, and compares the selected
@@ -54,8 +58,9 @@ Board Manager index update; the workflow does not edit that index or consumer
 repositories. Azure users must pin an Azure-enabled version: upgrading to a newer
 base release removes Azure support. See the
 [separation and release plan](docs/azure-iot-separation-plan.md) for acceptance
-limits and the release process. The 3.0.0 source version is prepared, but no
-3.0.0 tag, release artifact, or Board Manager index entry has been published yet.
+limits and the release process. Core 3.0.0 is published as the first base-profile
+release. Core release publication does not update the separately maintained
+Board Manager index or downstream consumers.
 
 Core package CI continues to run automatically for pull requests and pushes to
 `maintenance`. Its uploaded files are short-lived workflow artifacts for

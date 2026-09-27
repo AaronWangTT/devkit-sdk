@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Existing approved numeric major-transition tag to publish
+        description: Existing approved numeric release tag to publish
         required: true
         type: string
       profile:
@@ -142,6 +142,11 @@ jobs:
           for the separately maintained Board Manager index. This workflow does not
           edit that index or upgrade downstream consumers.
           "@ | Set-Content -LiteralPath $notesPath -Encoding utf8
+          $versionNotes = "./docs/core-$env:RELEASE_VERSION-release-notes.md"
+          if (Test-Path -LiteralPath $versionNotes -PathType Leaf) {
+            Add-Content -LiteralPath $notesPath -Value "`n## Release highlights`n"
+            Get-Content -Raw -LiteralPath $versionNotes | Add-Content -LiteralPath $notesPath
+          }
           gh release create $env:RELEASE_VERSION $env:PACKAGE_PATH $env:METADATA_PATH `
             --repo $env:GITHUB_REPOSITORY --verify-tag `
             --title "AZ3166 Core $env:RELEASE_VERSION ($env:RELEASE_PROFILE)" --notes-file $notesPath --latest
