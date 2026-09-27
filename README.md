@@ -100,11 +100,16 @@ and telemetry stub have no cloud behavior.
 AzureIoT owns [its serial logging helpers](libraries/AzureIoT/src/SerialLog.h),
 which now compile only when that library is selected. The header name and C
 function names are unchanged; an external sketch including this header now
-selects AzureIoT instead of finding it in the Core. The
-[OTA library](libraries/OTA/library.properties) similarly provides
-[OTAFirmwareUpdate.h](libraries/OTA/src/OTAFirmwareUpdate.h) on demand, using
-the Core HTTP client and board flash services. This relocation does not change
-or validate OTA runtime behavior.
+selects AzureIoT instead of finding it in the Core. The [OTA library](libraries/OTA/library.properties) provides the
+transport-independent signed-package staging API in
+[OTAStaging.h](libraries/OTA/src/OTAStaging.h). It validates authenticated
+metadata before erase, streams the raw image into the runtime OTA partition,
+verifies a complete Flash read-back, and binds activation to the current
+in-memory session. See the [OTA library guide](libraries/OTA/README.md) for the
+package format, state/error contract, cancellation bounds, and recovery limits.
+The original [OTAFirmwareUpdate.h](libraries/OTA/src/OTAFirmwareUpdate.h)
+URL downloader remains a separately documented deprecated unsigned raw-image
+compatibility path.
 
 The HTTP client carries its unchanged third-party
 [http-parser snapshot](src/extensions/http-client/http_parser), including the
@@ -123,8 +128,8 @@ are currently ignored in base builds.
 
 Core package CI runs package-map contract tests on Windows and Ubuntu. It uses
 [Test-Az3166HostTests.ps1](tools/test/Test-Az3166HostTests.ps1) to execute the
-runtime-version, timer, base/full configuration, WiFiUDP, and legacy IoT-client
-harnesses on Ubuntu. Base runs four programs and full runs six, with
+runtime-version, timer, base/full configuration, WiFiUDP, OTA staging, and
+legacy IoT-client harnesses on Ubuntu. Tests run with
 AddressSanitizer and UndefinedBehaviorSanitizer where supported. Client tests use dependency fakes;
 configuration tests also exercise the real multipart helper. They do not execute
 the ARM-only vendor libraries or the real JSON parser. The corresponding checks
