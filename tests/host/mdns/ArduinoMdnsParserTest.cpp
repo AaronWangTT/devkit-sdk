@@ -182,6 +182,21 @@ bool failedNameReplacementPreservesObject()
     return true;
 }
 
+bool invalidServiceNamesAreRejected()
+{
+    PacketTransport transport;
+    MDNS mdns(transport, false);
+    REQUIRE(mdns.begin(IPAddress(192, 0, 2, 10), "az3166") == 1);
+    int sendsBeforeInvalidNames = transport.sends;
+
+    REQUIRE(mdns.addServiceRecord("http", 80, MDNSServiceTCP) == 0);
+    REQUIRE(mdns.addServiceRecord(".http", 80, MDNSServiceTCP) == 0);
+    REQUIRE(mdns.addServiceRecord("http.", 80, MDNSServiceTCP) == 0);
+    REQUIRE(transport.sends == sendsBeforeInvalidNames);
+    REQUIRE(mdns.addServiceRecord("device._http", 80, MDNSServiceTCP) == 1);
+    return true;
+}
+
 bool truncatedResponseNameIsRejected()
 {
     PacketTransport transport;
@@ -334,6 +349,7 @@ int main()
     const TestCase tests[] = {
         {"removing missing service record is safe", removingMissingServiceRecordIsSafe},
         {"failed name replacement preserves object", failedNameReplacementPreservesObject},
+        {"invalid service names are rejected", invalidServiceNamesAreRejected},
         {"truncated response name is rejected", truncatedResponseNameIsRejected},
         {"undersized PTR record is rejected", undersizedPtrRecordIsRejected},
         {"undersized SRV record is rejected", undersizedSrvRecordIsRejected},

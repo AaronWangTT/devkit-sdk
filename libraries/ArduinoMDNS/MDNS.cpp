@@ -1241,8 +1241,13 @@ int MDNS::addServiceRecord(const char* name, uint16_t port,
 {
    int i, status = 0;
    MDNSServiceRecord_t* record = NULL;
+   const char* separator = NULL;
       
-   if (NULL != name && 0 != port) {
+   if (NULL != name)
+      separator = strrchr(name, '.');
+
+   if (NULL != separator && separator != name && '\0' != separator[1] &&
+       0 != port && (MDNSServiceTCP == proto || MDNSServiceUDP == proto)) {
       for (i=0; i < NumMDNSServiceRecords; i++) {
          if (NULL == this->_serviceRecords[i]) {
             record = (MDNSServiceRecord_t*)my_malloc(sizeof(MDNSServiceRecord_t));
