@@ -254,6 +254,10 @@ bool multipleWritesProduceOneDatagram()
     const uint8_t expected[] = {1, 2, 3, 4, 5};
     REQUIRE(fakeSocket.sent ==
             std::vector<uint8_t>(expected, expected + sizeof(expected)));
+    REQUIRE(udp.endPacket() == 0);
+    REQUIRE(fakeSocket.sendCalls == 1);
+    REQUIRE(udp.write(first, sizeof(first)) == 0);
+    REQUIRE(fakeSocket.sendCalls == 1);
     return true;
 }
 

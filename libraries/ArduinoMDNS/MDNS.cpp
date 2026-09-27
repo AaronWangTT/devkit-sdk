@@ -82,6 +82,13 @@ typedef enum _DNSOpCode_t {
    DNSOpUpdate    = 5
 } DNSOpCode_t;
 
+static bool packetHasBytes(int offset, size_t count, uint16_t packetLength)
+{
+   return offset >= 0 &&
+      static_cast<size_t>(offset) <= packetLength &&
+      count <= packetLength - static_cast<size_t>(offset);
+}
+
 // for some reason, I get data corruption issues with normal malloc() on arduino 0017
 void* my_malloc(unsigned s)
 {
@@ -549,6 +556,8 @@ MDNSError_t MDNS::_processMDNSQuery()
    uint8_t recordsFound[2];
    uint8_t wantsIPv6Addr = 0;
    uint8_t * udpBuffer = NULL;
+   uint8_t* ptrNames[MDNS_MAX_SERVICES_PER_PACKET] = {};
+   uint8_t* servTxt[MDNS_MAX_SERVICES_PER_PACKET] = {};
    uintptr_t ptr;
 
    memset(recordsAskedFor, 0, sizeof(uint8_t)*(NumMDNSServiceRecords+2));
@@ -737,14 +746,11 @@ MDNSError_t MDNS::_processMDNSQuery()
          uint8_t* buf = (uint8_t*)dnsHeader;
          int rLen = 0, tLen = 0;
          
-         uint8_t* ptrNames[MDNS_MAX_SERVICES_PER_PACKET];
          uint16_t ptrOffsets[MDNS_MAX_SERVICES_PER_PACKET];
          uint16_t ptrPorts[MDNS_MAX_SERVICES_PER_PACKET];
          uint8_t ptrIPs[MDNS_MAX_SERVICES_PER_PACKET];
          uint8_t servIPs[MDNS_MAX_SERVICES_PER_PACKET][5];
-         uint8_t* servTxt[MDNS_MAX_SERVICES_PER_PACKET];
          memset(servIPs, 0, sizeof(uint8_t)*MDNS_MAX_SERVICES_PER_PACKET*5);
-         memset(servTxt, 0, sizeof(uint8_t*)*MDNS_MAX_SERVICES_PER_PACKET);
          
          const uint8_t* ptrNamesCmp[MDNS_MAX_SERVICES_PER_PACKET];
          int ptrLensCmp[MDNS_MAX_SERVICES_PER_PACKET];
@@ -792,13 +798,20 @@ MDNSError_t MDNS::_processMDNSQuery()
             tLen = 0;
                         
             do {
+               if (!packetHasBytes(offset, 1, udp_len)) {
+                  statusCode = MDNSInvalidArgument;
+                  goto errorReturn;
+               }
             	memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,1);
                offset += 1;
                rLen = buf[0];
                tLen += 1;
             
-               if (rLen > 128) { // handle DNS name compression, kinda, sorta...
-
+               if ((rLen & 0xc0) == 0xc0) { // handle DNS name compression, kinda, sorta...
+                  if (!packetHasBytes(offset, 1, udp_len)) {
+                     statusCode = MDNSInvalidArgument;
+                     goto errorReturn;
+                  }
             	   memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,1);
                   offset += 1;
 
@@ -816,6 +829,10 @@ MDNSError_t MDNS::_processMDNSQuery()
                   if (0 == firstNamePtrByte)
                      firstNamePtrByte = buf[0];
                } else if (rLen > 0) {
+                  if (rLen > 63 || !packetHasBytes(offset, rLen, udp_len)) {
+                     statusCode = MDNSInvalidArgument;
+                     goto errorReturn;
+                  }
                   if (i < qCnt)
                      offset += rLen;
                   else {
@@ -863,36 +880,58 @@ MDNSError_t MDNS::_processMDNSQuery()
             // check whether this is an A record query (for our own name) or a PTR record query
             // (for one of our services).
             // if so, we'll note to send a record
-            if (i < qCnt)
+            if (i < qCnt) {
+               if (!packetHasBytes(offset, 4, udp_len)) {
+                  statusCode = MDNSInvalidArgument;
+                  goto errorReturn;
+               }
                offset += 4;
+            }
             else if (i >= qCnt) {               
                if (i >= qCnt + aCnt && !checkAARecords)
                   break;
                
                uint8_t packetHandled = 0;
 
+               if (!packetHasBytes(offset, 4, udp_len)) {
+                  statusCode = MDNSInvalidArgument;
+                  goto errorReturn;
+               }
                memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,4);
                offset += 4;
+               uint8_t recordType = buf[1];
+               uint8_t recordClassHigh = buf[2];
+               uint8_t recordClassLow = buf[3];
+               uint16_t recordNameOffset = offset - 4 - tLen;
+
+               if (!packetHasBytes(offset, 6, udp_len)) {
+                  statusCode = MDNSInvalidArgument;
+                  goto errorReturn;
+               }
+               memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,6);
+               offset += 6;
+               uint16_t dataLen = ethutil_ntohs(*(uint16_t*)&buf[4]);
+               if (!packetHasBytes(offset, dataLen, udp_len)) {
+                  statusCode = MDNSInvalidArgument;
+                  goto errorReturn;
+               }
+
                if (i < qCnt+aCnt) {
                   for (j=0; j<2; j++) {
                      if (0 == servNamePos[j])
-                        servNamePos[j] = offset - 4 - tLen;
+                        servNamePos[j] = recordNameOffset;
                                       
                      if (servNames[j] &&
                          ((servMatches[j] && 0 == servLens[j]) ||
                          (partMatched[j] && lastWasCompressed[j]) ||
                          (servWasCompressed[j] && servMatches[j]))) { // somewhat handle compression by guessing
                                              
-                        if (buf[0] == 0 && buf[1] == ((0 == j) ? 0x01 : 0x0c) &&
-                           (buf[2] == 0x00 || buf[2] == 0x80) && buf[3] == 0x01) {
+                        if (recordType == ((0 == j) ? 0x01 : 0x0c) &&
+                           (recordClassHigh == 0x00 || recordClassHigh == 0x80) &&
+                           recordClassLow == 0x01) {
                            recordsFound[j] = 1;
                         
                            // this is an A or PTR type response. Parse it as such.
-
-                           memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,6);
-                           offset += 6;
-                           //uint32_t ttl = ethutil_ntohl(*(uint32_t*)buf);
-                           uint16_t dataLen = ethutil_ntohs(*(uint16_t*)&buf[4]);
                         
                            if (0 == j && 4 == dataLen) {
                               // ok, this is the IP address. report it via callback.
@@ -901,7 +940,7 @@ MDNSError_t MDNS::_processMDNSQuery()
                               
                               this->_finishedResolvingName((char*)this->_resolveNames[0],
                                                            (const byte*)buf);
-                           } else if (1 == j) {
+                           } else if (1 == j && dataLen >= 3) {
                               uint8_t k;
                               for (k=0; k<MDNS_MAX_SERVICES_PER_PACKET; k++)
                                  if (NULL == ptrNames[k])
@@ -936,18 +975,12 @@ MDNSError_t MDNS::_processMDNSQuery()
                   }
                } else if (i >= (unsigned int)(qCnt+aCnt+aaCnt)) {
                   //  check whether we find a service description
-                  if (buf[1] == 0x21) {
+                  if (recordType == 0x21) {
                      for (j=0; j<MDNS_MAX_SERVICES_PER_PACKET; j++) {
                         if (ptrNames[j] &&
                               ((firstNamePtrByte && firstNamePtrByte == ptrOffsets[j]) ||
                               (0 == ptrLensCmp[j] && ptrNamesMatches[j]))) {
                            // we have found the matching SRV location packet to a previous SRV domain
-
-                        	memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,6);
-                           offset += 6;
-
-                           //uint32_t ttl = ethutil_ntohl(*(uint32_t*)buf);
-                           uint16_t dataLen = ethutil_ntohs(*(uint16_t*)&buf[4]);
 
                            if (dataLen >= 8) {
 
@@ -966,19 +999,12 @@ MDNSError_t MDNS::_processMDNSQuery()
                            break;
                         }
                      }
-                 } else if (buf[1] == 0x10) { // txt record
+                 } else if (recordType == 0x10) { // txt record
                      for (j=0; j<MDNS_MAX_SERVICES_PER_PACKET; j++) {
                         if (ptrNames[j] &&
                               ((firstNamePtrByte && firstNamePtrByte == ptrOffsets[j]) ||
                               (0 == ptrLensCmp[j] && ptrNamesMatches[j]))) {
 
-
-                        	memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,6);
-                           offset += 6;
-
-                           //uint32_t ttl = ethutil_ntohl(*(uint32_t*)buf);
-                           uint16_t dataLen = ethutil_ntohs(*(uint16_t*)&buf[4]);
-                        
                            // if there's a content to this txt record, save it for delivery
                            if (dataLen > 1 && NULL == servTxt[j]) {
                               servTxt[j] = (uint8_t*)my_malloc(dataLen+1);
@@ -996,15 +1022,11 @@ MDNSError_t MDNS::_processMDNSQuery()
                            break;
                         }
                      }
-                  } else if (buf[1] == 0x01) { // A record (IPv4 address)                     
+                  } else if (recordType == 0x01) { // A record (IPv4 address)
                      for (j=0; j<MDNS_MAX_SERVICES_PER_PACKET; j++) {
                         if (0 == servIPs[j][0]) {
                            servIPs[j][0] = firstNamePtrByte ? firstNamePtrByte : 255;
 
-                           memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset) ,6);
-                           offset += 6;
-
-                           uint16_t dataLen = ethutil_ntohs(*(uint16_t*)&buf[4]);
                            if (4 == dataLen) {
                         	  memcpy((uint8_t*)&servIPs[j][1], (uint16_t*)(ptr+offset) ,4);
                            }
@@ -1019,9 +1041,7 @@ MDNSError_t MDNS::_processMDNSQuery()
                
                // eat the answer
                if (!packetHandled) {
-            	   offset += 4; // ttl
-            	   memcpy((uint8_t*)buf, (uint16_t*)(ptr+offset), 2);
-            	   offset += 2 + ethutil_ntohs(*(uint16_t*)buf); // skip over content
+            	   offset += dataLen;
                }
             }
          }
@@ -1065,19 +1085,18 @@ MDNSError_t MDNS::_processMDNSQuery()
             *p = '.';
          }
    
-         uint8_t k;
-         for (k=0; k<MDNS_MAX_SERVICES_PER_PACKET; k++)
-            if (NULL != ptrNames[k]) {
-               my_free(ptrNames[k]);
-               if (NULL != servTxt[k])
-                  my_free(servTxt[k]);
-            }
    }
 
 #endif // (defined(HAS_SERVICE_REGISTRATION) && HAS_SERVICE_REGISTRATION) || (defined(HAS_NAME_BROWSING) && HAS_NAME_BROWSING)
 
 errorReturn:
 
+   for (i=0; i<MDNS_MAX_SERVICES_PER_PACKET; i++) {
+      if (NULL != ptrNames[i])
+         my_free(ptrNames[i]);
+      if (NULL != servTxt[i])
+         my_free(servTxt[i]);
+   }
    my_free(udpBuffer);
 
 #if defined(_USE_MALLOC_) 
@@ -1086,7 +1105,7 @@ errorReturn:
 #endif
    
    // now, handle the requests
-   for (j=0; j<NumMDNSServiceRecords+2; j++) {
+   for (j=0; statusCode == MDNSSuccess && j<NumMDNSServiceRecords+2; j++) {
       if (recordsAskedFor[j]) {
          if (0 == j)
             (void)this->_sendMDNSMessage(this->_udp->remoteIP(), xid, (int)MDNSPacketTypeMyIPAnswer, 0);
@@ -1100,7 +1119,7 @@ errorReturn:
    }
    
    // if we were asked for our IPv6 address, say that we don't have any
-   if (wantsIPv6Addr)
+   if (statusCode == MDNSSuccess && wantsIPv6Addr)
       (void)this->_sendMDNSMessage(this->_udp->remoteIP(), xid, (int)MDNSPacketTypeNoIPv6AddrAvailable, 0);
    
    return statusCode;

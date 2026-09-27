@@ -38,6 +38,7 @@ AZ3166MulticastUDP::AZ3166MulticastUDP()
       receiveLength_(0),
       receiveOffset_(0),
       sendLength_(0),
+      packetActive_(false),
       overflow_(false),
       failed_(false)
 {
@@ -116,6 +117,7 @@ void AZ3166MulticastUDP::stop()
     }
     socket_ = -1;
     receiveLength_ = receiveOffset_ = sendLength_ = 0;
+    packetActive_ = false;
     overflow_ = failed_ = false;
 }
 
@@ -124,13 +126,15 @@ int AZ3166MulticastUDP::beginPacket(IPAddress address, uint16_t port)
     destination_ = address;
     destinationPort_ = port;
     sendLength_ = 0;
+    packetActive_ = socket_ >= 0 && port != 0;
     overflow_ = false;
-    return socket_ >= 0 && port != 0;
+    return packetActive_;
 }
 
 size_t AZ3166MulticastUDP::write(const uint8_t *buffer, size_t size)
 {
-    if (buffer == NULL || overflow_ || size > sizeof(sendBuffer_) - sendLength_)
+    if (!packetActive_ || buffer == NULL || overflow_ ||
+        size > sizeof(sendBuffer_) - sendLength_)
     {
         overflow_ = true;
         return 0;
@@ -142,9 +146,11 @@ size_t AZ3166MulticastUDP::write(const uint8_t *buffer, size_t size)
 
 int AZ3166MulticastUDP::endPacket()
 {
-    if (socket_ < 0 || overflow_ || sendLength_ == 0)
+    if (!packetActive_ || socket_ < 0 || overflow_ || sendLength_ == 0)
     {
         failed_ = true;
+        packetActive_ = false;
+        sendLength_ = 0;
         return 0;
     }
 
@@ -159,8 +165,12 @@ int AZ3166MulticastUDP::endPacket()
     if (sent != static_cast<int>(sendLength_))
     {
         failed_ = true;
+        packetActive_ = false;
+        sendLength_ = 0;
         return 0;
     }
+    packetActive_ = false;
+    sendLength_ = 0;
     return 1;
 }
 

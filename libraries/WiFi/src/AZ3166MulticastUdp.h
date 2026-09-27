@@ -55,6 +55,7 @@ private:
     size_t receiveLength_;
     size_t receiveOffset_;
     size_t sendLength_;
+    bool packetActive_;
     bool overflow_;
     bool failed_;
     uint8_t receiveBuffer_[AZ3166_MULTICAST_UDP_RX_CAPACITY];
