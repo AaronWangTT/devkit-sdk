@@ -11,9 +11,9 @@ function Assert-ReleaseTest {
 }
 
 $request = @{
-    Version = '3.1.0'
+    Version = '3.1.1'
     Profile = 'base'
-    CoreVersion = '3.1.0'
+    CoreVersion = '3.1.1'
     LegacyVersion = '2.0.2'
     LayoutManifest = [pscustomobject]@{ schemaVersion = 2; defaultProfile = 'base'; releaseProfile = 'base' }
 }
@@ -24,9 +24,9 @@ Assert-Az3166ReleaseRequest @request
 Write-Host 'PASS explicit base and full profile-release requests'
 
 foreach ($mutation in @(
-    { param($value) $value.Version = '03.1.0' }
-    { param($value) $value.Version = '3.1.0-preview' }
-    { param($value) $value.CoreVersion = '3.1.1' }
+    { param($value) $value.Version = '03.1.1' }
+    { param($value) $value.Version = '3.1.1-preview' }
+    { param($value) $value.CoreVersion = '3.1.0' }
     { param($value) $value.Version = '2.1.0'; $value.CoreVersion = '2.1.0' }
     { param($value) $value.Version = '4.0.0'; $value.CoreVersion = '4.0.0' }
     { param($value) $value.Profile = 'unknown' }
@@ -49,12 +49,12 @@ Write-Host 'PASS profile mismatch, unapproved version line, missing tag metadata
 $root = Join-Path ([IO.Path]::GetTempPath()) "az3166-release-$([guid]::NewGuid().ToString('N'))"
 try {
     $null = New-Item -ItemType Directory -Path $root
-    $packagePath = Join-Path $root 'AZ3166-3.1.0-base.zip'
+    $packagePath = Join-Path $root 'AZ3166-3.1.1-base.zip'
     [IO.File]::WriteAllBytes($packagePath, [byte[]]@(1, 2, 3, 4))
     $hash = (Get-FileHash -LiteralPath $packagePath).Hash.ToLowerInvariant()
-    $arguments = @{ Version = '3.1.0'; Profile = 'base'; Revision = 'a' * 40; Repository = 'AaronWangTT/devkit-sdk'; PackagePath = $packagePath; ExpectedSHA256 = $hash }
+    $arguments = @{ Version = '3.1.1'; Profile = 'base'; Revision = 'a' * 40; Repository = 'AaronWangTT/devkit-sdk'; PackagePath = $packagePath; ExpectedSHA256 = $hash }
     $metadata = New-Az3166ReleaseMetadata @arguments
-    Assert-ReleaseTest ($metadata.boardManagerUpdate.url -ceq 'https://github.com/AaronWangTT/devkit-sdk/releases/download/3.1.0/AZ3166-3.1.0-base.zip') 'Incorrect immutable index URL.'
+    Assert-ReleaseTest ($metadata.boardManagerUpdate.url -ceq 'https://github.com/AaronWangTT/devkit-sdk/releases/download/3.1.1/AZ3166-3.1.1-base.zip') 'Incorrect immutable index URL.'
     Assert-ReleaseTest ($metadata.boardManagerUpdate.checksum -ceq "SHA-256:$hash" -and $metadata.boardManagerUpdate.size -ceq '4') 'Incorrect index hash or size.'
     foreach ($mutation in @(
         { param($value) $value.ExpectedSHA256 = '0' * 64 }
@@ -75,9 +75,11 @@ $workflow = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot '.github/wo
 foreach ($required in @('needs: [prepare, validate]', 'uses: ./.github/workflows/core-package-ci.yml',
     'revision: ${{ needs.prepare.outputs.revision }}', 'Assert-Az3166ReleaseRequest', 'New-Az3166ReleaseMetadata',
     'hardware_validated:', 'Release tag moved after validation', 'Release archive differs from the artifact validated by CI.',
-    'docs/core-$env:RELEASE_VERSION-release-notes.md', '## Release highlights')) {
+    'docs/core-$env:RELEASE_VERSION-release-notes.md', 'Release notes are required for the exact release version.',
+    '## Release highlights')) {
     Assert-ReleaseTest ($workflow.Contains($required)) "Missing release gate: $required"
 }
+Assert-ReleaseTest (Test-Path -LiteralPath (Join-Path $repositoryRoot 'docs/core-3.1.1-release-notes.md') -PathType Leaf) 'Missing exact 3.1.1 release notes.'
 Assert-ReleaseTest (-not $workflow.Contains('--clobber') -and $workflow.Contains('gh release create')) 'Release workflow may overwrite published artifacts.'
 Write-Host 'PASS publication requires exact-revision validation, hardware confirmation, profile match, and immutable artifact identity'
 Write-Host '4 release-profile contract groups passed.'

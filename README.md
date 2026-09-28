@@ -12,7 +12,9 @@ package to the Azure-independent `base` profile and adds the separate
 The Core does not depend on, bundle, or install ArduinoMDNS. Applications that
 need an mDNS responder choose and pin that dependency independently;
 HomeTemperature currently supplies its own ArduinoMDNS 1.1.0 dependency.
-Core 3.1.0 adds the transport-independent signed-package OTA staging engine.
+Core 3.1.1 provides the transport-independent signed-package OTA staging engine
+and the directly tested production P-256 signature adapter. It supersedes
+Core 3.1.0, which must not be indexed for HomeTemperature.
 It authenticates package metadata before erase, performs bounded streaming
 writes and complete Flash read-back verification, and binds activation to the
 verified in-memory session. HomeTemperature HTTP and UI integration remain
