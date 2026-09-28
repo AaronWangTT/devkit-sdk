@@ -11,7 +11,7 @@ package to the Azure-independent `base` profile and adds the separate
 `AZ3166MulticastUDP` transport used by multicast protocols such as mDNS.
 The Core does not depend on, bundle, or install ArduinoMDNS. Applications that
 need an mDNS responder choose and pin that dependency independently;
-HomeTemperature currently supplies its own ArduinoMDNS 1.1.0 dependency.
+HomeTemperature currently supplies its own ArduinoMDNS 1.1.1 dependency.
 Core 3.1.2 provides the transport-independent signed-package OTA staging engine
 and the directly tested production P-256 signature adapter. It supersedes the
 mutable Core 3.1.0 and 3.1.1 releases, which must not be indexed for

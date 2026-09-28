@@ -278,9 +278,11 @@ identity, not as an add-on or parallel Board Manager product.
 
 The workflow refuses publication on the old major-version line and requires
 explicit, default-off `hardware_validated` confirmation covering board acceptance
-and original-versus-split firmware review. It calls the two-profile CI workflow
-at the resolved tag commit, rebuilds the selected package, and checks equality
-to CI's artifact before publication. It rechecks the remote tag and uses
+and original-versus-split firmware review. It also requires
+`release_immutability_confirmed: true` after verifying the repository's release
+immutability setting. It calls the two-profile CI workflow at the resolved tag
+commit, rebuilds the selected package, and checks equality to CI's artifact
+before publication. It rechecks the remote tag and uses
 `gh release create`, never overwrite/clobber operations.
 
 [The release helper](../tools/package/Az3166Release.ps1) emits
