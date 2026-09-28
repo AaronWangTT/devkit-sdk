@@ -110,8 +110,11 @@ try {
                 '-std=c++11', '-O1', '-g', '-Wall', '-Wextra', '-Werror'
                 '-I', "$platform/libraries/OTA/src"
                 "$repositoryRoot/tests/host/ota/OTAStagingTest.cpp"
-                if ($IsWindows) { '-DOTA_STAGING_SKIP_OPENSSL_KAT' }
-                else { '-lcrypto' }
+                if (-not $IsWindows) {
+                    '-DOTA_STAGING_SIGNATURE_KAT'
+                    "$platform/libraries/OTA/src/OTAStagingSignature.cpp"
+                    '-lmbedcrypto'
+                }
             )
             RunArguments = @()
             Sanitize = $true

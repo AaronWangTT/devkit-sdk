@@ -5,11 +5,6 @@
 #include <cstring>
 #include <vector>
 
-#if !defined(_WIN32) && !defined(OTA_STAGING_SKIP_OPENSSL_KAT)
-#include <openssl/evp.h>
-#include <openssl/x509.h>
-#endif
-
 #define OTA_STAGING_TEST
 #include "../../../libraries/OTA/src/OTAStaging.cpp"
 
@@ -374,8 +369,8 @@ void testSha256KnownAnswer()
     CHECK(crc == 0x31C3);
 }
 
-#if !defined(_WIN32) && !defined(OTA_STAGING_SKIP_OPENSSL_KAT)
-void testP256KnownAnswer()
+#ifdef OTA_STAGING_SIGNATURE_KAT
+void testProductionSignatureAdapter()
 {
     static const uint8_t publicKeyDer[91] = {
         0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02,
@@ -393,35 +388,67 @@ void testP256KnownAnswer()
         0xB0, 0x03, 0x61, 0xA3, 0x96, 0x17, 0x7A, 0x9C,
         0xB4, 0x10, 0xFF, 0x61, 0xF2, 0x00, 0x15, 0xAD
     };
-    static const uint8_t signatureDer[70] = {
-        0x30, 0x44, 0x02, 0x20,
+    static const uint8_t signature[64] = {
         0x0A, 0x0A, 0xE3, 0x0C, 0x0A, 0xBA, 0x64, 0x10,
         0xA9, 0x20, 0xFC, 0x71, 0xB7, 0x1C, 0x0C, 0x04,
         0x90, 0xA5, 0xB9, 0xAD, 0xE5, 0x8B, 0x8F, 0x29,
         0xF3, 0x5C, 0xDD, 0x27, 0x62, 0x1A, 0x29, 0x44,
-        0x02, 0x20,
         0x46, 0x06, 0x68, 0x04, 0x1B, 0x71, 0x16, 0x6E,
         0x13, 0xBD, 0x8D, 0x09, 0xE9, 0xB4, 0x89, 0x81,
         0x59, 0xA2, 0xC0, 0xE6, 0xBB, 0x18, 0xE7, 0x86,
         0x90, 0xDC, 0xE5, 0xA7, 0x19, 0x97, 0x0B, 0x4D
     };
+    static const uint8_t otherPublicKeyDer[91] = {
+        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02,
+        0x01, 0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0x03,
+        0x42, 0x00, 0x04, 0x7C, 0xF2, 0x7B, 0x18, 0x8D, 0x03, 0x4F, 0x7E, 0x8A,
+        0x52, 0x38, 0x03, 0x04, 0xB5, 0x1A, 0xC3, 0xC0, 0x89, 0x69, 0xE2, 0x77,
+        0xF2, 0x1B, 0x35, 0xA6, 0x0B, 0x48, 0xFC, 0x47, 0x66, 0x99, 0x78, 0x07,
+        0x77, 0x55, 0x10, 0xDB, 0x8E, 0xD0, 0x40, 0x29, 0x3D, 0x9A, 0xC6, 0x9F,
+        0x74, 0x30, 0xDB, 0xBA, 0x7D, 0xAD, 0xE6, 0x3C, 0xE9, 0x82, 0x29, 0x9E,
+        0x04, 0xB7, 0x9D, 0x22, 0x78, 0x73, 0xD1
+    };
 
-    const unsigned char *cursor = publicKeyDer;
-    EVP_PKEY *key = d2i_PUBKEY(NULL, &cursor, sizeof(publicKeyDer));
-    EVP_PKEY_CTX *context = key == NULL ? NULL : EVP_PKEY_CTX_new(key, NULL);
-    bool verified =
-        context != NULL &&
-        EVP_PKEY_verify_init(context) == 1 &&
-        EVP_PKEY_CTX_set_signature_md(context, EVP_sha256()) == 1 &&
-        EVP_PKEY_verify(
-            context,
-            signatureDer,
-            sizeof(signatureDer),
-            digest,
-            sizeof(digest)) == 1;
-    CHECK(verified);
-    EVP_PKEY_CTX_free(context);
-    EVP_PKEY_free(key);
+    CHECK(OTAStagingVerifySignature(
+              publicKeyDer,
+              sizeof(publicKeyDer),
+              digest,
+              signature) == 0);
+
+    uint8_t tamperedSignature[sizeof(signature)];
+    memcpy(tamperedSignature, signature, sizeof(signature));
+    tamperedSignature[63] ^= 1;
+    CHECK(OTAStagingVerifySignature(
+              publicKeyDer,
+              sizeof(publicKeyDer),
+              digest,
+              tamperedSignature) != 0);
+
+    uint8_t tamperedDigest[sizeof(digest)];
+    memcpy(tamperedDigest, digest, sizeof(digest));
+    tamperedDigest[0] ^= 1;
+    CHECK(OTAStagingVerifySignature(
+              publicKeyDer,
+              sizeof(publicKeyDer),
+              tamperedDigest,
+              signature) != 0);
+
+    CHECK(OTAStagingVerifySignature(
+              otherPublicKeyDer,
+              sizeof(otherPublicKeyDer),
+              digest,
+              signature) != 0);
+
+    uint8_t malformedKey[sizeof(publicKeyDer)];
+    memcpy(malformedKey, publicKeyDer, sizeof(publicKeyDer));
+    malformedKey[0] ^= 1;
+    CHECK(OTAStagingVerifySignature(
+              malformedKey,
+              sizeof(malformedKey),
+              digest,
+              signature) == -2);
+
+    CHECK(OTAStagingVerifySignature(NULL, 0, digest, signature) == -2);
 }
 #endif
 
@@ -683,8 +710,8 @@ const OTAStagingPlatformOperations *OTAStagingDefaultPlatform(void)
 int main()
 {
     testSha256KnownAnswer();
-#if !defined(_WIN32) && !defined(OTA_STAGING_SKIP_OPENSSL_KAT)
-    testP256KnownAnswer();
+#ifdef OTA_STAGING_SIGNATURE_KAT
+    testProductionSignatureAdapter();
 #endif
     testArbitraryChunkingAndActivation();
     testPreEraseRejections();
