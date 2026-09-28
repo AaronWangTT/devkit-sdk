@@ -164,6 +164,10 @@ jobs:
           }
           $result | Format-List
 
+      - name: Install host signature-test dependency
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes libmbedtls-dev
+
       - name: Run Core host tests
         if: runner.os == 'Linux'
         shell: pwsh

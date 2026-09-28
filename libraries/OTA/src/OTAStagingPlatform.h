@@ -43,6 +43,12 @@ struct OTAStagingPlatformOperations
     int (*readPersistedBootTable)(OTAStagingBootTable *bootTable);
 };
 
+int OTAStagingVerifySignature(
+    const uint8_t *publicKeyDer,
+    size_t publicKeyDerSize,
+    const uint8_t digest[32],
+    const uint8_t signature[64]);
+
 const OTAStagingPlatformOperations *OTAStagingDefaultPlatform(void);
 
 #ifdef OTA_STAGING_TEST

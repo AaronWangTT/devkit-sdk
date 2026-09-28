@@ -6,9 +6,6 @@
 #include <string.h>
 
 #include "mico.h"
-#include "mbedtls/ecdsa.h"
-#include "mbedtls/pk.h"
-#include "mbedtls/sha256.h"
 
 static_assert(
     sizeof(OTAStagingBootTable) == sizeof(boot_table_t),
@@ -70,47 +67,6 @@ static uint32_t timeMs(void)
     return mico_rtos_get_time();
 }
 
-static int verifySignature(
-    const uint8_t *publicKeyDer,
-    size_t publicKeyDerSize,
-    const uint8_t digest[32],
-    const uint8_t signature[64])
-{
-    int result = -1;
-    mbedtls_pk_context key;
-    mbedtls_mpi r;
-    mbedtls_mpi s;
-    mbedtls_ecp_keypair *ec = NULL;
-    mbedtls_pk_init(&key);
-    mbedtls_mpi_init(&r);
-    mbedtls_mpi_init(&s);
-
-    if (mbedtls_pk_parse_public_key(&key, publicKeyDer, publicKeyDerSize) != 0 ||
-        !mbedtls_pk_can_do(&key, MBEDTLS_PK_ECDSA))
-    {
-        result = -2;
-        goto cleanup;
-    }
-
-    ec = mbedtls_pk_ec(key);
-    if (ec == NULL || ec->grp.id != MBEDTLS_ECP_DP_SECP256R1 ||
-        mbedtls_ecp_check_pubkey(&ec->grp, &ec->Q) != 0 ||
-        mbedtls_mpi_read_binary(&r, signature, 32) != 0 ||
-        mbedtls_mpi_read_binary(&s, signature + 32, 32) != 0)
-    {
-        result = -2;
-        goto cleanup;
-    }
-
-    result = mbedtls_ecdsa_verify(&ec->grp, digest, 32, &ec->Q, &r, &s);
-
-cleanup:
-    mbedtls_mpi_free(&s);
-    mbedtls_mpi_free(&r);
-    mbedtls_pk_free(&key);
-    return result;
-}
-
 static int readPersistedBootTable(OTAStagingBootTable *bootTable);
 
 static int readBootTable(OTAStagingBootTable *bootTable)
@@ -167,7 +123,7 @@ const OTAStagingPlatformOperations *OTAStagingDefaultPlatform(void)
         writeOta,
         readOta,
         timeMs,
-        verifySignature,
+        OTAStagingVerifySignature,
         readBootTable,
         writeBootTable,
         readPersistedBootTable
