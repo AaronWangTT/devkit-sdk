@@ -12,9 +12,10 @@ package to the Azure-independent `base` profile and adds the separate
 The Core does not depend on, bundle, or install ArduinoMDNS. Applications that
 need an mDNS responder choose and pin that dependency independently;
 HomeTemperature currently supplies its own ArduinoMDNS 1.1.0 dependency.
-Core 3.1.1 provides the transport-independent signed-package OTA staging engine
-and the directly tested production P-256 signature adapter. It supersedes
-Core 3.1.0, which must not be indexed for HomeTemperature.
+Core 3.1.2 provides the transport-independent signed-package OTA staging engine
+and the directly tested production P-256 signature adapter. It supersedes the
+mutable Core 3.1.0 and 3.1.1 releases, which must not be indexed for
+HomeTemperature or published through Board Manager.
 It authenticates package metadata before erase, performs bounded streaming
 writes and complete Flash read-back verification, and binds activation to the
 verified in-memory session. HomeTemperature HTTP and UI integration remain
@@ -50,10 +51,11 @@ included by `-Revision HEAD`; use staging for uncommitted source validation.
 A release tag on `maintenance` must match the runtime version and record its
 one intended `releaseProfile` in the package layout. The manual `Core release`
 workflow
-requires the matching profile and explicit hardware/firmware-review confirmation,
-runs both-profile CI at the resolved tag commit, and compares the selected
-artifact with CI before publication. It publishes only that profile for that
-version. Existing releases cannot be overwritten.
+requires the matching profile, explicit hardware/firmware-review confirmation,
+and confirmation that repository release immutability is enabled. It runs
+both-profile CI at the resolved tag commit and compares the selected artifact
+with CI before publication. It publishes only that profile for that version.
+Existing releases cannot be overwritten.
 
 Release metadata supplies immutable archive fields for the separately reviewed
 Board Manager index update; the workflow does not edit that index or consumer
