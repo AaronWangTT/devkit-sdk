@@ -157,7 +157,7 @@ alter the caller repository or create application commits.
 On a host with native GCC and AddressSanitizer/UndefinedBehaviorSanitizer support:
 
 ```powershell
-pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Sanitize -ExpectedVersion 3.1.2
+pwsh -File ./tools/test/Test-Az3166HostTests.ps1 -Sanitize -ExpectedVersion 3.1.3
 ```
 
 The version is the current Core version, not a permanent pin for future releases;
@@ -193,7 +193,7 @@ do not use the archived Jenkins tooling as an implicitly supported replacement.
 
 ```powershell
 pwsh -File ./tools/package/Test-Az3166BoardPackage.ps1 `
-  -Revision HEAD -ExpectedVersion 3.1.2 -OutputDirectory ./artifacts/packages
+  -Revision HEAD -ExpectedVersion 3.1.3 -OutputDirectory ./artifacts/packages
 ```
 
 This builds the selected committed revision twice, requires matching size/hash,
@@ -203,7 +203,7 @@ not included. To create a single archive without the repeated-build check:
 
 ```powershell
 pwsh -File ./tools/package/New-Az3166BoardPackage.ps1 `
-  -Revision HEAD -OutputPath ./artifacts/AZ3166-3.1.2-base.zip
+  -Revision HEAD -OutputPath ./artifacts/AZ3166-3.1.3-base.zip
 ```
 
 Prefer the verifier for release evidence. Both commands accept an existing tag or
