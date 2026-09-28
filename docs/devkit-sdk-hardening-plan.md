@@ -228,7 +228,9 @@ replace that baseline with the current archive hash.
    release process. Create and push a matching numeric tag only when authorized.
    The existing `2.0.2` tag is a verification example, not a release to republish.
 3. Dispatch [Core release](../.github/workflows/core-release.yml) from
-   `maintenance`, with the existing tag as its `version` input.
+   `maintenance`, with the existing tag as its `version` input,
+   `hardware_validated: true`, and `release_immutability_confirmed: true` only
+   after verifying repository release immutability is enabled.
 4. The workflow checks tag ancestry and version, checks out that tag, rebuilds
    and verifies its package, runs available layout and host tests, then publishes
    the immutable GitHub release archive and SHA-256 in the release notes.
