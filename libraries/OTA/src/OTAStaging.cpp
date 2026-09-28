@@ -865,21 +865,20 @@ OTAStagingError OTAStagingActivate(
     candidate.startAddress = session.otaPartition.start;
     candidate.length = session.payloadSize;
     candidate.type = 'A';
-    candidate.upgradeType = 'u';
+    candidate.upgradeType = 'U';
     candidate.crc16 = session.ready.crc16;
 
     started = platform->timeMs();
-    bool candidateWritten = platform->writeBootTable(&candidate) == 0;
+    platform->writeBootTable(&candidate);
     bool candidateWriteInTime =
         !elapsedExceeded(started, OTA_STAGING_ACTIVATION_MAX_MS);
     started = platform->timeMs();
-    bool candidateRead = candidateWritten &&
+    bool candidateRead =
         platform->readPersistedBootTable(&persisted) == 0;
     bool candidateReadInTime =
         !elapsedExceeded(started, OTA_STAGING_ACTIVATION_MAX_MS);
     bool candidateVerified =
-        candidateWritten && candidateWriteInTime &&
-        candidateRead && candidateReadInTime &&
+        candidateWriteInTime && candidateRead && candidateReadInTime &&
         memcmp(&persisted, &candidate, sizeof(candidate)) == 0;
     if (candidateVerified)
     {
@@ -889,17 +888,16 @@ OTAStagingError OTAStagingActivate(
     }
 
     started = platform->timeMs();
-    bool restoreWritten = platform->writeBootTable(&previous) == 0;
+    platform->writeBootTable(&previous);
     bool restoreWriteInTime =
         !elapsedExceeded(started, OTA_STAGING_ACTIVATION_MAX_MS);
     started = platform->timeMs();
-    bool restoreRead = restoreWritten &&
+    bool restoreRead =
         platform->readPersistedBootTable(&persisted) == 0;
     bool restoreReadInTime =
         !elapsedExceeded(started, OTA_STAGING_ACTIVATION_MAX_MS);
     bool restored =
-        restoreWritten && restoreWriteInTime &&
-        restoreRead && restoreReadInTime &&
+        restoreWriteInTime && restoreRead && restoreReadInTime &&
         memcmp(&persisted, &previous, sizeof(previous)) == 0;
     return fail(restored ? OTA_ERROR_ACTIVATION : OTA_ERROR_ACTIVATION_UNCERTAIN);
 }

@@ -37,6 +37,7 @@ struct FakePlatform
     int failBootWriteCall;
     int failPersistedReadCall;
     int mismatchPersistedReadCall;
+    bool persistBeforeBootWriteFailure;
     bool failBootRead;
     bool signatureAccepted;
     bool cancelRequested;
@@ -72,6 +73,7 @@ struct FakePlatform
         failBootWriteCall = 0;
         failPersistedReadCall = 0;
         mismatchPersistedReadCall = 0;
+        persistBeforeBootWriteFailure = false;
         failBootRead = false;
         signatureAccepted = true;
         cancelRequested = false;
@@ -189,13 +191,14 @@ int writeBootTable(const OTAStagingBootTable *boot)
 {
     ++fake.bootWriteCalls;
     fake.now += fake.bootWriteDuration;
-    if (fake.failBootWriteCall == fake.bootWriteCalls)
+    bool fail = fake.failBootWriteCall == fake.bootWriteCalls;
+    if (fail && !fake.persistBeforeBootWriteFailure)
     {
         return -1;
     }
     fake.boot = *boot;
     fake.persisted = *boot;
-    return 0;
+    return fail ? -1 : 0;
 }
 
 int readPersistedBootTable(OTAStagingBootTable *boot)
@@ -475,7 +478,7 @@ void testArbitraryChunkingAndActivation()
         CHECK(fake.persisted.length == PayloadSize);
         CHECK(fake.persisted.crc16 == info.crc16);
         CHECK(fake.persisted.type == 'A');
-        CHECK(fake.persisted.upgradeType == 'u');
+        CHECK(fake.persisted.upgradeType == 'U');
         CHECK(OTAStagingActivate(info.sessionGeneration, info.sha256) == OTA_ERROR_INVALID_STATE);
     }
 }
@@ -664,6 +667,12 @@ void testActivationRecovery()
     fake.failBootRead = true;
     CHECK(OTAStagingActivate(info.sessionGeneration, info.sha256) == OTA_ERROR_ACTIVATION);
     CHECK(fake.bootWriteCalls == 0);
+
+    reset();
+    info = stage(package, 31);
+    fake.failBootWriteCall = 1;
+    fake.persistBeforeBootWriteFailure = true;
+    CHECK(OTAStagingActivate(info.sessionGeneration, info.sha256) == OTA_OK);
 
     reset();
     OTAStagingBootTable original = fake.boot;
