@@ -71,16 +71,24 @@ static int readPersistedBootTable(OTAStagingBootTable *bootTable);
 
 static int readBootTable(OTAStagingBootTable *bootTable)
 {
-    return readPersistedBootTable(bootTable);
+    mico_Context_t *context = mico_system_context_get();
+    if (bootTable == NULL || context == NULL)
+    {
+        return -1;
+    }
+    memcpy(bootTable, &context->bootTable, sizeof(*bootTable));
+    return 0;
 }
 
 static int writeBootTable(const OTAStagingBootTable *bootTable)
 {
-    return mico_system_para_write(
-        bootTable,
-        PARA_BOOT_TABLE_SECTION,
-        0,
-        sizeof(*bootTable));
+    mico_Context_t *context = mico_system_context_get();
+    if (bootTable == NULL || context == NULL)
+    {
+        return -1;
+    }
+    memcpy(&context->bootTable, bootTable, sizeof(*bootTable));
+    return mico_system_context_update(context);
 }
 
 static int readPersistedBootTable(OTAStagingBootTable *bootTable)
