@@ -66,6 +66,10 @@ jobs:
           $version = Get-Az3166CoreVersion -HeaderContent $header -Source 'SystemVersion.h'
           Assert-Az3166ReleaseRequest -Version $env:RELEASE_VERSION -Profile $env:RELEASE_PROFILE `
             -LayoutManifest $manifest -CoreVersion $version -LegacyVersion (Get-Az3166BuildLock).core.version
+          $versionNotes = "./docs/core-$env:RELEASE_VERSION-release-notes.md"
+          if (-not (Test-Path -LiteralPath $versionNotes -PathType Leaf)) {
+            throw 'Release notes are required for the exact release version.'
+          }
           "revision=$revision" >> $env:GITHUB_OUTPUT
 
   validate:
@@ -143,10 +147,8 @@ jobs:
           edit that index or upgrade downstream consumers.
           "@ | Set-Content -LiteralPath $notesPath -Encoding utf8
           $versionNotes = "./docs/core-$env:RELEASE_VERSION-release-notes.md"
-          if (Test-Path -LiteralPath $versionNotes -PathType Leaf) {
-            Add-Content -LiteralPath $notesPath -Value "`n## Release highlights`n"
-            Get-Content -Raw -LiteralPath $versionNotes | Add-Content -LiteralPath $notesPath
-          }
+          Add-Content -LiteralPath $notesPath -Value "`n## Release highlights`n"
+          Get-Content -Raw -LiteralPath $versionNotes | Add-Content -LiteralPath $notesPath
           gh release create $env:RELEASE_VERSION $env:PACKAGE_PATH $env:METADATA_PATH `
             --repo $env:GITHUB_REPOSITORY --verify-tag `
             --title "AZ3166 Core $env:RELEASE_VERSION ($env:RELEASE_PROFILE)" --notes-file $notesPath --latest

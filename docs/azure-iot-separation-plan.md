@@ -24,10 +24,11 @@ request `azure-iot` explicitly for a complete Azure-enabled board package.
 Neither profile ships the original monolithic archive. It remains an immutable
 repository input to the deterministic splitter.
 
-Core 3.0.0 published the first base-profile package. The runtime version is now
-prepared as 3.1.0 for the signed streaming OTA staging API. Release publication
-still requires exact-tag validation and hardware approval; the external Board
-Manager index remains a separate reviewed update.
+Core 3.0.0 published the first base-profile package. Core 3.1.1 supersedes
+3.1.0 for the signed streaming OTA staging API and includes direct validation
+of the production P-256 signature adapter. Release publication still requires
+exact-tag validation and hardware approval; the external Board Manager index
+remains a separate reviewed update.
 
 Hosted validation and review results belong to the pull request for the exact
 committed head. The local evidence below is a separate validation checkpoint.
