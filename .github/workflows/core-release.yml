@@ -21,6 +21,11 @@ on:
         required: true
         type: boolean
         default: false
+      release_immutability_confirmed:
+        description: Confirm repository Settings > Releases > Enable release immutability is selected
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: core-release-${{ inputs.version }}
@@ -46,9 +51,11 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_PROFILE: ${{ inputs.profile }}
           HARDWARE_VALIDATED: ${{ inputs.hardware_validated }}
+          RELEASE_IMMUTABILITY_CONFIRMED: ${{ inputs.release_immutability_confirmed }}
         run: |
           if ($env:GITHUB_REF -ne 'refs/heads/maintenance') { throw 'Dispatch releases from maintenance.' }
           if ($env:HARDWARE_VALIDATED -ne 'true') { throw 'Physical-board acceptance and firmware-difference review must be confirmed before publication.' }
+          if ($env:RELEASE_IMMUTABILITY_CONFIRMED -ne 'true') { throw 'Enable repository release immutability in Settings before publication.' }
           if ($env:RELEASE_VERSION -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Invalid numeric version.' }
           $tag = "refs/tags/$env:RELEASE_VERSION"
           $revision = git rev-parse --verify "$tag^{commit}"
