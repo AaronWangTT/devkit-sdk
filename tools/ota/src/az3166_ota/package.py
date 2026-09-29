@@ -112,7 +112,7 @@ def parse_descriptor(data: bytes) -> Descriptor:
         raise PackageError("application address must be aligned to 512 bytes")
     if application_capacity == 0:
         raise PackageError("application capacity must be greater than zero")
-    if application_address + application_capacity > 0x1_0000_0000:
+    if application_address + application_capacity >= 0x1_0000_0000:
         raise PackageError("application address and capacity overflow")
     return Descriptor(
         product_id=product_id,

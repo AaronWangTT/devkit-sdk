@@ -401,6 +401,13 @@ void testHostToolingGoldenPackage(const char *packagePath, const char *publicKey
     OTAStagedImageInfo info = {};
     CHECK(package.size() == 1408);
     CHECK(key.size() == 91);
+#ifdef OTA_STAGING_SIGNATURE_KAT
+    uint8_t headerDigest[OTA_SHA256_SIZE];
+    sha256(package.data(), OTA_PACKAGE_HEADER_SIZE, headerDigest);
+    CHECK(OTAStagingVerifySignature(
+              key.data(), key.size(), headerDigest,
+              package.data() + OTA_PACKAGE_HEADER_SIZE) == 0);
+#endif
     CHECK(OTAStagingBegin(
               package.size(), key.data(), key.size(),
               admitGoldenPackage, cancel, NULL) == OTA_OK);

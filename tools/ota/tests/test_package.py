@@ -166,6 +166,23 @@ class PackageTests(unittest.TestCase):
                 bytes(small_capacity), key_id=hashlib.sha256(self.public_der).digest()
             )
 
+        overflowing_range = bytearray(self.image)
+        struct.pack_into(
+            "<II",
+            overflowing_range,
+            DESCRIPTOR_OFFSET + 152,
+            0xFFFFFE00,
+            0x200,
+        )
+        with self.assertRaisesRegex(PackageError, "overflow"):
+            parse_descriptor(
+                bytes(
+                    overflowing_range[
+                        DESCRIPTOR_OFFSET : DESCRIPTOR_OFFSET + DESCRIPTOR_SIZE
+                    ]
+                )
+            )
+
     def test_rejects_noncanonical_descriptor_fields(self) -> None:
         cases = (
             (DESCRIPTOR_OFFSET + 16, ord("X"), "padded"),
