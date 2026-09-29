@@ -314,6 +314,16 @@ int admit(const OTAStagingMetadata *metadata, void *)
            metadata->versionPatch == 4;
 }
 
+int admitGoldenPackage(const OTAStagingMetadata *metadata, void *)
+{
+    return fake.admissionAccepted &&
+           strcmp(metadata->productId, "AZ3166GoldenVector") == 0 &&
+           strcmp(metadata->boardId, "MXCHIP_AZ3166") == 0 &&
+           metadata->versionMajor == 1 &&
+           metadata->versionMinor == 2 &&
+           metadata->versionPatch == 3;
+}
+
 int cancel(void *)
 {
     return fake.cancelRequested;
@@ -392,7 +402,8 @@ void testHostToolingGoldenPackage(const char *packagePath, const char *publicKey
     CHECK(package.size() == 1408);
     CHECK(key.size() == 91);
     CHECK(OTAStagingBegin(
-              package.size(), key.data(), key.size(), admit, cancel, NULL) == OTA_OK);
+              package.size(), key.data(), key.size(),
+              admitGoldenPackage, cancel, NULL) == OTA_OK);
     CHECK(stream(package, 37) == OTA_OK);
     CHECK(OTAStagingFinish(&info) == OTA_OK);
     CHECK(strcmp(info.metadata.productId, "AZ3166GoldenVector") == 0);
