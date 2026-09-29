@@ -165,6 +165,8 @@ def generate_key_pair(
             raise PackageError(
                 f"parent directory does not exist: {parent}; use --create-parents"
             )
+    if any(path.is_symlink() for path in paths):
+        raise PackageError("private-key and public-key destinations must not be symlinks")
     if _destinations_match(private_path, public_path):
         raise PackageError("private-key and public-key paths must resolve to different files")
     if not overwrite:

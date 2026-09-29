@@ -6,7 +6,7 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
-from cryptography.exceptions import InvalidSignature
+from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import (
@@ -130,7 +130,7 @@ def load_public_key(path: Path) -> tuple[ec.EllipticCurvePublicKey, bytes]:
     encoded = path.read_bytes()
     try:
         key = serialization.load_der_public_key(encoded)
-    except (TypeError, ValueError) as error:
+    except (TypeError, ValueError, UnsupportedAlgorithm) as error:
         raise PackageError("public key must be DER SubjectPublicKeyInfo") from error
     if not isinstance(key, ec.EllipticCurvePublicKey) or not isinstance(
         key.curve, ec.SECP256R1
@@ -164,7 +164,7 @@ def load_private_key(path: Path) -> ec.EllipticCurvePrivateKey:
                 serialization.PrivateFormat.PKCS8,
                 serialization.NoEncryption(),
             )
-    except (TypeError, ValueError) as error:
+    except (TypeError, ValueError, UnsupportedAlgorithm) as error:
         raise PackageError(
             "private key must be canonical unencrypted PKCS#8 PEM or DER"
         ) from error

@@ -193,6 +193,25 @@ class KeyAndCliTests(unittest.TestCase):
             with self.assertRaisesRegex(PackageError, "different"):
                 generate_key_pair(path, path)
 
+    def test_rejects_symlink_destination_before_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "target"
+            private_path = root / "private.pem"
+            public_path = root / "public.der"
+            target.write_bytes(b"existing key material")
+            try:
+                private_path.symlink_to(target)
+            except (NotImplementedError, OSError) as error:
+                self.skipTest(f"file symlinks unavailable: {error}")
+            with self.assertRaisesRegex(PackageError, "must not be symlinks"):
+                generate_key_pair(
+                    private_path, public_path, overwrite=True
+                )
+            self.assertTrue(private_path.is_symlink())
+            self.assertEqual(target.read_bytes(), b"existing key material")
+            self.assertFalse(public_path.exists())
+
     def test_rejects_parent_symlink_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

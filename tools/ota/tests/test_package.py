@@ -5,7 +5,9 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
@@ -230,6 +232,29 @@ class PackageTests(unittest.TestCase):
             with self.assertRaisesRegex(PackageError, "SubjectPublicKeyInfo"):
                 load_public_key(public_path)
 
+    def test_translates_unsupported_key_algorithms(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            public_path = root / "public.der"
+            private_path = root / "private.pem"
+            public_path.write_bytes(b"unsupported public key")
+            private_path.write_bytes(
+                b"-----BEGIN PRIVATE KEY-----\nunsupported\n"
+                b"-----END PRIVATE KEY-----\n"
+            )
+            with patch(
+                "az3166_ota.package.serialization.load_der_public_key",
+                side_effect=UnsupportedAlgorithm("unsupported"),
+            ):
+                with self.assertRaisesRegex(PackageError, "public key"):
+                    load_public_key(public_path)
+            with patch(
+                "az3166_ota.package.serialization.load_pem_private_key",
+                side_effect=UnsupportedAlgorithm("unsupported"),
+            ):
+                with self.assertRaisesRegex(PackageError, "private key"):
+                    load_private_key(private_path)
+
     def test_header_signature_is_raw_big_endian_rs(self) -> None:
         raw = self.package[PACKAGE_HEADER_SIZE:PAYLOAD_OFFSET]
         r = int.from_bytes(raw[:32], "big")
@@ -244,5 +269,4 @@ class PackageTests(unittest.TestCase):
         self.assertGreater(sample_s, 0)
 
 if __name__ == "__main__":
-    unittest.main()
     unittest.main()
