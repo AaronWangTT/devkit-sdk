@@ -40,6 +40,7 @@ struct FakePlatform
     bool persistBeforeBootWriteFailure;
     bool failBootRead;
     bool signatureAccepted;
+    bool acceptAnySignature;
     bool cancelRequested;
     bool admissionAccepted;
     uint32_t eraseDuration;
@@ -76,6 +77,7 @@ struct FakePlatform
         persistBeforeBootWriteFailure = false;
         failBootRead = false;
         signatureAccepted = true;
+        acceptAnySignature = false;
         cancelRequested = false;
         admissionAccepted = true;
         eraseDuration = 1;
@@ -172,7 +174,7 @@ int verifySignature(
     uint8_t zero[32] = {};
     return fake.signatureAccepted &&
            memcmp(digest, zero, sizeof(zero)) != 0 &&
-           signature[0] == 0x5A
+           (fake.acceptAnySignature || signature[0] == 0x5A)
         ? 0
         : -1;
 }
@@ -354,6 +356,50 @@ OTAStagedImageInfo stage(const std::vector<uint8_t> &package, size_t chunkSize)
     CHECK(stream(package, chunkSize) == OTA_OK);
     CHECK(OTAStagingFinish(&info) == OTA_OK);
     return info;
+}
+
+std::vector<uint8_t> readFile(const char *path)
+{
+    std::FILE *file = std::fopen(path, "rb");
+    CHECK(file != NULL);
+    if (file == NULL)
+    {
+        return {};
+    }
+    std::fseek(file, 0, SEEK_END);
+    long length = std::ftell(file);
+    std::rewind(file);
+    CHECK(length >= 0);
+    std::vector<uint8_t> data(length > 0 ? static_cast<size_t>(length) : 0);
+    CHECK(data.empty() || std::fread(data.data(), 1, data.size(), file) == data.size());
+    std::fclose(file);
+    return data;
+}
+
+void testHostToolingGoldenPackage(const char *packagePath, const char *publicKeyPath)
+{
+    static const uint8_t expectedDigest[32] = {
+        0x5E, 0x8C, 0x1D, 0x75, 0x69, 0xB8, 0xA3, 0x38,
+        0x34, 0x30, 0x63, 0xBA, 0xB9, 0xC7, 0xE1, 0x45,
+        0x50, 0xB8, 0xEE, 0xC0, 0x77, 0xCF, 0x28, 0x5C,
+        0x65, 0x37, 0x21, 0xCA, 0x0F, 0x0A, 0x4B, 0x5E
+    };
+    std::vector<uint8_t> package = readFile(packagePath);
+    std::vector<uint8_t> key = readFile(publicKeyPath);
+    reset();
+    fake.acceptAnySignature = true;
+    OTAStagedImageInfo info = {};
+    CHECK(package.size() == 1408);
+    CHECK(key.size() == 91);
+    CHECK(OTAStagingBegin(
+              package.size(), key.data(), key.size(), admit, cancel, NULL) == OTA_OK);
+    CHECK(stream(package, 37) == OTA_OK);
+    CHECK(OTAStagingFinish(&info) == OTA_OK);
+    CHECK(strcmp(info.metadata.productId, "AZ3166GoldenVector") == 0);
+    CHECK(strcmp(info.metadata.boardId, "MXCHIP_AZ3166") == 0);
+    CHECK(strcmp(info.metadata.firmwareVersion, "1.2.3") == 0);
+    CHECK(info.payloadSize == 1024);
+    CHECK(memcmp(info.sha256, expectedDigest, sizeof(expectedDigest)) == 0);
 }
 
 void testSha256KnownAnswer()
@@ -716,7 +762,7 @@ const OTAStagingPlatformOperations *OTAStagingDefaultPlatform(void)
     return &operations;
 }
 
-int main()
+int main(int argc, char **argv)
 {
     testSha256KnownAnswer();
 #ifdef OTA_STAGING_SIGNATURE_KAT
@@ -729,6 +775,14 @@ int main()
     testOperationTimeouts();
     testCancellationAndState();
     testActivationRecovery();
+    if (argc == 3)
+    {
+        testHostToolingGoldenPackage(argv[1], argv[2]);
+    }
+    else
+    {
+        CHECK(argc == 1);
+    }
 
     if (failures != 0)
     {

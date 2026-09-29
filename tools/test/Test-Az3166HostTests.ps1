@@ -116,7 +116,10 @@ try {
                     '-lmbedcrypto'
                 }
             )
-            RunArguments = @()
+            RunArguments = @(
+                "$repositoryRoot/tools/ota/tests/data/golden-package.azpkg"
+                "$repositoryRoot/tools/ota/tests/data/golden-public.der"
+            )
             Sanitize = $true
         }
         if ($layout.Profile -eq 'azure-iot') { @{

@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import unittest
+import errno
 from pathlib import Path
 from unittest.mock import patch
 
@@ -202,8 +203,15 @@ class KeyAndCliTests(unittest.TestCase):
             target.write_bytes(b"existing key material")
             try:
                 private_path.symlink_to(target)
-            except (NotImplementedError, OSError) as error:
+            except NotImplementedError as error:
                 self.skipTest(f"file symlinks unavailable: {error}")
+            except OSError as error:
+                if getattr(error, "winerror", None) == 1314 or error.errno in (
+                    errno.EPERM,
+                    errno.EOPNOTSUPP,
+                ):
+                    self.skipTest(f"file symlinks unavailable: {error}")
+                raise
             with self.assertRaisesRegex(PackageError, "must not be symlinks"):
                 generate_key_pair(
                     private_path, public_path, overwrite=True
@@ -220,8 +228,15 @@ class KeyAndCliTests(unittest.TestCase):
             actual_parent.mkdir()
             try:
                 alias_parent.symlink_to(actual_parent, target_is_directory=True)
-            except (NotImplementedError, OSError) as error:
+            except NotImplementedError as error:
                 self.skipTest(f"directory symlinks unavailable: {error}")
+            except OSError as error:
+                if getattr(error, "winerror", None) == 1314 or error.errno in (
+                    errno.EPERM,
+                    errno.EOPNOTSUPP,
+                ):
+                    self.skipTest(f"directory symlinks unavailable: {error}")
+                raise
 
             private_path = actual_parent / "same-key"
             public_path = alias_parent / "same-key"
@@ -380,6 +395,30 @@ class KeyAndCliTests(unittest.TestCase):
                     self.assertEqual(private_path.read_bytes(), private_before)
                     if output == hard_link_output:
                         output.unlink()
+
+    def test_build_reports_missing_output_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private_path = root / "private.pem"
+            public_path = root / "public.der"
+            image_path = root / "application.bin"
+            public_der, _ = generate_key_pair(private_path, public_path)
+            image_path.write_bytes(make_image(public_der))
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main(
+                    [
+                        "build",
+                        "--image",
+                        str(image_path),
+                        "--private-key",
+                        str(private_path),
+                        "--output",
+                        str(root / "missing" / "application.azpkg"),
+                    ]
+                )
+            self.assertEqual(result, 2)
+            self.assertIn("output parent directory does not exist", stderr.getvalue())
 
 
 if __name__ == "__main__":

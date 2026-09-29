@@ -112,6 +112,8 @@ def _command_validate(args: argparse.Namespace) -> None:
 
 
 def _command_build(args: argparse.Namespace) -> None:
+    if not args.output.parent.is_dir():
+        raise PackageError(f"output parent directory does not exist: {args.output.parent}")
     if _paths_alias(args.output, args.private_key):
         raise PackageError("package output must not alias the private key")
     private_key = load_private_key(args.private_key)
@@ -120,8 +122,6 @@ def _command_build(args: argparse.Namespace) -> None:
         private_key,
         **_expected(args),
     )
-    if not args.output.parent.is_dir():
-        raise PackageError(f"output parent directory does not exist: {args.output.parent}")
     _atomic_output(args.output, package)
     print(f"wrote {len(package)} bytes to {args.output}")
 

@@ -113,9 +113,11 @@ the two signature scalars are unsigned big-endian.
 
 `tests/data/golden-package.azpkg` is a fixed, independently reusable package
 with its canonical public key and expected hashes in `golden-vector.json`.
-`test_golden_vector.py` verifies those immutable bytes through the public API.
-This demonstrates byte-level compatibility with the format consumed by
-`libraries/OTA/src/OTAStaging.cpp`; it is not a production signing identity.
+`test_golden_vector.py` verifies those immutable bytes through the Python API,
+and the existing C++ `OTAStagingTest` streams the same package through the Core
+consumer to independently validate its envelope, descriptor, key binding,
+vectors, payload digest, and Flash read-back. The vector is not a production
+signing identity.
 
 The host tooling is intentionally excluded from
 `platform/az3166/package-layout.json`, so adding or changing it does not alter
