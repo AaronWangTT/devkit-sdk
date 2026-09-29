@@ -373,4 +373,3 @@ def verify_package(
     except (InvalidSignature, ValueError) as error:
         raise PackageError("package signature is invalid") from error
     return VerifiedPackage(descriptor, payload_length, payload_digest)
-

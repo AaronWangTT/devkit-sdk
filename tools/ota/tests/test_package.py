@@ -243,7 +243,6 @@ class PackageTests(unittest.TestCase):
         self.assertGreater(sample_r, 0)
         self.assertGreater(sample_s, 0)
 
-
 if __name__ == "__main__":
     unittest.main()
-
+    unittest.main()

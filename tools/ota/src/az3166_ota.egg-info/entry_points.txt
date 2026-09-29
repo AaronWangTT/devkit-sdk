@@ -1,2 +1,0 @@
-[console_scripts]
-az3166-ota = az3166_ota.cli:main

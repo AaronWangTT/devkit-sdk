@@ -25,4 +25,3 @@ __all__ = [
     "validate_raw_image",
     "verify_package",
 ]
-
