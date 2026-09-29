@@ -95,6 +95,19 @@ The driver enforces the [first-party warning policy](docs/first-party-warning-po
 first-party and unclassified warnings fail, and complete inventories also reject
 stale historical allowances. Raw diagnostics and count-by-rule reports remain
 in the retained evidence.
+
+Changes under `tools/ota` must also pass:
+
+```powershell
+python -m pip install .\tools\ota
+python -m unittest discover -s .\tools\ota\tests -v
+python -m compileall -q .\tools\ota\src .\tools\ota\tests
+```
+
+Do not add this host-only Python package to
+`platform/az3166/package-layout.json`; platform archive hashes must remain
+independent of OTA host tooling.
+
 Run the shared native tests using PowerShell 7 and GCC with sanitizer support:
 
 ```powershell

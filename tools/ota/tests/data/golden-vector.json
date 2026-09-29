@@ -1,0 +1,12 @@
+{
+  "format": "AZPKG001/AZOTA001 version 1",
+  "product": "AZ3166GoldenVector",
+  "board": "MXCHIP_AZ3166",
+  "version": "1.2.3",
+  "source": "0123456789abcdef0123456789abcdef01234567",
+  "keyId": "f3c9d135604346824a568ba09251f3118e0184b417fae972a66668ff3f93d75d",
+  "payloadLength": 1024,
+  "payloadSha256": "5e8c1d7569b8a338343063bab9c7e14550b8eec077cf285c653721ca0f0a4b5e",
+  "packageLength": 1408,
+  "packageSha256": "e26e79e7949280226a827ea1e5571b759becbcebe1fd1580f6bd1ef06c99a714"
+}

@@ -144,6 +144,11 @@ configuration tests also exercise the real multipart helper. They do not execute
 the ARM-only vendor libraries or the real JSON parser. The corresponding checks
 also run during releases when the tagged revision contains those harnesses.
 
+The installable [AZ3166 signed OTA host tooling](tools/ota/README.md) builds,
+validates, and verifies generic `AZPKG001` packages. Its Python unit tests,
+fixed compatibility vector, and bytecode compilation run on both CI hosts.
+The tooling is not part of the Arduino platform package layout.
+
 On Windows, [Test-Az3166Sketches.ps1](tools/test/Test-Az3166Sketches.ps1) compiles
 14 base sketches and 17 full sketches using the same production staging code.
 Both include SensorStatus and VoiceRecord so Sensors and Audio coverage does not
