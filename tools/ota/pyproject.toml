@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "az3166-ota"
+version = "1.0.0"
+description = "Build and verify signed AZ3166 OTA packages"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "MXCHIP AZ3166 contributors" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Embedded Systems",
+  "Topic :: Security :: Cryptography",
+]
+dependencies = ["cryptography==50.0.1"]
+
+[project.scripts]
+az3166-ota = "az3166_ota.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
