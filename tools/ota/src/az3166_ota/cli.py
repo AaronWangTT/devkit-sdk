@@ -70,6 +70,16 @@ def _atomic_output(path: Path, data: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _paths_alias(first: Path, second: Path) -> bool:
+    first_resolved = first.parent.resolve(strict=True) / first.name
+    second_resolved = second.parent.resolve(strict=True) / second.name
+    if os.path.normcase(str(first_resolved)) == os.path.normcase(
+        str(second_resolved)
+    ):
+        return True
+    return first.exists() and second.exists() and os.path.samefile(first, second)
+
+
 def _command_generate_key(args: argparse.Namespace) -> None:
     public_der, key_id = generate_key_pair(
         args.private_key,
@@ -102,6 +112,8 @@ def _command_validate(args: argparse.Namespace) -> None:
 
 
 def _command_build(args: argparse.Namespace) -> None:
+    if _paths_alias(args.output, args.private_key):
+        raise PackageError("package output must not alias the private key")
     private_key = load_private_key(args.private_key)
     package = build_package(
         args.image.read_bytes(),

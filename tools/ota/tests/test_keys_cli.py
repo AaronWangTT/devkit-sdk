@@ -347,6 +347,40 @@ class KeyAndCliTests(unittest.TestCase):
                 )
             self.assertTrue(package_path.exists())
 
+    def test_build_rejects_output_aliasing_private_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private_path = root / "private.pem"
+            public_path = root / "public.der"
+            hard_link_output = root / "private-alias.azpkg"
+            image_path = root / "application.bin"
+            public_der, _ = generate_key_pair(private_path, public_path)
+            private_before = private_path.read_bytes()
+            image_path.write_bytes(make_image(public_der))
+
+            for output in (private_path, hard_link_output):
+                with self.subTest(output=output):
+                    if output == hard_link_output:
+                        output.hardlink_to(private_path)
+                    stderr = io.StringIO()
+                    with contextlib.redirect_stderr(stderr):
+                        result = main(
+                            [
+                                "build",
+                                "--image",
+                                str(image_path),
+                                "--private-key",
+                                str(private_path),
+                                "--output",
+                                str(output),
+                            ]
+                        )
+                    self.assertEqual(result, 2)
+                    self.assertIn("must not alias", stderr.getvalue())
+                    self.assertEqual(private_path.read_bytes(), private_before)
+                    if output == hard_link_output:
+                        output.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

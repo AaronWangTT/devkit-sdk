@@ -47,6 +47,9 @@ def _backup_existing(path: Path) -> Path | None:
 
 
 def _restore_backup(backup: Path, path: Path) -> None:
+    if path.exists() and os.path.samefile(backup, path):
+        backup.unlink()
+        return
     os.replace(backup, path)
 
 

@@ -15,6 +15,7 @@ class GoldenVectorTests(unittest.TestCase):
         package = (data / "golden-package.azpkg").read_bytes()
         public_key, public_der = load_public_key(data / "golden-public.der")
 
+        self.assertEqual(len(package), manifest["packageLength"])
         self.assertEqual(hashlib.sha256(package).hexdigest(), manifest["packageSha256"])
         self.assertEqual(hashlib.sha256(public_der).hexdigest(), manifest["keyId"])
         verified = verify_package(package, public_key, public_der)
